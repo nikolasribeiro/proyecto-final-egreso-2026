@@ -1,0 +1,50 @@
+# Este es el docker-compose.yml que utilizaremos en modo DESARROLLO, no sera el de produccion.
+# En este caso, usamos PHP:8.2-apache como una imagen preconfigurada para PHP.
+# También utilizamos una base de datos MariaDB para almacenar los datos.
+# Finalmente, usamos PHPMyAdmin para administrar la base de datos.
+# El archivo de produccion sera docker-compose.prod.yml y no se utilizara phpmyadmin
+
+services:
+  proxy:
+    image: nginx:alpine
+    container_name: songbird_proxy
+    ports:
+      - "${APP_PORT}:80"
+    volumes:
+      # configuracion del proxy
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:Z
+    depends_on:
+      - web
+
+  web:
+    image: php:8.2-apache
+    container_name: songbird_web
+    volumes:
+      - ./src:/var/www/html:Z
+    depends_on:
+      - db
+
+  db:
+    image: mariadb:10.11
+    container_name: songbird_db
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: songbird_pma
+    environment:
+      PMA_ABSOLUTE_URI: ${BASE_PATH}/phpmyadmin/
+      PMA_HOST: ${PMA_HOST} 
+      PMA_USER: ${PMA_USER} 
+      PMA_PASSWORD: ${PMA_PASSWORD} 
+    depends_on:
+      - db
+
+volumes:
+  mariadb_data:
