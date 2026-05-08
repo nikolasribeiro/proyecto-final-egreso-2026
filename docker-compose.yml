@@ -17,7 +17,7 @@ services:
       - web
 
   web:
-    image: php:8.2-apache
+    build: .
     container_name: songbird_web
     volumes:
       - ./src:/var/www/html:Z
