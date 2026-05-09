@@ -50,6 +50,11 @@ switch ($route) {
         $controller->index();
         break;
 
+    case 'GET /clients':
+        $controller = new \Controllers\ClientController();
+        $controller->index();
+        break;
+
 
     // --- FALLBACK (404) ---
     default:
