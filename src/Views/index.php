@@ -9,6 +9,8 @@
 
 <body>
     <?php echo "Hola Mundo desde PHP, sin haber instalado nada ni necesitado nada raro" ?>
+    <br>
+    Paciente: <?= $new_client ? htmlspecialchars($new_client, ENT_QUOTES, 'UTF-8') : "No existe este paciente" ?>
 </body>
 
 </html>

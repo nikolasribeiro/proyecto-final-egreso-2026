@@ -1,0 +1,12 @@
+.container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: black;
+}
+
+.container h1, .container p {
+    color: white;
+    text-align: center;
+}
+
