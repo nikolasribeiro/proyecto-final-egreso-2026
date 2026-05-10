@@ -28,7 +28,7 @@ git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git
 ```
 
 **2. Variables de entorno**
-Asegurate de renombrar el archivo `.env.example` a `.env` en la raíz del proyecto (al lado del `docker-compose.yml`) con los puertos y credenciales correspondientes.
+Asegurate copiar el archivo: `.env.example` y crear uno nuevo llamado `.env` y copia los valores de las variables de entorno que necesites para tu proyecto.
 
 **3. Levantar la infraestructura**
 Abrí la terminal en la raíz del proyecto y ejecutá:
@@ -52,6 +52,7 @@ Para detener los contenedores (sin perder los datos de la base de datos), ejecut
 `docker-compose down`
 
 ### En caso de tener problemas con algunos sitemas como por ejemplo Linux Mint
+
 - sudo apt update
 - sudo apt install docker-compose-plugin -y
 - sudo usermod -aG docker $USER
@@ -60,8 +61,9 @@ Para detener los contenedores (sin perder los datos de la base de datos), ejecut
 - sudo mkdir -p /usr/local/lib/docker/cli-plugins
 - sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
 - sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-  
+
 ### Para los casos de Debian
+
 - sudo apt --fix-broken install
 - docker compose up -d
 - sudo systemctl start docker
