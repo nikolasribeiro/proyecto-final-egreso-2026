@@ -1,0 +1,46 @@
+name: Automatización de PRs
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  auto-configurar:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read
+      pull-requests: write
+    steps:
+      - name: Sincronizar datos del Issue al PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.addAssignees({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              assignees: [context.payload.pull_request.user.login]
+            });
+
+            const body = context.payload.pull_request.body || "";
+            const match = body.match(/(?:closes|fixes|resolves)\s+#(\d+)/i);
+            
+            if (match) {
+              const issueNum = parseInt(match[1], 10);
+              
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNum
+              });
+              
+              const labels = issue.labels.map(l => l.name);
+              
+              if (labels.length > 0) {
+                github.rest.issues.addLabels({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  labels: labels
+                });
+              }
+            }
