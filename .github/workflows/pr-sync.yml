@@ -1,0 +1,67 @@
+name: Automatización de PRs
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  auto-configurar:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Sincronizar datos del Issue al PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addAssignees({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              assignees: [context.payload.pull_request.user.login]
+            });
+
+            const title = context.payload.pull_request.title || "";
+            const match = title.match(/#(\d+)/);
+            
+            if (match) {
+              const issueNum = parseInt(match[1], 10);
+              
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNum
+              });
+              
+              const labels = issue.labels.map(l => l.name);
+              if (labels.length > 0) {
+                await github.rest.issues.addLabels({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  labels: labels
+                });
+              }
+
+              if (issue.milestone) {
+                await github.rest.issues.update({
+                  issue_number: context.issue.number, // Para la API, un PR hereda propiedades de Issue
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  milestone: issue.milestone.number
+                });
+              }
+
+              // Agrega "Closes #ID" al final de la descripción del PR si no existe.
+              const currentBody = context.payload.pull_request.body || "";
+              const linkText = `Closes #${issueNum}`;
+              
+              if (!currentBody.includes(linkText)) {
+                await github.rest.pulls.update({
+                  pull_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: currentBody + `\n\n---\n*Auto-vinculación:* ${linkText}`
+                });
+              }
+            }
