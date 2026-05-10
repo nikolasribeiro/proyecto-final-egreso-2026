@@ -50,3 +50,26 @@ Una vez que los contenedores estén levantados, accedé desde tu navegador:
 
 Para detener los contenedores (sin perder los datos de la base de datos), ejecutá:
 `docker-compose down`
+
+### En caso de tener problemas con algunos sitemas como por ejemplo Linux Mint
+- sudo apt update
+- sudo apt install docker-compose-plugin -y
+- sudo usermod -aG docker $USER
+- newgrp docker
+- sudo apt install docker-compose-v2 -y
+- sudo mkdir -p /usr/local/lib/docker/cli-plugins
+- sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+- sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+  
+### Para los casos de Debian
+- sudo apt --fix-broken install
+- docker compose up -d
+- sudo systemctl start docker
+- sudo systemctl enable docker
+- sudo usermod -aG docker $USER
+- newgrp docker
+- sudo apt update
+- sudo apt install docker.io -y
+- sudo systemctl start docker
+- sudo systemctl enable docker
+- sudo systemctl status docker
