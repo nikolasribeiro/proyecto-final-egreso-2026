@@ -7,11 +7,11 @@ jobs:
   auto-configurar:
     runs-on: ubuntu-latest
     permissions:
-      issues: read
+      issues: write
       pull-requests: write
     steps:
       - name: Sincronizar datos del Issue al PR
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             github.rest.issues.addAssignees({
@@ -21,8 +21,8 @@ jobs:
               assignees: [context.payload.pull_request.user.login]
             });
 
-            const body = context.payload.pull_request.body || "";
-            const match = body.match(/(?:closes|fixes|resolves)\s+#(\d+)/i);
+            const title = context.payload.pull_request.title || "";
+            const match = title.match(/#(\d+)/);
             
             if (match) {
               const issueNum = parseInt(match[1], 10);
