@@ -13,6 +13,25 @@ Proyecto Final de egreso de UTU 2026 ISBO - Grupo 3°ML
 
 ---
 
+## Arquitectura y Requisitos de Software
+
+Este proyecto prescinde de entornos genéricos locales (como XAMPP) para garantizar la paridad absoluta entre los sistemas operativos de los desarrolladores (Linux/Windows) y preparar el terreno para el despliegue final en producción. Utilizamos una arquitectura 100% contenerizada basada en **Docker Compose / Podman**, compuesta por:
+
+- **Proxy Inverso (Nginx:alpine):** Actúa como recepcionista del tráfico en el puerto 80, aportando seguridad perimetral y derivando las peticiones de forma transparente.
+- **Servidor Web y Backend (PHP:8.2-apache):** Contenedor aislado que procesa la lógica de negocio sin contaminar el sistema operativo host.
+- **Base de Datos (MariaDB:10.11):** Motor relacional principal del sistema, aislado de la red externa por seguridad.
+- **Gestor de BD (phpMyAdmin):** Interfaz gráfica accesible mediante sub-ruta para iterar rápidamente sobre el SQL durante el desarrollo.
+
+---
+
+## Entorno de Desarrollo Recomendado (IDE)
+
+Para mantener la coherencia y estandarización del código en el equipo, se recomienda utilizar **Visual Studio Code** con las siguientes extensiones instaladas:
+
+- **PHP Intelephense:** Para autocompletado, formateo y detección de errores en el backend.
+- **Docker:** Para gestionar los contenedores, visualizar logs y reiniciar servicios directamente desde el editor.
+- **Prettier - Code formatter:** Para mantener un estilo uniforme en HTML, CSS y JavaScript Vanilla.
+
 ## Cómo levantar el proyecto (Entorno Local)
 
 ### Requisitos Previos
