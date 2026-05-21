@@ -13,53 +13,57 @@ header("X-XSS-Protection: 1; mode=block");
 // CSP (Content Security Policy)
 header("Content-Security-Policy: default-src 'self';");
 
-spl_autoload_register(function ($class_name) {
-    $file = __DIR__ . '/' . str_replace('\\', '/', $class_name) . '.php';
-    if (file_exists($file)) {
-        require_once $file;
+spl_autoload_register(function ($nombre_clase) {
+    $archivo = __DIR__ . '/' . str_replace('\\', '/', $nombre_clase) . '.php';
+    if (file_exists($archivo)) {
+        require_once $archivo;
     }
 });
 
-\Core\Session::start();
+\Nucleo\Sesion::iniciar();
 
 set_exception_handler(function (\Throwable $e) {
     error_log($e->getMessage() . " en " . $e->getFile() . ":" . $e->getLine());
 
     http_response_code(500);
     try {
-        $controller = new \Controllers\ErrorsController();
-        $controller->serverError();
+        $controlador = new \Controladores\ControladorErrores();
+        $controlador->errorServidor();
     } catch (\Throwable $e2) {
-        error_log("FALLO EN CASCADA (Error View): " . $e2->getMessage());
+        error_log("FALLO EN CASCADA (Error Vista): " . $e2->getMessage());
     }
     exit;
 });
 
 // ==========================================
-// ROUTER CENTRAL
+// INICIALIZACIÓN
 // ==========================================
-$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$method = $_SERVER['REQUEST_METHOD'];
+// Cargamos funciones de ayuda globales (ayudantes)
+require_once __DIR__ . '/Nucleo/ayudantes.php';
 
-$route = $method . ' ' . $uri;
+// ==========================================
+// ENRUTADOR CENTRAL
+// ==========================================
+// 1. Creamos el enrutador. Este objeto guardará las páginas (rutas) de nuestra web.
+$enrutador = new \Nucleo\Enrutador();
 
-switch ($route) {
-    // Pagina Principal
-    case 'GET /':
-        $controller = new \Controllers\IndexController();
-        $controller->index();
-        break;
+// 2. Registramos las páginas. 
+// Aquí definimos: (Método de envío, Dirección URL, [Nombre del Controlador, Nombre de la Función])
 
-    case 'GET /clients':
-        $controller = new \Controllers\ClientController();
-        $controller->index();
-        break;
+// Ruta para la Página de Inicio (Raíz)
+$enrutador->get('/', [\Controladores\ControladorInicio::class, 'inicio']);
+
+// Ruta para la Página de Clientes (o Pacientes)
+$enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);
+
+// Pruebas con parametros
+$enrutador->get('/prueba', [\Controladores\ControladorInicio::class, 'prueba']);
+$enrutador->get('/prueba/{id}', [\Controladores\ControladorInicio::class, 'pruebaDetalle']);
 
 
-    // --- FALLBACK (404) ---
-    default:
-        http_response_code(404);
-        $controller = new \Controllers\ErrorsController();
-        $controller->notFound();
-        break;
-}
+// 3. Ejecutamos el enrutador.
+// Le pasamos el método (si es GET o POST) y la dirección que el usuario escribió en el navegador.
+$metodo = $_SERVER['REQUEST_METHOD'];
+$uri = $_SERVER['REQUEST_URI'];
+
+$enrutador->despachar($metodo, $uri);
