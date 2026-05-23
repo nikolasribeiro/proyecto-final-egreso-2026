@@ -1,6 +1,6 @@
 # proyecto-final-egreso-2026
 
-Proyecto Final de egreso de UTU 2026 ISBO - Grupo 3°ML
+Proyecto Final de egreso de UTU 2026 ISBO - Grupo 3°ML.
 
 ---
 
