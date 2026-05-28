@@ -1,0 +1,22 @@
+{
+    "intelephense.stubs": [
+        "apache", "bcmath", "bz2", "calendar", "com_dotnet", "Core", "ctype", "curl", "date", "dba", "dom", "ds", "enchant", "exif", "fileinfo", "filter", "fpm", "ftp", "gd", "gettext", "gmp", "hash", "iconv", "imap", "info", "json", "ldap", "libxml", "mbstring", "meta", "mhash", "mysql", "mysqli", "network", "oci8", "odbc", "openssl", "pcntl", "pcre", "pdf", "pgsql", "phar", "posix", "pspell", "readline", "recode", "Reflection", "session", "shmop", "SimpleXML", "snmp", "soap", "sockets", "sodium", " SPL", "sqlite3", "standard", "superglobals", "sysvmsg", "sysvsem", "sysvshm", "tidy", "tokenizer", "tokenizer", "xml", "xmlreader", "xmlrpc", "xmlwriter", "xsd", "yaml", "zip", "zlib", "pdo", "pdo_mysql", "pdo_sqlite", "mongodb", "redis"
+    ],
+    "intelephense.environment.includePaths": [
+        "/usr/share/php",
+        ".vscode/stubs"
+    ],
+    "intelephense.files.exclude": [
+        "**/.vscode/stubs/**/*.php"
+    ],
+    "intelephense.files.include": [
+        "src/**/*.php"
+    ],
+    "intelephense.environment.documentRoot": "src",
+    "intelephense.environment.phpVersion": "8.2",
+    "php.suggest.basic": false,
+    "php.validate.enable": false,
+    "intelephense.formatting": {
+        "enabled": true
+    }
+}
