@@ -69,3 +69,24 @@ function abortar(int $codigo = 404): void
 
     exit;
 }
+
+/**
+ * Renderiza un componente visual de forma aislada.
+ * * @param string $ruta Ruta relativa a la carpeta Componentes (ej: 'sidebar/sidebar')
+ * @param array $datos Variables inyectadas al componente
+ */
+function componente(string $ruta, array $datos = []): void
+{
+    // Extrae las variables para que vivan solo dentro de este componente
+    extract($datos);
+
+    // Resuelve la ruta absoluta partiendo desde el núcleo hacia la carpeta de Vistas
+    $archivo = dirname(__DIR__) . '/Componentes/' . $ruta . '.php';
+
+    if (file_exists($archivo)) {
+        require $archivo;
+    } else {
+        // Manejo amigable de errores en la interfaz para no romper todo el layout
+        echo "";
+    }
+}
