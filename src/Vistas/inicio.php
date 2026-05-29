@@ -4,7 +4,6 @@
  * @var string $nombreCliente
  */
 ?>
-
 <div class="welcome-container">
     <h1>¡Bienvenido al Micro Framework!</h1>
     <p>Hola Mundo desde PHP, sin haber instalado librerías externas.</p>

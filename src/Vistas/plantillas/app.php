@@ -24,7 +24,7 @@
     Esto es un componente. Sirve para extraer y abstraer componentes comunes 
     que se repiten en varias vistas.
     -->
-    <?= require_once __DIR__ . '/../Componentes/navbar.php' ?>
+    <?php componente('app/navbar'); ?>
 
     <main class="container">
         <!-- Aquí se inyecta dinámicamente la vista renderizada por Nucleo\Vista -->

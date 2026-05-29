@@ -16,7 +16,7 @@ class Vista
     public static function mostrar(string $plantilla, array $datos = [], string $plantillaBase = 'app'): void
     {
         extract($datos);
-        
+
         $archivoVista = dirname(__DIR__) . '/Vistas/' . $plantilla . '.php';
 
         if (file_exists($archivoVista)) {
@@ -24,10 +24,10 @@ class Vista
             // Todo el HTML (o echos) que esté en la vista no se imprimirá en pantalla,
             // sino que se guardará temporalmente en la memoria de PHP.
             ob_start();
-            
+
             // Requerimos el archivo de la vista. Su salida HTML queda atrapada en el buffer.
             require $archivoVista;
-            
+
             // Recogemos todo lo atrapado y lo guardamos en la variable $contenido, limpiando el buffer.
             $contenido = ob_get_clean();
 
@@ -45,7 +45,6 @@ class Vista
             } else {
                 echo $contenido;
             }
-
         } else {
             throw new \Exception("La vista $plantilla, ruta: $archivoVista, no existe.");
         }

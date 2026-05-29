@@ -2,7 +2,6 @@
 
 namespace Controladores;
 
-use Nucleo\Vista;
 use Modelos\ModeloCliente;
 
 class ControladorInicio
@@ -11,30 +10,9 @@ class ControladorInicio
     {
         try {
             $nuevoCliente = ModeloCliente::crear();
-            Vista::mostrar('inicio', ["nombreCliente" => $nuevoCliente]);
-        } catch (\Throwable $th) {
-            Vista::mostrar('errores/error_servidor');
-        }
-    }
-
-    public function prueba(): void
-    {
-        try {
-            vista("prueba/inicio", [
-                "prueba" => "pruebaprueba",
-            ], "admin");
-        } catch (\Throwable $th) {
-            vista('errores/error_servidor');
-        }
-    }
-
-    public function pruebaDetalle(int $id): void
-    {
-        try {
-            vista("prueba/inicio", [
-                "prueba" => "pruebaprueba",
-                "id" => $id
-            ], "admin");
+            vista('inicio', [
+                'nombreCliente' => $nuevoCliente,
+            ], 'admin');
         } catch (\Throwable $th) {
             vista('errores/error_servidor');
         }
