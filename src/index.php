@@ -11,7 +11,11 @@ header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 
 // CSP (Content Security Policy)
-header("Content-Security-Policy: default-src 'self';");
+// Este es el que usaremos en PRODUCCION
+//header("Content-Security-Policy: default-src 'self';");
+
+// Este es el que usaremos en DESARROLLO
+header("Content-Security-Policy: default-src 'self' 'unsafe-inline';");
 
 spl_autoload_register(function ($nombre_clase) {
     $archivo = __DIR__ . '/' . str_replace('\\', '/', $nombre_clase) . '.php';

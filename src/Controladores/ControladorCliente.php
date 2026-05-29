@@ -2,7 +2,6 @@
 
 namespace Controladores;
 
-use Nucleo\Vista;
 use Modelos\ModeloCliente;
 
 class ControladorCliente
@@ -10,7 +9,7 @@ class ControladorCliente
     public function inicio()
     {
         $nombreCliente = ModeloCliente::crear();
-        Vista::mostrar('cliente/inicio', [
+        vista('cliente/inicio', [
             'nombreCliente' => $nombreCliente,
         ]);
     }
