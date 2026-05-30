@@ -6,11 +6,19 @@ use Nucleo\Sesion;
 
 class ControladorAuth
 {
+    private string $rutaDashboard = '/dashboard/documentos';
+
     /**
      * Muestra el formulario de login
      */
     public function login(): void
     {
+
+        if (Sesion::obtener('user')) {
+            redirigir($this->rutaDashboard);
+            return;
+        }
+
         // Generar token CSRF
         $csrfToken = Sesion::generarTokenCsrf();
 
@@ -77,7 +85,7 @@ class ControladorAuth
             // Regenerar sesión para prevenir session fixation
             session_regenerate_id(true);
 
-            redirigir('/dashboard/documentos');
+            redirigir($this->rutaDashboard);
         } else {
             // Login fallido
             Sesion::guardar('error_login', 'Credenciales inválidas. Intentá de nuevo.');

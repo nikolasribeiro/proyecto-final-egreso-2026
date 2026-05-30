@@ -12,6 +12,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function __construct()
     {
+        parent::__construct();
+
         $usuario = Sesion::obtener('user');
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];

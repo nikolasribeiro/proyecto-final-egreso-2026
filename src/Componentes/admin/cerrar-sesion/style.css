@@ -1,0 +1,47 @@
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* ========== Botón Logout ========== */
+.btn-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: transparent;
+  color: var(--secondary-gray, #6b7280);
+  border: 1px solid var(--border-gray, #e5e7eb);
+  border-radius: var(--radius-sm, 8px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-logout:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.btn-logout:active {
+  transform: scale(0.98);
+}
+
+.btn-logout svg {
+  flex-shrink: 0;
+}
+
+/* Ocultar texto en móvil */
+.btn-logout-text {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .btn-logout-text {
+    display: inline;
+  }
+}
