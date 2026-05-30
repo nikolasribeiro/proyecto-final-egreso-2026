@@ -27,7 +27,7 @@ function e(?string $string): string
  * @param array $datos Variables para la vista
  * @param string $plantillaBase El layout a utilizar
  */
-function vista(string $plantilla, array $datos = [], string $plantillaBase = 'app'): void
+function vista(string $plantilla, array $datos = [], ?string $plantillaBase = null): void
 {
     Vista::mostrar($plantilla, $datos, $plantillaBase);
 }

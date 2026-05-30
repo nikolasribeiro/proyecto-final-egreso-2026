@@ -57,6 +57,12 @@ $enrutador = new \Nucleo\Enrutador();
 // Ruta para la Página de Inicio (Raíz)
 $enrutador->get('/', [\Controladores\ControladorInicio::class, 'inicio']);
 
+// Rutas de Autenticación
+$enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
+$enrutador->post('/login', [\Controladores\ControladorAuth::class, 'authenticate']);
+$enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
+
+
 // Ruta para la Página de Clientes (o Pacientes)
 $enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);
 
