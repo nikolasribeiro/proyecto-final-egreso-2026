@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @var string titulo_pagina
+ * @var string $titulo_pagina
  */
 
 ?>
@@ -23,7 +23,7 @@
             </svg>
         </button>
         <h1 class="header-title" id="header-title">
-            $titulo_pagina
+            <?php echo e($titulo_pagina) ?>
         </h1>
     </div>
     <div class="header-right">

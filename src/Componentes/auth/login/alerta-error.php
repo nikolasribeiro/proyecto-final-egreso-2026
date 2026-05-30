@@ -5,7 +5,7 @@
  * @var string $errorMsg
  */
 
-$errorMsg = $errorMsg ?? '';
+$errorMsg = $error_login ?? '';
 ?>
 
 <div id="auth-alert" class="auth-alert auth-alert-error">
