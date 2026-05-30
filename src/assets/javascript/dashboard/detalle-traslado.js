@@ -490,24 +490,37 @@
     const step = badge.closest(".detail-stepper-step");
     if (!step) return;
 
-    // Create tooltip if it doesn't exist
-    let tooltip = step.querySelector(".report-tooltip");
+    // Create tooltip if it doesn't exist - append to body for fixed positioning
+    let tooltip = document.body.querySelector(".report-tooltip");
     if (!tooltip) {
       tooltip = document.createElement("div");
       tooltip.className = "report-tooltip";
-      tooltip.innerHTML = `
-        <div class="report-tooltip-title">Reportes (${reportes.length})</div>
-        <ul class="report-tooltip-list">
-          ${reportes.map((r) => `
-            <li>
-              <div class="report-tooltip-tipo">${escapeHtml(r.tipo)}</div>
-              <div class="report-tooltip-mensaje">${escapeHtml(r.mensaje)}</div>
-            </li>
-          `).join("")}
-        </ul>
-      `;
-      step.appendChild(tooltip);
+      document.body.appendChild(tooltip);
     }
+
+    // Update tooltip content
+    tooltip.innerHTML = `
+      <div class="report-tooltip-title">Reportes (${reportes.length})</div>
+      <ul class="report-tooltip-list">
+        ${reportes.map((r) => `
+          <li>
+            <div class="report-tooltip-tipo">${escapeHtml(r.tipo)}</div>
+            <div class="report-tooltip-mensaje">${escapeHtml(r.mensaje)}</div>
+          </li>
+        `).join("")}
+      </ul>
+    `;
+
+    // Position tooltip using fixed positioning based on badge's viewport position
+    const rect = badge.getBoundingClientRect();
+
+    // Position above the badge, centered
+    const top = rect.top - 12;
+    const left = rect.left + rect.width / 2;
+
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.transform = "translateX(-50%) translateY(-100%)";
 
     requestAnimationFrame(() => {
       tooltip.classList.add("visible");
@@ -515,10 +528,7 @@
   }
 
   function ocultarTooltipReporte(e) {
-    const badge = e.target;
-    const step = badge.closest(".detail-stepper-step");
-    if (!step) return;
-    const tooltip = step.querySelector(".report-tooltip");
+    const tooltip = document.body.querySelector(".report-tooltip");
     if (tooltip) {
       tooltip.classList.remove("visible");
     }
