@@ -250,6 +250,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .ubicacion-icon svg {
@@ -273,6 +274,12 @@
 }
 
 /* ========== Destinos ========== */
+.destinos-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 .destinos-list {
   display: flex;
   flex-direction: column;
@@ -813,5 +820,15 @@
   .step-actions .btn-lg {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* ========== Animations ========== */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }

@@ -1,0 +1,125 @@
+/* ==========================================================================
+   COMPONENTS - Badges
+   ========================================================================== */
+
+/* ========== Transfer Type Badges ========== */
+.transfer-type-badge {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Badge Patient */
+.badge-patient {
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+}
+
+/* Badge Equipment */
+.badge-equipment {
+  background: var(--warning-yellow-light);
+  color: var(--warning-yellow);
+}
+
+/* Badge Sample */
+.badge-sample {
+  background: var(--success-green-light);
+  color: var(--success-green);
+}
+
+/* ========== Status Badges ========== */
+.transfer-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--success-green-light);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.status-pending {
+  background: var(--warning-yellow-light);
+  color: var(--warning-yellow);
+}
+
+.status-in-progress {
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+}
+
+.status-completed {
+  background: var(--success-green-light);
+  color: var(--success-green);
+}
+
+.status-cancelled {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-pending .status-dot {
+  background: var(--warning-yellow);
+}
+
+.status-in-progress .status-dot {
+  background: var(--primary-blue);
+}
+
+.status-completed .status-dot {
+  background: var(--success-green);
+}
+
+.status-cancelled .status-dot {
+  background: var(--danger-red);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ========== Generic Badge ========== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.badge-primary {
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+}
+
+.badge-success {
+  background: var(--success-green-light);
+  color: var(--success-green);
+}
+
+.badge-danger {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+}
+
+.badge-warning {
+  background: var(--warning-yellow-light);
+  color: var(--warning-yellow);
+}

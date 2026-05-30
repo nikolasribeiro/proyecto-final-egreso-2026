@@ -1,0 +1,50 @@
+/* ==========================================================================
+   MAIN - Entry Point CSS
+   Reorganizado para mejor mantenibilidad con HTTP/2 (múltiples archivos)
+   ========================================================================== */
+
+/* ==========================================================================
+   BASE - Fundamentos
+   ========================================================================== */
+@import url("base/variables.css");
+@import url("base/reset.css");
+@import url("base/typography.css");
+
+/* ==========================================================================
+   LAYOUT - Estructura de páginas
+   ========================================================================== */
+@import url("layout/sidebar.css");
+@import url("layout/header.css");
+@import url("layout/main.css");
+@import url("layout/grid.css");
+
+/* ==========================================================================
+   COMPONENTS - Elementos reutilizables
+   ========================================================================== */
+@import url("components/buttons.css");
+@import url("components/cards.css");
+@import url("components/forms.css");
+@import url("components/tables.css");
+@import url("components/modals.css");
+@import url("components/alerts.css");
+@import url("components/stepper.css");
+@import url("components/badges.css");
+@import url("components/traslados-wizard.css");
+
+/* ==========================================================================
+   COMPONENTS - External Component CSS
+   ========================================================================== */
+@import url("../../../Componentes/admin/cerrar-sesion/style.css");
+
+/* ==========================================================================
+   UTILITIES - Clases helper
+   ========================================================================== */
+@import url("utilities/spacing.css");
+@import url("utilities/display.css");
+@import url("utilities/text.css");
+
+/* ==========================================================================
+   PAGE-SPECIFIC - Estilos específicos por página
+   ========================================================================== */
+/* @import url("pages/auth.css"); */
+/* @import url("pages/dashboard.css"); */
