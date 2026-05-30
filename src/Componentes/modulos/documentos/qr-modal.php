@@ -1,11 +1,20 @@
+<?php
+
+/**
+ * @var string $idDocumento
+ * @var string $nombreDocumento
+ * @var string $rutaDocumento
+ */
+?>
+
 <div
-    id="qr-modal"
+    id="qr-modal-<?= e($idDocumento) ?>"
     class="modal-overlay"
     onclick="closeModalOnOverlay(event)">
     <div class="modal">
         <div class="modal-header">
             <h3 class="modal-title">Codigo QR del Documento</h3>
-            <button class="modal-close" onclick="closeModal('qr-modal')">
+            <button class="modal-close" onclick="closeModal('qr-modal-<?= e($idDocumento) ?>')">
                 <svg
                     width="16"
                     height="16"
@@ -24,13 +33,13 @@
             <div class="qr-container">
                 <div class="qr-code">
                     <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=placeholder-url"
+                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=<?= e($rutaDocumento) ?>"
                         alt="Codigo QR"
                         width="200"
                         height="200" />
                 </div>
                 <p class="qr-document-name" id="qr-document-name">
-                    Nombre del documento
+                    <?php echo e($nombreDocumento) ?>
                 </p>
                 <p style="font-size: 0.875rem; color: var(--secondary-gray)">
                     Escanee este codigo para acceder al documento
@@ -40,7 +49,7 @@
         <div class="modal-footer">
             <button
                 class="btn btn-secondary btn-small"
-                onclick="closeModal('qr-modal')">
+                onclick="closeModal('qr-modal-<?= e($idDocumento) ?>')">
                 Cerrar
             </button>
             <button class="btn btn-primary btn-small">
