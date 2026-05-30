@@ -1,0 +1,76 @@
+/* ==========================================================================
+   LAYOUT - Grid System
+   ========================================================================== */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ========== Transfer Detail Layout ========== */
+.transfer-detail-section {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-gray);
+}
+
+.transfer-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-gray);
+}
+
+@media (min-width: 640px) {
+  .transfer-detail-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.transfer-detail-info h3 {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.transfer-detail-info p {
+  color: var(--secondary-gray);
+}
+
+.action-section {
+  margin-top: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border-gray);
+}
+
+.action-section h4 {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  margin-bottom: var(--space-4);
+  color: var(--secondary-gray);
+}
+
+.report-section {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-gray);
+}

@@ -1,0 +1,206 @@
+/* ==========================================================================
+   COMPONENTS - Stepper (Wizard de 6 pasos)
+   ========================================================================== */
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-8);
+}
+
+@media (min-width: 768px) {
+  .stepper {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.stepper-indicator {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: var(--font-size-base);
+  flex-shrink: 0;
+  border: 3px solid var(--border-gray);
+  background: var(--white);
+  color: var(--secondary-gray);
+  transition: all var(--transition-normal);
+}
+
+.stepper-step.completed .stepper-indicator {
+  background: var(--success-green);
+  border-color: var(--success-green);
+  color: var(--white);
+}
+
+.stepper-step.active .stepper-indicator {
+  background: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: var(--white);
+  animation: pulse 2s infinite;
+}
+
+.stepper-content {
+  flex: 1;
+}
+
+.stepper-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--secondary-gray);
+}
+
+.stepper-step.completed .stepper-title,
+.stepper-step.active .stepper-title {
+  color: var(--black);
+}
+
+.stepper-connector {
+  display: none;
+  height: 3px;
+  flex: 1;
+  background: var(--border-gray);
+  margin: 0 var(--space-2);
+}
+
+.stepper-connector.completed {
+  background: var(--success-green);
+}
+
+@media (min-width: 768px) {
+  .stepper-connector {
+    display: block;
+  }
+
+  .stepper-step {
+    flex-direction: column;
+    text-align: center;
+    gap: var(--space-2);
+  }
+
+  .stepper-content {
+    order: 1;
+  }
+}
+
+/* ========== Progressive Disclosure ========== */
+.progressive-step {
+  position: relative;
+  padding-left: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-left: 2px solid var(--border-gray);
+  margin-left: var(--space-3);
+}
+
+.progressive-step:last-child {
+  border-left: 2px solid transparent;
+}
+
+.progressive-step::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 0;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--border-gray);
+  border: 3px solid var(--white);
+}
+
+.progressive-step.completed::before {
+  background: var(--success-green);
+}
+
+.progressive-step.active::before {
+  background: var(--primary-blue);
+}
+
+.progressive-title {
+  font-weight: 600;
+  color: var(--black);
+  margin-bottom: var(--space-2);
+}
+
+.progressive-content {
+  color: var(--secondary-gray);
+  font-size: var(--font-size-sm);
+}
+
+.progressive-hint {
+  background: var(--light-gray);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  color: var(--secondary-gray);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+  margin-top: var(--space-3);
+}
+
+/* ========== Step Content ========== */
+.step-content {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-gray);
+}
+
+.step-content-header {
+  margin-bottom: var(--space-6);
+}
+
+.step-content-title {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--black);
+  margin-bottom: var(--space-2);
+}
+
+.step-content-description {
+  color: var(--secondary-gray);
+  font-size: var(--font-size-sm);
+}
+
+/* ========== Step Navigation ========== */
+.step-navigation {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-gray);
+}
+
+.step-navigation-left {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.step-navigation-right {
+  display: flex;
+  gap: var(--space-3);
+}
+
+/* ========== Pulse Animation ========== */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
