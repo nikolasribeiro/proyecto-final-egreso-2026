@@ -87,6 +87,6 @@ function componente(string $ruta, array $datos = []): void
         require $archivo;
     } else {
         // Manejo amigable de errores en la interfaz para no romper todo el layout
-        echo "";
+        echo "Componente: $ruta - Error al traer el componente.";
     }
 }

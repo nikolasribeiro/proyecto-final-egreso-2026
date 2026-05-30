@@ -27,7 +27,7 @@ class ControladorAuth
     /**
      * Procesa el login (POST)
      */
-    public function authenticate(): void
+    public function autenticar(): void
     {
         // Verificar método POST
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -69,6 +69,7 @@ class ControladorAuth
             // Login exitoso
             Sesion::guardar('user', [
                 'username' => $username,
+                'nombre' => $username,
                 'rol' => $username === 'admin' ? 'administrador' : 'usuario',
                 'login_at' => date('Y-m-d H:i:s'),
             ]);
@@ -76,7 +77,7 @@ class ControladorAuth
             // Regenerar sesión para prevenir session fixation
             session_regenerate_id(true);
 
-            redirigir('/');
+            redirigir('/dashboard/documentos');
         } else {
             // Login fallido
             Sesion::guardar('error_login', 'Credenciales inválidas. Intentá de nuevo.');
