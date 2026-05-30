@@ -11,10 +11,6 @@ header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 
 // CSP (Content Security Policy)
-// Este es el que usaremos en PRODUCCION
-//header("Content-Security-Policy: default-src 'self';");
-
-// Este es el que usaremos en DESARROLLO
 header("Content-Security-Policy: default-src 'self' 'unsafe-inline' https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=;");
 
 spl_autoload_register(function ($nombre_clase) {
@@ -64,7 +60,7 @@ $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
-$enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'traslados']);
+$enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
 
 
 // Ruta para la Página de Clientes (o Pacientes)
