@@ -81,4 +81,25 @@ class ControladorDashboard extends RutaProtegida
             'rol' => $this->rol,
         ], 'admin');
     }
+
+    public function nuevoTraslado(): void
+    {
+        // Mostrar contenido del panel principal
+        vista('modulos/traslados/nuevo/inicio', [
+            'titulo_pagina' => "Solicita un nuevo traslado",
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+        ], 'admin');
+    }
+
+    public function detalleTraslado(int $id): void
+    {
+        // Mostrar contenido del panel principal
+        vista('modulos/traslados/detalle/inicio', [
+            'titulo_pagina' => "Detalle del traslado",
+            'traslado_id' => $id,
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+        ], 'admin');
+    }
 }

@@ -61,6 +61,8 @@ $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
 $enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
+$enrutador->get('/dashboard/traslados/nuevo', [\Controladores\ControladorDashboard::class, 'nuevoTraslado']);
+$enrutador->get('/dashboard/traslados/{id}', [\Controladores\ControladorDashboard::class, 'detalleTraslado']);
 
 
 // Ruta para la Página de Clientes (o Pacientes)
