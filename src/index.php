@@ -15,7 +15,7 @@ header("X-XSS-Protection: 1; mode=block");
 //header("Content-Security-Policy: default-src 'self';");
 
 // Este es el que usaremos en DESARROLLO
-header("Content-Security-Policy: default-src 'self' 'unsafe-inline';");
+header("Content-Security-Policy: default-src 'self' 'unsafe-inline' https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=;");
 
 spl_autoload_register(function ($nombre_clase) {
     $archivo = __DIR__ . '/' . str_replace('\\', '/', $nombre_clase) . '.php';
