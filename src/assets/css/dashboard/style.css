@@ -1,5 +1,6 @@
 @import url("../variables.css");
 @import url("../../../Componentes/admin/cerrar-sesion/style.css");
+@import url("../../../Componentes/modulos/traslados/style.css");
 
 /* ========== Reset & Base ========== */
 * {
