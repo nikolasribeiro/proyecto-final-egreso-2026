@@ -319,6 +319,19 @@
   pointer-events: none;
 }
 
+/* ========== Completed/Cancelled State ========== */
+.detail-transfer-completed .detail-action-section h4::after {
+  content: " - TRASLADO COMPLETADO";
+  color: var(--success-green);
+  font-weight: 600;
+}
+
+.detail-transfer-cancelled .detail-action-section h4::after {
+  content: " - TRASLADO CANCELADO";
+  color: var(--danger-red);
+  font-weight: 600;
+}
+
 /* ========== Report Tooltip/Popover ========== */
 .report-tooltip {
   position: fixed;

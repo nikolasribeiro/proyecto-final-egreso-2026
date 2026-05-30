@@ -19,6 +19,13 @@ class ModeloTraslado
         return null;
     }
 
+    public static function obtenerTodos(): array
+    {
+        self::inicializarMockData();
+
+        return array_values(self::$traslados);
+    }
+
     public static function registrarArribo(int $trasladoId, int $destinoOrden, string $timestamp): array
     {
         $traslado = self::obtenerPorId($trasladoId);
@@ -155,6 +162,38 @@ class ModeloTraslado
                         'tiempo_estimado' => '2024-06-15T16:00:00',
                         'tiempo_real' => null,
                         'diferencia_minutos' => null,
+                        'reportes' => []
+                    ]
+                ]
+            ],
+            3 => [
+                'id' => 3,
+                'numero' => 'TRF-2024-0893',
+                'tipo' => 'equipamiento',
+                'estado' => 'completado',
+                'paciente' => 'Carlos Mendez',
+                'conductor' => 'Roberto Sánchez',
+                'vehiculo' => 'Ambulancia 003',
+                'origen' => 'Hospital Central',
+                'volver_al_origen' => true,
+                'paso_actual' => 6,
+                'destinos' => [
+                    [
+                        'orden' => 1,
+                        'nombre' => 'Hospital南区',
+                        'tiempo_estimado' => '2024-06-15T10:00:00',
+                        'tiempo_real' => '2024-06-15T10:08:00',
+                        'diferencia_minutos' => 8,
+                        'reportes' => [
+                            ['id' => 1, 'tipo' => 'Retraso en ruta', 'mensaje' => 'Semáforo en Av. Principal']
+                        ]
+                    ],
+                    [
+                        'orden' => 2,
+                        'nombre' => 'Clínica Central',
+                        'tiempo_estimado' => '2024-06-15T11:30:00',
+                        'tiempo_real' => '2024-06-15T11:25:00',
+                        'diferencia_minutos' => -5,
                         'reportes' => []
                     ]
                 ]

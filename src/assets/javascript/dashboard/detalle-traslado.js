@@ -176,6 +176,21 @@
     renderStepper();
     renderActionButton();
     renderReportButton();
+    renderTransferState();
+  }
+
+  function renderTransferState() {
+    if (!elements.container) return;
+
+    // Remove all state classes
+    elements.container.classList.remove("detail-transfer-completed", "detail-transfer-cancelled");
+
+    // Add appropriate state class
+    if (state.estado === "completado") {
+      elements.container.classList.add("detail-transfer-completed");
+    } else if (state.estado === "cancelado") {
+      elements.container.classList.add("detail-transfer-cancelled");
+    }
   }
 
   function renderReportButton() {
@@ -197,10 +212,47 @@
     const primerDestino = state.destinos[0];
     const info = elements.container.dataset;
 
+    // Determine badge class based on estado
+    let estadoBadge = "";
+    if (state.estado === "completado") {
+      estadoBadge = '<span class="transfer-type-badge badge-success">Completado</span>';
+    } else if (state.estado === "cancelado") {
+      estadoBadge = '<span class="transfer-type-badge badge-danger">Cancelado</span>';
+    } else if (state.estado === "en_proceso") {
+      estadoBadge = '<span class="transfer-type-badge badge-warning">En Proceso</span>';
+    }
+
+    // Tipo badge based on transfer type
+    let tipoBadge = "";
+    const tipoMap = {
+      "paciente_alta": "Paciente",
+      "biologico": "Biológico",
+      "equipamiento": "Equipamiento",
+      "doctor": "Doctor"
+    };
+    const tipoTexto = tipoMap[info.tipo] || info.tipo || "Traslado";
+    tipoBadge = `<span class="transfer-type-badge badge-patient">${tipoTexto}</span>`;
+
     elements.transferInfo.innerHTML = `
       <h3>Traslado #${info.numero}</h3>
       <p>${info.paciente} - ${info.origen} → ${primerDestino.nombre}</p>
     `;
+
+    // Update badges in header
+    const header = document.querySelector(".transfer-detail-header");
+    if (header) {
+      const existingBadges = header.querySelectorAll(".transfer-type-badge");
+      existingBadges.forEach(b => b.remove());
+
+      // Add estado badge
+      if (estadoBadge) {
+        header.insertAdjacentHTML("beforeend", estadoBadge);
+      }
+      // Add tipo badge
+      if (tipoBadge) {
+        header.insertAdjacentHTML("beforeend", tipoBadge);
+      }
+    }
 
     if (elements.transferMeta) {
       elements.transferMeta.innerHTML = `
@@ -223,13 +275,24 @@
   function renderStepper() {
     if (!elements.stepper) return;
 
+    const isFinalizado = state.estado === "completado" || state.estado === "cancelado";
+
     let html = "";
 
     state.stepperData.forEach((paso, index) => {
       const pasoIndex = index + 1;
-      const esCompleted = pasoIndex < state.pasoActual;
-      const esActive = pasoIndex === state.pasoActual;
-      const esPending = pasoIndex > state.pasoActual;
+
+      // Si está completado o cancelado, todos los pasos son completed
+      let esCompleted, esActive, esPending;
+      if (isFinalizado) {
+        esCompleted = true;
+        esActive = false;
+        esPending = false;
+      } else {
+        esCompleted = pasoIndex < state.pasoActual;
+        esActive = pasoIndex === state.pasoActual;
+        esPending = pasoIndex > state.pasoActual;
+      }
 
       const estadoClase = esCompleted ? "completed" : esActive ? "active" : "pending";
 
