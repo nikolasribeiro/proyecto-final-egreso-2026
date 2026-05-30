@@ -107,13 +107,81 @@
     }
   }
 
-  function openQRModal(documentName, documentId) {
+  function openQRModal(documentName, documentId, documentUrl) {
     const qrDocumentName = document.getElementById("qr-document-name");
     if (qrDocumentName) {
       qrDocumentName.textContent = documentName;
     }
 
+    // Guardar datos para la descarga
+    window.currentQRData = {
+      documentName,
+      documentId,
+      documentUrl,
+    };
+
     openModal(`qr-modal-${documentId}`);
+  }
+
+  function downloadQR() {
+    const qrData = window.currentQRData;
+    if (!qrData) return;
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData.documentUrl)}`;
+    const nombreArchivo = qrData.documentName.replace(/\s+/g, "_") + ".png";
+
+    fetch(qrUrl)
+      .then((res) => res.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombreArchivo;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => console.error("Error al descargar QR:", err));
+  }
+
+  function printQR() {
+    const qrData = window.currentQRData;
+    if (!qrData) return;
+
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData.documentUrl)}`;
+
+    const ventana = window.open("", "_blank");
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>QR - ${qrData.documentName}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 40px;
+            margin: 0;
+          }
+          h2 {
+            color: #333;
+            margin-bottom: 20px;
+          }
+          img {
+            width: 250px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+          }
+        </style>
+      </head>
+      <body>
+        <h2>${qrData.documentName}</h2>
+        <img src="${qrUrl}" alt="Código QR">
+      </body>
+      </html>
+    `);
+    ventana.document.close();
+    setTimeout(() => ventana.print(), 250);
   }
 
   // ==========================================
@@ -170,6 +238,8 @@
     window.closeModal = closeModal;
     window.closeModalOnOverlay = closeModalOnOverlay;
     window.openQRModal = openQRModal;
+    window.downloadQR = downloadQR;
+    window.printQR = printQR;
   });
 
   // También ejecutar inmediatamente por si DOMContentLoaded ya ocurrió

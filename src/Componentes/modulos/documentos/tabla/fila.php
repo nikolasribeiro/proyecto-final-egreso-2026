@@ -47,7 +47,7 @@
     <td data-label="Acciones">
         <button
             class="btn btn-secondary btn-small"
-            onclick="openQRModal('<?= e($nombreDocumento) ?>', '<?= e($idDocumento) ?>')">
+            onclick="openQRModal('<?= e($nombreDocumento) ?>', '<?= e($idDocumento) ?>', '<?= e($rutaDocumento) ?>')">
             <svg
                 class="icon"
                 fill="none"

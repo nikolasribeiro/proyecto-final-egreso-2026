@@ -388,6 +388,18 @@ body {
   background: #d97706;
 }
 
+.btn-outline {
+  background: var(--white);
+  color: var(--secondary-gray);
+  border: 2px solid var(--border-gray);
+}
+
+.btn-outline:hover {
+  background: var(--light-gray);
+  border-color: var(--secondary-gray);
+  color: var(--black);
+}
+
 .btn-large {
   padding: 1.25rem 2rem;
   font-size: 1.125rem;
