@@ -266,8 +266,7 @@
 
       html += `
         <div class="detail-stepper-step ${estadoClase}" data-step="${pasoIndex}" data-tipo="${paso.tipo}" data-destino-orden="${paso.destinoOrden || ""}">
-          ${reportsBadge}
-          <div class="detail-step-indicator">${indicatorContent}</div>
+          <div class="detail-step-indicator">${indicatorContent}${reportsBadge}</div>
           <div class="detail-step-content">
             <div class="detail-step-title">${paso.titulo}</div>
             ${timeInfo}
