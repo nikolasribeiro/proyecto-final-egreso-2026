@@ -246,7 +246,7 @@
 </section>
 
 <!-- QR Code Modal -->
-<?php componente('modulos/documentos/qr-modal.php') ?>
+<?php componente('modulos/documentos/qr-modal') ?>
 
 <!-- Upload Document Modal -->
-<?php componente('modulos/documentos/subida-documentos-modal.php') ?>
+<?php componente('modulos/documentos/subida-documentos-modal') ?>
