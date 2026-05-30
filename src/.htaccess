@@ -12,7 +12,6 @@ RewriteCond %{THE_REQUEST} \.php[\?\ ] [NC]
 RewriteCond %{REQUEST_URI} !^/index\.php$ [NC]
 RewriteRule ^ - [F,L]
 
-
 # Si la dirección no es un archivo real (-f) ni una carpeta real (-d),
 # redirige todo silenciosamente a index.php para que el Router lo gestione.
 RewriteCond %{REQUEST_FILENAME} !-f
