@@ -4,36 +4,6 @@
  * @var array $traslados
  */
 
-$traslados = [
-    [
-        'id' => '1',
-        'tipo' => 'Paciente',
-        'ubicacion_origen' => 'Hospital Clinicas',
-        'ubicacion_destino' => 'Hospital Universitario',
-        'fecha_realizacion' => 'Hace 5 dias',
-        'chofer' => 'Juan Pérez',
-        'estado' => 'En Proceso'
-    ],
-    [
-        'id' => '2',
-        'tipo' => 'Doctor',
-        'ubicacion_origen' => 'Clinica A',
-        'ubicacion_destino' => 'Clinica B',
-        'fecha_realizacion' => 'Hace 3 dias',
-        'chofer' => 'Juan Pérez',
-        'estado' => 'Finalizado'
-    ],
-    [
-        'id' => '3',
-        'tipo' => 'Paciente',
-        'ubicacion_origen' => 'Hospital C',
-        'ubicacion_destino' => 'Clinica D',
-        'fecha_realizacion' => 'Hace 7 dias',
-        'chofer' => 'Juan Pérez',
-        'estado' => 'En Proceso'
-    ],
-];
-
 ?>
 
 <section id="traslados" class="section active">

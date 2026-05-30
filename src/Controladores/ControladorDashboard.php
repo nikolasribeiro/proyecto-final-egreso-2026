@@ -75,11 +75,47 @@ class ControladorDashboard extends RutaProtegida
      */
     public function trasladosInicio(): void
     {
+        $trasladosRaw = ModeloTraslado::obtenerTodos();
+
+        // Transformar datos al formato que espera la vista
+        $traslados = array_map(function ($t) {
+            $primerDestino = $t['destinos'][0]['nombre'] ?? 'Sin destino';
+            $ultimoDestino = $t['destinos'][count($t['destinos']) - 1]['nombre'] ?? 'Sin destino';
+
+            // Mapear estado interno a texto para la vista
+            $estadoMap = [
+                'solicitado' => 'Solicitado',
+                'en_proceso' => 'En Proceso',
+                'completado' => 'Finalizado',
+                'cancelado' => 'Cancelado'
+            ];
+
+            // Mapear tipo interno a texto
+            $tipoMap = [
+                'paciente_alta' => 'Paciente',
+                'biologico' => 'Biológico',
+                'equipamiento' => 'Equipamiento',
+                'doctor' => 'Doctor'
+            ];
+
+            return [
+                'id' => (string) $t['id'],
+                'tipo' => $tipoMap[$t['tipo']] ?? $t['tipo'],
+                'ubicacion_origen' => $t['origen'],
+                'ubicacion_destino' => $primerDestino,
+                'fecha_realizacion' => 'Hace ' . rand(1, 7) . ' dias',
+                'chofer' => $t['conductor'],
+                'estado' => $estadoMap[$t['estado']] ?? $t['estado'],
+                'estado_interno' => $t['estado']
+            ];
+        }, $trasladosRaw);
+
         // Mostrar contenido del panel principal
         vista('modulos/traslados/inicio', [
             'titulo_pagina' => "Trazabilidad de Traslados",
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
+            'traslados' => $traslados
         ], 'admin');
     }
 
