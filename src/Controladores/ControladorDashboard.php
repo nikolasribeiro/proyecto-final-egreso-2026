@@ -4,6 +4,7 @@ namespace Controladores;
 
 use Nucleo\Sesion;
 use Nucleo\RutaProtegida;
+use Modelos\ModeloTraslado;
 
 class ControladorDashboard extends RutaProtegida
 {
@@ -101,5 +102,93 @@ class ControladorDashboard extends RutaProtegida
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
         ], 'admin');
+    }
+
+    // ==========================================
+    // API METHODS
+    // ==========================================
+
+    public function apiObtenerTraslado(int $id): void
+    {
+        header('Content-Type: application/json');
+
+        $traslado = ModeloTraslado::obtenerPorId($id);
+
+        if (!$traslado) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'Traslado no encontrado']);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'data' => $traslado]);
+    }
+
+    public function apiRegistrarArribo(int $id): void
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['destino_orden']) || !isset($data['timestamp'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        $resultado = ModeloTraslado::registrarArribo(
+            $id,
+            $data['destino_orden'],
+            $data['timestamp']
+        );
+
+        if ($resultado['success']) {
+            ModeloTraslado::avanzarPaso($id);
+        }
+
+        echo json_encode($resultado);
+    }
+
+    public function apiCrearReporte(int $id): void
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['destino_orden']) || !isset($data['tipo_problema']) || !isset($data['mensaje'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        $resultado = ModeloTraslado::crearReporte(
+            $id,
+            $data['destino_orden'],
+            $data['tipo_problema'],
+            $data['mensaje']
+        );
+
+        echo json_encode($resultado);
+    }
+
+    public function apiCancelarTraslado(int $id): void
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['destino_orden']) || !isset($data['tipo_problema']) || !isset($data['mensaje'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        $resultado = ModeloTraslado::cancelar(
+            $id,
+            $data['destino_orden'],
+            $data['tipo_problema'],
+            $data['mensaje']
+        );
+
+        echo json_encode($resultado);
     }
 }

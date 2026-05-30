@@ -11,7 +11,7 @@ header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 
 // CSP (Content Security Policy)
-header("Content-Security-Policy: default-src 'self' 'unsafe-inline'; img-src https://api.qrserver.com/v1/create-qr-code/; connect-src https://api.qrserver.com/v1/create-qr-code/;");
+header("Content-Security-Policy: default-src 'self' 'unsafe-inline'; img-src https://api.qrserver.com/v1/create-qr-code/; connect-src 'self' https://api.qrserver.com/v1/create-qr-code/;");
 
 spl_autoload_register(function ($nombre_clase) {
     $archivo = __DIR__ . '/' . str_replace('\\', '/', $nombre_clase) . '.php';
@@ -63,6 +63,12 @@ $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::c
 $enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
 $enrutador->get('/dashboard/traslados/nuevo', [\Controladores\ControladorDashboard::class, 'nuevoTraslado']);
 $enrutador->get('/dashboard/traslados/{id}', [\Controladores\ControladorDashboard::class, 'detalleTraslado']);
+
+// Rutas API para traslados
+$enrutador->get('/api/traslados/{id}', [\Controladores\ControladorDashboard::class, 'apiObtenerTraslado']);
+$enrutador->post('/api/traslados/{id}/arribo', [\Controladores\ControladorDashboard::class, 'apiRegistrarArribo']);
+$enrutador->post('/api/traslados/{id}/reportes', [\Controladores\ControladorDashboard::class, 'apiCrearReporte']);
+$enrutador->post('/api/traslados/{id}/cancelar', [\Controladores\ControladorDashboard::class, 'apiCancelarTraslado']);
 
 
 // Ruta para la Página de Clientes (o Pacientes)
