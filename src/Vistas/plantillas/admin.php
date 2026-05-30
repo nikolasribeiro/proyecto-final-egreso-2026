@@ -16,6 +16,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HC - <?php echo e($titulo_pagina) ?></title>
     <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/assets/css/components/transfer-detail.css">
 </head>
 
 <body>
