@@ -1,2 +1,26 @@
+# Secretos y configuración local
 .env
+.env.local
 issues_context.json
+
+# Archivos de log
+*.log
+logs/
+
+# Dependencias (reservado para futuro)
+node_modules/
+vendor/
+
+# Configuraciones de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Cachés y artefactos de build
+.cache/
+dist/
+build/
