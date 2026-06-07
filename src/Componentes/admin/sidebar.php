@@ -5,6 +5,7 @@
  * @var string $nombre
  * @var string $rol
  */
+$uri = $_SERVER['REQUEST_URI'];
 ?>
 
 
@@ -30,7 +31,8 @@
         <p class="nav-section-title">Modulos</p>
         <ul class="nav-list">
             <li class="nav-item">
-                <a href="#" class="nav-link active" data-section="documents">
+                <!-- Enlace Documentos: Estará activo si NO estamos en la ruta de traslados -->
+                <a href="#" class="nav-link <?= strpos($uri, '/traslados') === false ? 'active' : '' ?>" data-section="documents">
                     <svg
                         class="nav-icon"
                         fill="none"
@@ -46,7 +48,8 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a href="#" class="nav-link" data-section="transfers">
+                <!-- Enlace Traslados: Estará activo SI la URL contiene '/traslados' -->
+                <a href="/traslados" class="nav-link <?= strpos($uri, '/traslados') !== false ? 'active' : '' ?>">
                     <svg
                         class="nav-icon"
                         fill="none"
