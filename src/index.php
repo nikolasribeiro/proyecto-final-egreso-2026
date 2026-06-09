@@ -55,7 +55,7 @@ $enrutador = new \Nucleo\Enrutador();
 // Aquí definimos: (Método de envío, Dirección URL, [Nombre del Controlador, Nombre de la Función])
 
 // Ruta para la Página de Inicio (Raíz)
-$enrutador->get('/', [\Controladores\ControladorInicio::class, 'inicio']);
+$enrutador->get('/', [\Controladores\ControladorInicio::class, 'documentos']);
 
 // Ruta para la Página de Clientes (o Pacientes)
 $enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);
@@ -64,6 +64,14 @@ $enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio'
 $enrutador->get('/prueba', [\Controladores\ControladorInicio::class, 'prueba']);
 $enrutador->get('/prueba/{id}', [\Controladores\ControladorInicio::class, 'pruebaDetalle']);
 
+// Rutas del Módulo de Traslados (Ambulancias)
+$enrutador->get('/traslados', [\Controladores\ControladorTraslados::class, 'inicio']);
+$enrutador->get('/traslados/nuevo', [\Controladores\ControladorTraslados::class, 'nuevo']);
+$enrutador->get('/traslados/detalle', [\Controladores\ControladorTraslados::class, 'detalle']);
+
+// Acciones POST del Módulo de Traslados
+$enrutador->post('/traslados/guardar', [\Controladores\ControladorTraslados::class, 'guardar']);
+$enrutador->post('/traslados/actualizar-estado', [\Controladores\ControladorTraslados::class, 'actualizarEstado']);
 
 // 3. Ejecutamos el enrutador.
 // Le pasamos el método (si es GET o POST) y la dirección que el usuario escribió en el navegador.
