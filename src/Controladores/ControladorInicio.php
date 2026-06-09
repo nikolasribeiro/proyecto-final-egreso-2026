@@ -6,15 +6,8 @@ use Modelos\ModeloCliente;
 
 class ControladorInicio
 {
-    public function inicio(): void
+    public function documentos(): void
     {
-        try {
-            $nuevoCliente = ModeloCliente::crear();
-            vista('inicio', [
-                'nombreCliente' => $nuevoCliente,
-            ], 'admin');
-        } catch (\Throwable $th) {
-            vista('errores/error_servidor');
-        }
+        vista("inicio", ["titulo_pagina" => "tituloprueba"], "admin");
     }
 }
