@@ -16,6 +16,11 @@ jobs:
       - name: Sincronizar datos del Issue al PR (incluye Project v2)
         uses: actions/github-script@v7
         with:
+          # PROJECT_TOKEN es un fine-grained PAT con acceso a Issues y Projects.
+          # Es necesario porque el GITHUB_TOKEN automático no tiene scope `project`
+          # y por tanto no puede leer/escribir Project v2 de propiedad de un usuario.
+          # Ver: docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/using-the-api-to-manage-projects
+          github-token: ${{ secrets.PROJECT_TOKEN }}
           script: |
             const path = require('path');
             const scriptPath = path.join(
