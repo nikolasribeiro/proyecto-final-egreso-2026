@@ -55,14 +55,11 @@ $enrutador = new \Nucleo\Enrutador();
 // Aquí definimos: (Método de envío, Dirección URL, [Nombre del Controlador, Nombre de la Función])
 
 // Ruta para la Página de Inicio (Raíz)
-$enrutador->get('/', [\Controladores\ControladorInicio::class, 'documentos']);
-
-// Ruta para la Página de Clientes (o Pacientes)
-$enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);
+$enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
 
 // Pruebas con parametros
-$enrutador->get('/prueba', [\Controladores\ControladorInicio::class, 'prueba']);
-$enrutador->get('/prueba/{id}', [\Controladores\ControladorInicio::class, 'pruebaDetalle']);
+// $enrutador->get('/prueba', [\Controladores\ControladorDocumentos::class, 'prueba']);
+// $enrutador->get('/prueba/{id}', [\Controladores\ControladorDocumentos::class, 'pruebaDetalle']);
 
 // Rutas del Módulo de Traslados (Ambulancias)
 $enrutador->get('/traslados', [\Controladores\ControladorTraslados::class, 'inicio']);
