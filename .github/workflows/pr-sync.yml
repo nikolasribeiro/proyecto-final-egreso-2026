@@ -10,9 +10,19 @@ jobs:
       issues: write
       pull-requests: write
     steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
       - name: Sincronizar datos del Issue al PR (incluye Project v2)
         uses: actions/github-script@v7
         with:
           script: |
-            const { main } = require('./.github/scripts/sync-pr.js');
+            const path = require('path');
+            const scriptPath = path.join(
+              process.env.GITHUB_WORKSPACE,
+              '.github',
+              'scripts',
+              'sync-pr.js'
+            );
+            const { main } = require(scriptPath);
             await main({ github, context, core });
