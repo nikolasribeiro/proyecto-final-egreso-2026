@@ -1167,14 +1167,9 @@
             <!-- Main Content -->
             <main class="main">
 
-                <?php $uri = $_SERVER['REQUEST_URI']; ?>
-
-                <div class="section <?= strpos($uri, '/traslados') !== false ? 'active' : '' ?>">
+                <div class="section active">
                     <?= $contenido ?? '' ?>
                 </div>
-
-                             
-
                
             </main>
         </div>
