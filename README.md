@@ -47,7 +47,7 @@ git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git
 ```
 
 **2. Variables de entorno**
-Asegurate copiar el archivo: `.env.example` y crear uno nuevo llamado `.env` y copia los valores de las variables de entorno que necesites para tu proyecto.
+Asegurate duplicar el archivo: `.env.example` y renombrar el duplicado a `.env` y configura los valores de las variables de entorno que necesites para tu proyecto local.
 
 **3. Levantar la infraestructura**
 Abrí la terminal en la raíz del proyecto y ejecutá:
