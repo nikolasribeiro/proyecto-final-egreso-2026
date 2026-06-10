@@ -47,7 +47,31 @@ git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git
 ```
 
 **2. Variables de entorno**
-Asegurate duplicar el archivo: `.env.example` y renombrar el duplicado a `.env` y configura los valores de las variables de entorno que necesites para tu proyecto local.
+Asegurate de generar tu archivo de configuración copiando el archivo de ejemplo. Podés hacerlo ejecutando en la terminal:
+
+`cp .env.example .env`
+
+Luego, abrí el nuevo archivo `.env` generado y completá los valores vacíos con tus credenciales locales. La estructura es la siguiente:
+
+#### Configuraciones Generales
+```text
+APP_PORT=8000
+BASE_PATH=http://localhost:${APP_PORT} # <- Dejar así en modo desarrollo
+MYSQL_DATABASE=nombre_de_tu_bd
+MYSQL_USER=tu_usuario
+MYSQL_PASSWORD=tu_contraseña
+MYSQL_ROOT_PASSWORD=tu_contraseña_root
+```
+#### Configuraciones de desarrollo
+```text
+PMA_HOST=db # <- Dejar como está
+PMA_USER=tu_usuario
+PMA_PASSWORD=tu_contraseña
+```
+#### Variables visibles en PHP
+```text
+APP_ENVIRONMENT=development
+```
 
 **3. Levantar la infraestructura**
 Abrí la terminal en la raíz del proyecto y ejecutá:
