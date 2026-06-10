@@ -165,6 +165,14 @@ async function findOrAddProjectItem(github, projectId, prNodeId, core) {
  * al item del PR. Los campos faltantes o sin valor se omiten.
  */
 async function copyFieldsToPR(github, sourceItem, targetItemId, projectId, core) {
+  // Diagnóstico: listar todos los field values encontrados en el source.
+  const allFields = (sourceItem.fieldValues.nodes || []).map((fv) => ({
+    name: fv.field && fv.field.name,
+    type: fv.field && fv.field.__typename,
+    valueType: fv.__typename
+  }));
+  console.log(`[DEBUG] Field values en source (${allFields.length}): ${JSON.stringify(allFields)}`);
+
   for (const target of FIELD_TARGETS) {
     const sourceFieldValue = (sourceItem.fieldValues.nodes || []).find(
       (fv) => fv.field && fv.field.name === target.name && fv.field.__typename === target.fieldType
