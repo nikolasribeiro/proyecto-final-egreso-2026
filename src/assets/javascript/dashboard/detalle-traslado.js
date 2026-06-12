@@ -18,6 +18,7 @@
     stepperData: [],
     volverAlOrigen: false,
     estado: "",
+    prioridad: "verde",
   };
 
   // DOM Elements
@@ -115,6 +116,7 @@
     state.volverAlOrigen = data.volver_al_origen || false;
     state.pasoActual = data.paso_actual || 1;
     state.estado = data.estado || "";
+    state.prioridad = data.prioridad || "verde";
     state.stepperData = construirStepper(data.destinos, data.volver_al_origen);
     state.totalPasos = state.stepperData.length;
   }
@@ -233,6 +235,21 @@
     const tipoTexto = tipoMap[info.tipo] || info.tipo || "Traslado";
     tipoBadge = `<span class="transfer-type-badge badge-patient">${tipoTexto}</span>`;
 
+    // Prioridad (semáforo) badge
+    const prioridadLabels = {
+      "rojo": "Rojo",
+      "amarillo": "Amarillo",
+      "verde": "Verde",
+    };
+    const prioridadClases = {
+      "rojo": "badge-priority-red",
+      "amarillo": "badge-priority-yellow",
+      "verde": "badge-priority-green",
+    };
+    const prioridadTexto = prioridadLabels[state.prioridad] || "Sin prioridad";
+    const prioridadClase = prioridadClases[state.prioridad] || "badge-priority-green";
+    const prioridadBadge = `<span class="transfer-priority-badge ${prioridadClase}" title="Prioridad: ${prioridadTexto}"><span class="priority-dot"></span>${prioridadTexto}</span>`;
+
     elements.transferInfo.innerHTML = `
       <h3>Traslado #${info.numero}</h3>
       <p>${info.paciente} - ${info.origen} → ${primerDestino.nombre}</p>
@@ -241,13 +258,18 @@
     // Update badges in header
     const header = document.querySelector(".transfer-detail-header");
     if (header) {
-      const existingBadges = header.querySelectorAll(".transfer-type-badge");
+      // Limpia tanto badges de tipo como de prioridad
+      const existingBadges = header.querySelectorAll(
+        ".transfer-type-badge, .transfer-priority-badge"
+      );
       existingBadges.forEach(b => b.remove());
 
       // Add estado badge
       if (estadoBadge) {
         header.insertAdjacentHTML("beforeend", estadoBadge);
       }
+      // Add prioridad badge
+      header.insertAdjacentHTML("beforeend", prioridadBadge);
       // Add tipo badge
       if (tipoBadge) {
         header.insertAdjacentHTML("beforeend", tipoBadge);

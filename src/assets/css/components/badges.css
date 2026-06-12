@@ -123,3 +123,67 @@
   background: var(--warning-yellow-light);
   color: var(--warning-yellow);
 }
+
+/* ========== Priority Badges (Semáforo) ========== */
+.transfer-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.transfer-priority-badge .priority-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.badge-priority-red {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+  border: 1px solid var(--danger-red);
+}
+
+.badge-priority-red .priority-dot {
+  background: var(--danger-red);
+  box-shadow: 0 0 0 2px var(--danger-red-light);
+  animation: pulse 1.5s infinite;
+}
+
+.badge-priority-yellow {
+  background: var(--warning-yellow-light);
+  color: var(--warning-yellow);
+  border: 1px solid var(--warning-yellow);
+}
+
+.badge-priority-yellow .priority-dot {
+  background: var(--warning-yellow);
+  box-shadow: 0 0 0 2px var(--warning-yellow-light);
+}
+
+.badge-priority-green {
+  background: var(--success-green-light);
+  color: var(--success-green);
+  border: 1px solid var(--success-green);
+}
+
+.badge-priority-green .priority-dot {
+  background: var(--success-green);
+  box-shadow: 0 0 0 2px var(--success-green-light);
+}
+
+/* ========== Inactive Status (Soft Delete) ========== */
+.status-inactive {
+  background: var(--light-gray);
+  color: var(--secondary-gray);
+}
+
+.status-inactive .status-dot {
+  background: var(--secondary-gray);
+}

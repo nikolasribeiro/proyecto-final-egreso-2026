@@ -1,6 +1,6 @@
-<div class="form-step" id="step-4">
+<div class="form-step" id="step-5">
     <h3 class="step-title">
-        <span class="step-number">4</span>
+        <span class="step-number">5</span>
         Asignar Personal
     </h3>
 
@@ -38,16 +38,28 @@
                 <?php endforeach; ?>
             </select>
         </div>
+
+        <!-- Jerarquía de enfermería: se muestra solo si se eligió un enfermero (JS) -->
+        <div class="form-group" id="jerarquia-enfermero-group" style="display: none;">
+            <label for="jerarquia-enfermero" class="form-label">Jerarquía de Enfermería</label>
+            <select id="jerarquia-enfermero" name="jerarquia_enfermero" class="form-select">
+                <option value="">-- Sin jerarquía específica --</option>
+                <option value="licenciado">Licenciado en Enfermería</option>
+                <option value="auxiliar">Auxiliar de Enfermería</option>
+                <option value="profesional">Enfermero Profesional</option>
+            </select>
+            <p class="step-hint">Requerido por auditoría ESRE para documentar los actores del sistema.</p>
+        </div>
     </div>
 
     <div class="step-actions">
-        <button type="button" class="btn btn-outline btn-lg" id="btn-back-4">
+        <button type="button" class="btn btn-outline btn-lg" id="btn-back-5">
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Volver
         </button>
-        <button type="button" class="btn btn-primary btn-lg" id="btn-step-4" disabled>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-step-5" disabled>
             Continuar
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

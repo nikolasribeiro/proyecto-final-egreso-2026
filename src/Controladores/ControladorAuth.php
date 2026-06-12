@@ -68,18 +68,28 @@ class ControladorAuth
 
         // Credenciales de prueba (remover en producción)
         $usuariosValidos = [
-            'admin' => 'admin123',
-            'medico' => 'medico123',
+            'admin'     => 'admin123',
+            'medico'    => 'medico123',
             'enfermero' => 'enfermero123',
+            'soporte'   => 'soporte123',
+        ];
+
+        // Mapa explícito username → rol del sistema.
+        // Cualquier username que no esté acá caerá en el fallback.
+        $mapaRoles = [
+            'admin'     => 'administrador',
+            'medico'    => 'medico',
+            'enfermero' => 'enfermero',
+            'soporte'   => 'soporte_tecnico',
         ];
 
         if (isset($usuariosValidos[$username]) && $usuariosValidos[$username] === $password) {
             // Login exitoso
             Sesion::guardar('user', [
-                'username' => $username,
-                'nombre' => $username,
-                'rol' => $username === 'admin' ? 'administrador' : 'usuario',
-                'login_at' => date('Y-m-d H:i:s'),
+                'username'  => $username,
+                'nombre'    => ucfirst($username),
+                'rol'       => $mapaRoles[$username] ?? 'usuario',
+                'login_at'  => date('Y-m-d H:i:s'),
             ]);
 
             // Regenerar sesión para prevenir session fixation

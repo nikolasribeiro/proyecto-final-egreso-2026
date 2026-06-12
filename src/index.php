@@ -60,9 +60,22 @@ $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
+$enrutador->get('/dashboard/documentos/categoria/{slug}', [\Controladores\ControladorDashboard::class, 'documentosCategoria']);
 $enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
 $enrutador->get('/dashboard/traslados/nuevo', [\Controladores\ControladorDashboard::class, 'nuevoTraslado']);
 $enrutador->get('/dashboard/traslados/{id}', [\Controladores\ControladorDashboard::class, 'detalleTraslado']);
+
+// Encuestas
+$enrutador->get('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestas']);
+$enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestaSubmit']);
+
+// Permisos (matriz)
+$enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
+
+// Usuarios (baja lógica)
+$enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);
+$enrutador->post('/dashboard/usuarios/{username}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
+$enrutador->post('/dashboard/usuarios/{username}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
 
 // Rutas API para traslados
 $enrutador->get('/api/traslados/{id}', [\Controladores\ControladorDashboard::class, 'apiObtenerTraslado']);

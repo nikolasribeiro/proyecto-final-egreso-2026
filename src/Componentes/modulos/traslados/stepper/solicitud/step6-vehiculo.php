@@ -1,4 +1,4 @@
-<div class="form-step" id="step-5">
+<div class="form-step" id="step-6">
     <h3 class="step-title">
         <span class="step-number">5</span>
         Selección de Vehículo
@@ -94,13 +94,13 @@
     <?php endif; ?>
 
     <div class="step-actions">
-        <button type="button" class="btn btn-outline btn-lg" id="btn-back-5">
+        <button type="button" class="btn btn-outline btn-lg" id="btn-back-6">
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Volver
         </button>
-        <button type="button" class="btn btn-primary btn-lg" id="btn-step-5" disabled>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-step-6" disabled>
             Continuar
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
