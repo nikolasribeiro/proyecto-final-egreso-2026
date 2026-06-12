@@ -30,6 +30,11 @@
 @import url("components/stepper.css");
 @import url("components/badges.css");
 @import url("components/traslados-wizard.css");
+@import url("components/encuestas.css");
+@import url("components/permisos.css");
+@import url("components/usuarios.css");
+@import url("components/documentos-categoria.css");
+@import url("components/transfer-detail.css");
 
 /* ==========================================================================
    COMPONENTS - External Component CSS

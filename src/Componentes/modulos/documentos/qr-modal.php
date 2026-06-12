@@ -13,7 +13,7 @@
     onclick="closeModalOnOverlay(event)">
     <div class="modal">
         <div class="modal-header">
-            <h3 class="modal-title">Codigo QR del Documento</h3>
+            <h3 class="modal-title">Codigo QR de la Categoria</h3>
             <button class="modal-close" onclick="closeModal('qr-modal-<?= e($idDocumento) ?>')">
                 <svg
                     width="16"
@@ -41,8 +41,9 @@
                 <p class="qr-document-name" id="qr-document-name">
                     <?php echo e($nombreDocumento) ?>
                 </p>
-                <p style="font-size: 0.875rem; color: var(--secondary-gray)">
-                    Escanee este codigo para acceder al documento
+                <p style="font-size: 0.875rem; color: var(--secondary-gray); text-align: center; margin-top: 0.5rem;">
+                    Escanee este codigo para acceder a la categoria completa de documentos.<br>
+                    <span class="qr-url"><?= e($rutaDocumento) ?></span>
                 </p>
             </div>
         </div>

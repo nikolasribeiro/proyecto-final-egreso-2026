@@ -1,4 +1,4 @@
-<div class="form-step" id="step-3">
+<div class="form-step" id="step-4">
     <h3 class="step-title">
         <span class="step-number">3</span>
         Destinos del Traslado
@@ -24,13 +24,13 @@
     </div>
 
     <div class="step-actions">
-        <button type="button" class="btn btn-outline btn-lg" id="btn-back-3">
+        <button type="button" class="btn btn-outline btn-lg" id="btn-back-4">
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Volver
         </button>
-        <button type="button" class="btn btn-primary btn-lg" id="btn-step-3" disabled>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-step-4" disabled>
             Continuar
             <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

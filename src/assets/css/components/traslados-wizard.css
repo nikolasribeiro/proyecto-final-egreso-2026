@@ -832,3 +832,116 @@
     opacity: 0.5;
   }
 }
+
+/* ==========================================================================
+   STEP 2 - DATOS CLÍNICOS
+   ========================================================================== */
+
+.clinico-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.clinico-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .clinico-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.clinico-card {
+  cursor: pointer;
+  display: block;
+}
+
+.clinico-card input {
+  display: none;
+}
+
+.clinico-card-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 2px solid var(--border-gray);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+  background: var(--white);
+}
+
+.clinico-card:hover .clinico-card-content {
+  border-color: var(--primary-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.clinico-card input:checked + .clinico-card-content {
+  border-color: var(--primary-blue);
+  background: var(--primary-blue-light);
+}
+
+.clinico-card input:checked + .clinico-card-content .clinico-icon {
+  background: var(--primary-blue);
+  color: var(--white);
+}
+
+.clinico-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.clinico-icon.critico {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+}
+
+.clinico-card input:checked + .clinico-card-content .clinico-icon.critico {
+  background: var(--danger-red);
+  color: var(--white);
+}
+
+.clinico-icon.camilla {
+  background: var(--success-green-light);
+  color: var(--success-green);
+}
+
+.clinico-card input:checked + .clinico-card-content .clinico-icon.camilla {
+  background: var(--success-green);
+  color: var(--white);
+}
+
+.clinico-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.clinico-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.clinico-titulo {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--black);
+}
+
+.clinico-desc {
+  font-size: 0.85rem;
+  color: var(--secondary-gray);
+}

@@ -16,20 +16,23 @@
         <!-- ========== STEP 1: TIPO DE TRASLADO ========== -->
         <?php componente("modulos/traslados/stepper/solicitud/step1-tipo-traslado") ?>
 
-        <!-- ========== STEP 2: ORIGEN ========== -->
-        <?php componente("modulos/traslados/stepper/solicitud/step2-origen") ?>
+        <!-- ========== STEP 2: DATOS CLÍNICOS ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step2-datos-clinicos") ?>
 
-        <!-- ========== STEP 3: DESTINOS ========== -->
-        <?php componente("modulos/traslados/stepper/solicitud/step3-destinos") ?>
+        <!-- ========== STEP 3: ORIGEN ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step3-origen") ?>
 
-        <!-- ========== STEP 4: PERSONAL ========== -->
-        <?php componente("modulos/traslados/stepper/solicitud/step4-personal") ?>
+        <!-- ========== STEP 4: DESTINOS ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step4-destinos") ?>
 
-        <!-- ========== STEP 5: VEHÍCULO ========== -->
-        <?php componente("modulos/traslados/stepper/solicitud/step5-vehiculo") ?>
+        <!-- ========== STEP 5: PERSONAL ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step5-personal") ?>
 
-        <!-- ========== STEP 6: CONFIRMACION ========== -->
-        <?php componente("modulos/traslados/stepper/solicitud/step6-confirmacion") ?>
+        <!-- ========== STEP 6: VEHÍCULO ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step6-vehiculo") ?>
+
+        <!-- ========== STEP 7: CONFIRMACION ========== -->
+        <?php componente("modulos/traslados/stepper/solicitud/step7-confirmacion") ?>
     </div>
 </div>
 

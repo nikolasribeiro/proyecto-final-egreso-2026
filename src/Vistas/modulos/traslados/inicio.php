@@ -2,6 +2,7 @@
 
 /**
  * @var array $traslados
+ * @var bool  $puede_crear
  */
 
 ?>
@@ -16,6 +17,7 @@
                     Gestione y monitoree los traslados activos
                 </p>
             </div>
+            <?php if (!empty($puede_crear)): ?>
             <a
                 class="btn btn-primary"
                 href="/dashboard/traslados/nuevo">
@@ -32,6 +34,7 @@
                 </svg>
                 Solicitar Traslado
             </a>
+            <?php endif; ?>
         </div>
 
         <h3
@@ -45,14 +48,24 @@
 
         <div class="card-grid">
             <?php foreach ($traslados as $traslado): ?>
-                <!-- Active Transfer 1 -->
+                <?php
+                    $prioridadClase = match ($traslado['prioridad_interna'] ?? 'verde') {
+                        'rojo'     => 'badge-priority-red',
+                        'amarillo' => 'badge-priority-yellow',
+                        default    => 'badge-priority-green',
+                    };
+                ?>
                 <a
                     class="card transfer-card"
                     href="/dashboard/traslados/<?= $traslado['id'] ?>"
                     style="cursor: pointer">
                     <div class="transfer-header">
                         <span class="transfer-type-badge badge-patient"><?= e($traslado['tipo']) ?></span>
-                        <span class="transfer-id"><?= e($traslado['id']) ?></span>
+                        <span class="transfer-priority-badge <?= $prioridadClase ?>" title="Prioridad: <?= e($traslado['prioridad']) ?>">
+                            <span class="priority-dot"></span>
+                            <?= e($traslado['prioridad']) ?>
+                        </span>
+                        <span class="transfer-id">#<?= e($traslado['id']) ?></span>
                     </div>
                     <div class="transfer-details">
                         <div class="transfer-detail-row">

@@ -36,11 +36,39 @@ document.addEventListener("DOMContentLoaded", function () {
     resumenConductor: document.getElementById("resumen-conductor"),
     resumenEnfermeroRow: document.getElementById("resumen-enfermero-row"),
     resumenEnfermero: document.getElementById("resumen-enfermero"),
+    resumenJerarquiaRow: document.getElementById("resumen-jerarquia-row"),
+    resumenJerarquia: document.getElementById("resumen-jerarquia"),
     resumenVehiculo: document.getElementById("resumen-vehiculo"),
     resumenVueltaRow: document.getElementById("resumen-vuelta-row"),
+    resumenEstadoCriticoRow: document.getElementById("resumen-estado-critico-row"),
+    resumenEstadoCritico: document.getElementById("resumen-estado-critico"),
+    resumenCamillaRow: document.getElementById("resumen-camilla-row"),
+    resumenCamilla: document.getElementById("resumen-camilla"),
+    resumenDiagnosticoRow: document.getElementById("resumen-diagnostico-row"),
+    resumenDiagnostico: document.getElementById("resumen-diagnostico"),
     btnSolicitarSame: document.getElementById("btn-solicitar-same"),
     conductorSelect: document.getElementById("conductor"),
     enfermeroSelect: document.getElementById("enfermero"),
+    jerarquiaSelect: document.getElementById("jerarquia-enfermero"),
+    jerarquiaGroup: document.getElementById("jerarquia-enfermero-group"),
+    estadoCritico: document.getElementById("estado-critico"),
+    requiereCamilla: document.getElementById("requiere-camilla"),
+    tipoDiagnostico: document.getElementById("tipo-diagnostico"),
+  };
+
+  // Labels legibles para los diagnósticos
+  const diagnosticoLabels = {};
+  if (elementos.tipoDiagnostico) {
+    Array.from(elementos.tipoDiagnostico.options).forEach((opt) => {
+      if (opt.value) diagnosticoLabels[opt.value] = opt.textContent;
+    });
+  }
+
+  // Labels legibles para las jerarquías
+  const jerarquiaLabels = {
+    licenciado: "Licenciado en Enfermería",
+    auxiliar: "Auxiliar de Enfermería",
+    profesional: "Enfermero Profesional",
   };
 
   /**
@@ -54,9 +82,13 @@ document.addEventListener("DOMContentLoaded", function () {
     return {
       pasoActual: 1,
       tipoTraslado: null,
+      estadoCritico: false,
+      requiereCamilla: false,
+      tipoDiagnostico: null,
       destinos: [],
       conductor: null,
       enfermero: null,
+      jerarquiaEnfermero: null,
       vehiculo: null,
       volverOrigen: false,
     };
@@ -106,6 +138,17 @@ document.addEventListener("DOMContentLoaded", function () {
       if (radio) radio.checked = true;
     }
 
+    // Restaurar datos clínicos
+    if (elementos.estadoCritico) {
+      elementos.estadoCritico.checked = !!estado.estadoCritico;
+    }
+    if (elementos.requiereCamilla) {
+      elementos.requiereCamilla.checked = !!estado.requiereCamilla;
+    }
+    if (elementos.tipoDiagnostico && estado.tipoDiagnostico) {
+      elementos.tipoDiagnostico.value = estado.tipoDiagnostico;
+    }
+
     // Restaurar destinos
     renderizarDestinos();
 
@@ -129,12 +172,16 @@ document.addEventListener("DOMContentLoaded", function () {
     if (elementos.enfermeroSelect && estado.enfermero) {
       elementos.enfermeroSelect.value = estado.enfermero;
     }
+    if (elementos.jerarquiaSelect && estado.jerarquiaEnfermero) {
+      elementos.jerarquiaSelect.value = estado.jerarquiaEnfermero;
+    }
+    actualizarVisibilidadJerarquia();
 
     // Actualizar botones según estado
     actualizarBotonPaso1();
-    actualizarBotonPaso3();
     actualizarBotonPaso4();
     actualizarBotonPaso5();
+    actualizarBotonPaso6();
   }
 
   /**
@@ -150,7 +197,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    // Navegación entre pasos
+    // Navegación entre pasos (7 pasos totales)
     document
       .getElementById("btn-step-1")
       ?.addEventListener("click", () => irAPaso(2));
@@ -181,6 +228,12 @@ document.addEventListener("DOMContentLoaded", function () {
     document
       .getElementById("btn-back-6")
       ?.addEventListener("click", () => irAPaso(5));
+    document
+      .getElementById("btn-step-6")
+      ?.addEventListener("click", () => irAPaso(7));
+    document
+      .getElementById("btn-back-7")
+      ?.addEventListener("click", () => irAPaso(6));
     elementos.btnConfirmar.addEventListener("click", confirmarTraslado);
 
     // Conductor y Enfermero
@@ -188,13 +241,46 @@ document.addEventListener("DOMContentLoaded", function () {
       elementos.conductorSelect.addEventListener("change", function () {
         estado.conductor = this.value || null;
         guardarEstado();
-        actualizarBotonPaso4();
+        actualizarBotonPaso5();
       });
     }
 
     if (elementos.enfermeroSelect) {
       elementos.enfermeroSelect.addEventListener("change", function () {
         estado.enfermero = this.value || null;
+        // Si se deselecciona el enfermero, también limpiamos la jerarquía
+        if (!estado.enfermero) {
+          estado.jerarquiaEnfermero = null;
+          if (elementos.jerarquiaSelect) elementos.jerarquiaSelect.value = "";
+        }
+        guardarEstado();
+        actualizarVisibilidadJerarquia();
+      });
+    }
+
+    if (elementos.jerarquiaSelect) {
+      elementos.jerarquiaSelect.addEventListener("change", function () {
+        estado.jerarquiaEnfermero = this.value || null;
+        guardarEstado();
+      });
+    }
+
+    // Datos clínicos (Paso 2)
+    if (elementos.estadoCritico) {
+      elementos.estadoCritico.addEventListener("change", function () {
+        estado.estadoCritico = this.checked;
+        guardarEstado();
+      });
+    }
+    if (elementos.requiereCamilla) {
+      elementos.requiereCamilla.addEventListener("change", function () {
+        estado.requiereCamilla = this.checked;
+        guardarEstado();
+      });
+    }
+    if (elementos.tipoDiagnostico) {
+      elementos.tipoDiagnostico.addEventListener("change", function () {
+        estado.tipoDiagnostico = this.value || null;
         guardarEstado();
       });
     }
@@ -228,7 +314,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (e.target.name === "vehiculo") {
           estado.vehiculo = e.target.value;
           guardarEstado();
-          actualizarBotonPaso5();
+          actualizarBotonPaso6();
         }
       });
     }
@@ -277,13 +363,25 @@ document.addEventListener("DOMContentLoaded", function () {
     actualizarStepper();
     actualizarPasos();
     actualizarBotonPaso1();
-    actualizarBotonPaso3();
     actualizarBotonPaso4();
     actualizarBotonPaso5();
+    actualizarBotonPaso6();
 
-    // Si estamos en el paso 6 (confirmación), actualizar resumen
-    if (estado.pasoActual === 6) {
+    // Si estamos en el paso 7 (confirmación), actualizar resumen
+    if (estado.pasoActual === 7) {
       actualizarResumen();
+    }
+  }
+
+  /**
+   * Muestra/oculta el campo Jerarquía según haya enfermero seleccionado.
+   */
+  function actualizarVisibilidadJerarquia() {
+    if (!elementos.jerarquiaGroup) return;
+    if (estado.enfermero) {
+      elementos.jerarquiaGroup.style.display = "flex";
+    } else {
+      elementos.jerarquiaGroup.style.display = "none";
     }
   }
 
@@ -336,30 +434,30 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Actualizar botón del paso 3
+   * Actualizar botón del paso 4 (Destinos - requiere al menos 1)
    */
-  function actualizarBotonPaso3() {
-    const btn = document.getElementById("btn-step-3");
+  function actualizarBotonPaso4() {
+    const btn = document.getElementById("btn-step-4");
     if (btn) {
       btn.disabled = estado.destinos.length === 0;
     }
   }
 
   /**
-   * Actualizar botón del paso 4 (Personal - requiere conductor)
+   * Actualizar botón del paso 5 (Personal - requiere conductor)
    */
-  function actualizarBotonPaso4() {
-    const btn = document.getElementById("btn-step-4");
+  function actualizarBotonPaso5() {
+    const btn = document.getElementById("btn-step-5");
     if (btn) {
       btn.disabled = !estado.conductor;
     }
   }
 
   /**
-   * Actualizar botón del paso 5 (Vehículo)
+   * Actualizar botón del paso 6 (Vehículo)
    */
-  function actualizarBotonPaso5() {
-    const btn = document.getElementById("btn-step-5");
+  function actualizarBotonPaso6() {
+    const btn = document.getElementById("btn-step-6");
     if (btn) {
       btn.disabled = !estado.vehiculo;
     }
@@ -391,7 +489,7 @@ document.addEventListener("DOMContentLoaded", function () {
           if (estado.vehiculo === input.value) {
             estado.vehiculo = null;
             guardarEstado();
-            actualizarBotonPaso5();
+            actualizarBotonPaso6();
           }
         }
       } else {
@@ -453,7 +551,7 @@ document.addEventListener("DOMContentLoaded", function () {
     guardarEstado();
     renderizarDestinos();
     cerrarModalDestino();
-    actualizarBotonPaso3();
+    actualizarBotonPaso4();
   }
 
   /**
@@ -506,7 +604,7 @@ document.addEventListener("DOMContentLoaded", function () {
     estado.destinos = estado.destinos.filter((d) => d.id !== id);
     guardarEstado();
     renderizarDestinos();
-    actualizarBotonPaso3();
+    actualizarBotonPaso4();
   }
 
   /**
@@ -515,6 +613,39 @@ document.addEventListener("DOMContentLoaded", function () {
   function actualizarResumen() {
     // Tipo de traslado
     elementos.resumenTipo.textContent = nombresTipo[estado.tipoTraslado] || "-";
+
+    // Datos clínicos
+    if (elementos.resumenEstadoCriticoRow) {
+      if (estado.estadoCritico) {
+        elementos.resumenEstadoCriticoRow.style.display = "flex";
+        if (elementos.resumenEstadoCritico) {
+          elementos.resumenEstadoCritico.textContent = "Sí";
+        }
+      } else {
+        elementos.resumenEstadoCriticoRow.style.display = "none";
+      }
+    }
+    if (elementos.resumenCamillaRow) {
+      if (estado.requiereCamilla) {
+        elementos.resumenCamillaRow.style.display = "flex";
+        if (elementos.resumenCamilla) {
+          elementos.resumenCamilla.textContent = "Sí";
+        }
+      } else {
+        elementos.resumenCamillaRow.style.display = "none";
+      }
+    }
+    if (elementos.resumenDiagnosticoRow) {
+      if (estado.tipoDiagnostico) {
+        elementos.resumenDiagnosticoRow.style.display = "flex";
+        if (elementos.resumenDiagnostico) {
+          elementos.resumenDiagnostico.textContent =
+            diagnosticoLabels[estado.tipoDiagnostico] || estado.tipoDiagnostico;
+        }
+      } else {
+        elementos.resumenDiagnosticoRow.style.display = "none";
+      }
+    }
 
     // Destinos
     if (estado.destinos.length > 0) {
@@ -550,6 +681,19 @@ document.addEventListener("DOMContentLoaded", function () {
       elementos.resumenEnfermeroRow.style.display = "none";
     }
 
+    // Jerarquía de enfermería
+    if (elementos.resumenJerarquiaRow) {
+      if (estado.enfermero && estado.jerarquiaEnfermero) {
+        elementos.resumenJerarquiaRow.style.display = "flex";
+        if (elementos.resumenJerarquia) {
+          elementos.resumenJerarquia.textContent =
+            jerarquiaLabels[estado.jerarquiaEnfermero] || estado.jerarquiaEnfermero;
+        }
+      } else {
+        elementos.resumenJerarquiaRow.style.display = "none";
+      }
+    }
+
     // Vehículo
     if (estado.vehiculo) {
       const vehiculoSelected = document.querySelector(
@@ -575,25 +719,26 @@ document.addEventListener("DOMContentLoaded", function () {
    * Confirmar el traslado
    */
   function confirmarTraslado() {
-    // Recopilar todos los datos
     const datosTraslado = {
       tipo: estado.tipoTraslado,
+      estadoCritico: estado.estadoCritico,
+      requiereCamilla: estado.requiereCamilla,
+      tipoDiagnostico: estado.tipoDiagnostico,
       origen: "Hospital de Clínicas",
       destinos: estado.destinos,
       conductor: estado.conductor,
       enfermero: estado.enfermero,
+      jerarquiaEnfermero: estado.jerarquiaEnfermero,
       vehiculo: estado.vehiculo,
       volverOrigen: estado.volverOrigen,
     };
 
     console.log("Datos del traslado:", datosTraslado);
 
-    // En un entorno real, aquí se haría la llamada al servidor
     alert(
       "Traslado confirmado correctamente. En un entorno real, esto enviaría los datos al servidor.",
     );
 
-    // Limpiar sessionStorage y redirigir
     limpiarEstado();
     // window.location.href = '/dashboard/traslados';
   }

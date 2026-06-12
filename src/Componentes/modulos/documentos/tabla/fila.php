@@ -7,9 +7,12 @@
  * @var int     $tamanoDocumento
  * @var string  $fechaSubidaDocumento
  * @var string  $rutaDocumento
+ * @var array   $categoriaDocumento
  */
+$categoriaDocumento = $categoriaDocumento ?? ['slug' => 'general', 'nombre' => 'General'];
+$qrData = '/dashboard/documentos/categoria/' . $categoriaDocumento['slug'];
 ?>
-<tr>
+<tr data-categoria="<?= e($categoriaDocumento['slug']) ?>">
     <td>
         <div class="document-cell">
             <div class="document-icon">
@@ -34,6 +37,11 @@
             </div>
         </div>
     </td>
+    <td data-label="Categoria">
+        <span class="document-category badge">
+            <?= e($categoriaDocumento['nombre']) ?>
+        </span>
+    </td>
     <td data-label="Tamano">
         <span class="document-size">
             <?php echo e($tamanoDocumento) ?>
@@ -47,7 +55,7 @@
     <td data-label="Acciones">
         <button
             class="btn btn-secondary btn-small"
-            onclick="openQRModal('<?= e($nombreDocumento) ?>', '<?= e($idDocumento) ?>', '<?= e($rutaDocumento) ?>')">
+            onclick="openQRModal('<?= e($nombreDocumento) ?>', '<?= e($idDocumento) ?>', '<?= e($qrData) ?>')">
             <svg
                 class="icon"
                 fill="none"
@@ -70,7 +78,7 @@ componente(
     'modulos/documentos/qr-modal',
     [
         'idDocumento' => $idDocumento,
-        'rutaDocumento' => $rutaDocumento,
+        'rutaDocumento' => $qrData,
         'nombreDocumento' => $nombreDocumento,
     ]
 );

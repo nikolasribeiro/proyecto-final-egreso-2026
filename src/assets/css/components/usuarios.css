@@ -1,0 +1,92 @@
+/* ==========================================================================
+   COMPONENTS - Usuarios
+   ========================================================================== */
+
+.usuarios-filtros {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.filtro-chip {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border-gray);
+  background: var(--white);
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--secondary-gray);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filtro-chip:hover {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+}
+
+.filtro-chip.is-active {
+  background: var(--primary-blue);
+  border-color: var(--primary-blue);
+  color: var(--white);
+}
+
+.usuarios-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.usuarios-table th,
+.usuarios-table td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border-gray);
+}
+
+.usuarios-table thead th {
+  background: var(--light-gray);
+  font-weight: 600;
+  color: var(--secondary-gray);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.usuario-username {
+  font-family: monospace;
+  background: var(--light-gray);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .usuarios-table thead {
+    display: none;
+  }
+
+  .usuarios-table tr {
+    display: block;
+    border: 1px solid var(--border-gray);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+  }
+
+  .usuarios-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: none;
+    padding: 0.5rem;
+  }
+
+  .usuarios-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--secondary-gray);
+    font-size: 0.8rem;
+  }
+}
