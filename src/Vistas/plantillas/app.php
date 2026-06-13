@@ -17,6 +17,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $titulo ?? 'Micro Framework UTU' ?></title>
     <link rel="stylesheet" href="/assets/css/globals.app.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 
 <body>
@@ -34,6 +35,7 @@
     <footer class="footer">
         &copy; <?= date('Y') ?> Proyecto UTU - Todos los derechos reservados.
     </footer>
+         <script src="/js/dashboard.js"></script>
 </body>
 
 </html>
