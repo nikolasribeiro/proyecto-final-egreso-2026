@@ -11,9 +11,9 @@ class Vista
      * 
      * @param string $plantilla La ruta de la vista relativa a la carpeta Vistas (ej: 'inicio' o 'cliente/inicio')
      * @param array $datos Datos extraídos como variables disponibles en la vista
-     * @param string $plantillaBase El nombre del layout base (ej: 'app' o 'admin')
+     * @param string $plantillaBase El nombre del layout base (ej: 'admin')
      */
-    public static function mostrar(string $plantilla, array $datos = [], string $plantillaBase = 'app'): void
+    public static function mostrar(string $plantilla, array $datos = [], string $plantillaBase = 'admin'): void
     {
         extract($datos);
 
