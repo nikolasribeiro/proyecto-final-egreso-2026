@@ -6,6 +6,6 @@ class ControladorDocumentos
 {
     public function inicio(): void
     {
-        vista("documentos/inicio", ["titulo_pagina" => "tituloprueba"], "admin");
+        vista("modulos/documentos/inicio", ["titulo_pagina" => "Gestion de Documentos"], "admin");
     }
 }

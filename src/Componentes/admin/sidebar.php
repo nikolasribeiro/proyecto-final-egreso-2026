@@ -30,8 +30,8 @@
         <p class="nav-section-title">Modulos</p>
         <ul class="nav-list">
             <li class="nav-item">
-                
-                <a href="#" class="nav-link " data-section="documents">
+
+                <a href="/" class="nav-link ">
                     <svg
                         class="nav-icon"
                         fill="none"
@@ -47,7 +47,7 @@
                 </a>
             </li>
             <li class="nav-item">
-                
+
                 <a href="/traslados" class="nav-link">
                     <svg
                         class="nav-icon"

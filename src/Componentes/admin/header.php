@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @var string titulo_pagina
+ * @var string $titulo_pagina
  */
 
 ?>
