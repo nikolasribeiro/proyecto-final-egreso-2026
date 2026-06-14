@@ -2,7 +2,7 @@
 // Plantilla para el panel administrativo
 
 /**
- * @var string titulo_pagina
+ * @var string $titulo_pagina
  * @var string $nombre
  * @var string $rol
  * @var string $contenido
@@ -15,7 +15,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HC - <?php echo e($titulo_pagina) ?> </title>
-    <link rel="stylesheet" href="/public/css/dashboard.css">
+    <link rel="stylesheet" href="/assets/css/main.css">
 </head>
 
 <body>
@@ -26,7 +26,7 @@
         <!-- Main Content Wrapper -->
         <div class="main-wrapper">
             <!-- Header -->
-            <?php componente('admin/header',["titulo_pagina" => $titulo_pagina]) ?>
+            <?php componente('admin/header', ["titulo_pagina" => $titulo_pagina]) ?>
 
             <!-- Main Content -->
             <main class="main">
@@ -34,7 +34,7 @@
                 <div class="section active">
                     <?= $contenido ?? '' ?>
                 </div>
-               
+
             </main>
         </div>
     </div>
@@ -158,7 +158,7 @@
             </div>
         </div>
     </div>
-<script src="/public/js/dashboard.js"></script>
+    <script src="/assets/js/dashboard.js"></script>
 </body>
 
 </html>

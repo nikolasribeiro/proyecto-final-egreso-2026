@@ -6,7 +6,7 @@ class ControladorTraslados
 {
     public function inicio(): void
     {
-        vista('traslados/inicio', [
+        vista('modulos/traslados/inicio', [
             'titulo_pagina' => 'Trazabilidad de Traslados',
             'nombre' => 'Administrador', // Variables requeridas por el sidebar
             'rol' => 'Admin'
@@ -15,7 +15,7 @@ class ControladorTraslados
 
     public function nuevo(): void
     {
-        vista('traslados/nuevo', [
+        vista('modulos/traslados/nuevo', [
             'titulo_pagina' => 'Nuevo Traslado',
             'nombre' => 'Administrador',
             'rol' => 'Admin'
@@ -24,7 +24,7 @@ class ControladorTraslados
 
     public function detalle(): void
     {
-        vista('traslados/detalle', [
+        vista('modulos/traslados/detalle', [
             'titulo_pagina' => 'Detalle del Traslado',
             'nombre' => 'Administrador',
             'rol' => 'Admin'
@@ -36,7 +36,7 @@ class ControladorTraslados
     public function guardar(): void
     {
         // Aquí en el futuro capturaremos $_POST y usararemos el Modelo para guardar en la BD
-        
+
         // Simulamos éxito y volvemos al listado
         redirigir('/traslados');
     }
@@ -44,10 +44,8 @@ class ControladorTraslados
     public function actualizarEstado(): void
     {
         // Aquí en el futuro capturaremos el ID del traslado y actualizaremos su estado en la BD
-        
+
         // Simulamos éxito y volvemos a cargar la vista de detalle
         redirigir('/traslados/detalle');
     }
 }
-
-    
