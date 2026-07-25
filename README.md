@@ -94,6 +94,91 @@ Una vez que los contenedores estén levantados, accedé desde tu navegador:
 Para detener los contenedores (sin perder los datos de la base de datos), ejecutá:
 `docker-compose down`
 
+---
+
+## Monitoreo (Zabbix)
+
+El proyecto incluye **Zabbix 7.0** para monitorear los servicios `proxy`, `web` y `db` mediante agentes sidecar. Está disponible tanto en producción como en desarrollo (opt-in).
+
+### Entorno de desarrollo (opt-in)
+
+En `docker-compose.yml` los servicios de Zabbix están bajo el perfil `monitoring`, por lo que **no se levantan con `docker compose up` por defecto** (ahorra ~400 MB de RAM cuando no los necesitás).
+
+Para levantar el stack de dev **con Zabbix**:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+> El `nginx/default.conf` ya incluye el bloque `location /zabbix/` que hace proxy al `zabbix-web`, por lo que el dashboard queda accesible en `http://localhost:${APP_PORT}/zabbix/` igual que en producción.
+>
+> Asegurate de tener las variables `ZABBIX_*` en tu `.env` (ver bloque `MONITOREO (Zabbix)` en `.env.example`).
+
+Sin el profile (`docker compose up -d`), el stack de dev se comporta como siempre: `proxy`, `web`, `db` y `phpmyadmin`.
+
+### Levantar el stack de producción con Zabbix
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+> Asegurate de que tu `.env` tenga todas las variables del bloque `MONITOREO (Zabbix)` definidas en `.env.example`.
+
+### Accesos
+
+- **UI de Zabbix:** http://localhost:[APP_PORT]/zabbix/
+  - Ejemplo: con `APP_PORT=8000` → http://localhost:8000/zabbix/
+  - Usuario por defecto: `Admin`
+  - Contraseña por defecto: `zabbix`
+  - ⚠️ **Cambialas inmediatamente en el primer login** (Users → Admin → Change password).
+- **Tráfico de agentes → server:** se realiza internamente en la red `songbird_network` (no expuesto al host).
+
+### Vincular los servicios como hosts
+
+Tras el primer arranque (esperá ~60 segundos a que el server inicialice la BD):
+
+1. En la UI, ir a **Configuration → Hosts → Create host**.
+2. Crear 3 hosts con estos datos:
+   - `songbird_proxy` — interface: IP del contenedor `zabbix-agent-proxy`, port `10050`.
+   - `songbird_web` — interface: IP del contenedor `zabbix-agent-web`, port `10050`.
+   - `songbird_db` — interface: IP del contenedor `zabbix-agent-db`, port `10050`.
+3. Asignar el template **`Linux by Zabbix agent 2`** a cada host.
+4. Esperar 1–2 minutos y verificar en **Monitoring → Latest data** que aparezcan métricas (CPU, memoria, red, filesystem).
+
+### Configuración
+
+Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bloque `MONITOREO (Zabbix)`). Ver `.env.example` para la lista completa.
+
+### Solución de problemas
+
+- **"Connection refused" al agregar un host:** verificá que el contenedor `zabbix-agent-*` correspondiente está corriendo y pertenece a la red `songbird_network`:
+  ```bash
+  # En desarrollo
+  docker compose --profile monitoring ps
+  # En producción
+  docker compose -f docker-compose.prod.yml ps
+  ```
+- **El server de Zabbix no arranca:** revisá los logs:
+  ```bash
+  # En desarrollo
+  docker compose --profile monitoring logs zabbix-server
+  # En producción
+  docker compose -f docker-compose.prod.yml logs zabbix-server
+  ```
+  Causa común: credenciales MySQL mal configuradas en `.env` (variables `ZABBIX_DB_PASSWORD` y `ZABBIX_DB_ROOT_PASSWORD`).
+- **Resetear la contraseña del admin de Zabbix:**
+  ```bash
+  # En desarrollo
+  docker exec -u root zabbix-web-dev bash -c "supervisorctl restart zabbix"
+  # En producción
+  docker exec -u root zabbix-web-prod bash -c "supervisorctl restart zabbix"
+  ```
+
+### Notas de seguridad
+
+- **No expongo puertos innecesariamente al host**: el dashboard de Zabbix se accede vía `nginx` en `/zabbix/`, y la comunicación agente→server ocurre dentro de la red `songbird_network`. Solo el puerto `${APP_PORT}` queda publicado.
+- En producción, hacé `chmod 600 .env` para restringir el acceso a credenciales.
+
 ### En caso de tener problemas con algunos sitemas como por ejemplo Linux Mint
 
 - sudo apt update

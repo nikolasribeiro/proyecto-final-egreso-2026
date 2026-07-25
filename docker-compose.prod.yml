@@ -41,17 +41,69 @@ services:
     restart: unless-stopped
 
   # ==========================================
+  # AGENTES ZABBIX (sidecar por servicio)
+  # ==========================================
+  zabbix-agent-proxy:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-proxy
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_proxy
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird proxy nginx
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+    restart: unless-stopped
+
+  zabbix-agent-web:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-web
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_web
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird web php-apache
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+    restart: unless-stopped
+
+  zabbix-agent-db:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-db
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_db
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird db mariadb
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+    restart: unless-stopped
+
+  # ==========================================
   # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
   # ==========================================
   zabbix-db:
-    image: mysql:8.0-oracle
+    image: ${ZABBIX_DB_IMAGE}
     container_name: zabbix-db-prod
     command: --log_bin_trust_function_creators=1
     environment:
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_password
-      - MYSQL_ROOT_PASSWORD=root_password
+      - TZ=${ZABBIX_TZ}
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${ZABBIX_DB_ROOT_PASSWORD}
     volumes:
       - zabbix-db-data:/var/lib/mysql
     networks:
@@ -59,15 +111,17 @@ services:
     restart: unless-stopped
 
   zabbix-server:
-    image: zabbix/zabbix-server-mysql:alpine-7.0-latest
+    image: ${ZABBIX_SERVER_IMAGE}
     container_name: zabbix-server-prod
     environment:
+      - TZ=${ZABBIX_TZ}
       - DB_SERVER_HOST=zabbix-db
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_password
-    ports:
-      - "10051:10051"
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
+      - ZBX_LISTENPORT=${ZABBIX_SERVER_PORT}
+    # Puerto NO expuesto al host: los agentes sidecar y nginx lo alcanzan
+    # por la red interna songbird_network (DNS automático de Docker).
     networks:
       - songbird_network
     depends_on:
@@ -75,17 +129,24 @@ services:
     restart: unless-stopped
 
   zabbix-web:
-    image: zabbix/zabbix-web-nginx-mysql:alpine-7.0-latest
+    image: ${ZABBIX_WEB_IMAGE}
     container_name: zabbix-web-prod
     environment:
+      - TZ=${ZABBIX_TZ}
       - DB_SERVER_HOST=zabbix-db
-      - MYSQL_DATABASE=zabbix
-      - MYSQL_USER=zabbix
-      - MYSQL_PASSWORD=zabbix_password
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
       - ZBX_SERVER_HOST=zabbix-server
-      - PHP_TZ=America/Montevideo
-    ports:
-      - "8080:8080"
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - PHP_TZ=${ZABBIX_TZ}
+      # URL pública del frontend. CRÍTICO cuando Zabbix vive detrás de
+      # un reverse proxy en sub-path: si Zabbix no conoce su URL pública
+      # completa, emite redirects relativos que el navegador resuelve en
+      # bucles infinitos al cruzar auth/login.
+      - ZBX_BASE_URL=${ZABBIX_BASE_URL}
+    # Puerto NO expuesto al host: el dashboard se accede vía nginx en
+    # http://localhost:${APP_PORT}/zabbix/ (definido en nginx/default.conf).
     networks:
       - songbird_network
     depends_on:
