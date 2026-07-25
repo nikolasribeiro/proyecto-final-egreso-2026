@@ -1,10 +1,11 @@
-<?php 
+<?php
 // El componente sidebar es el componente que aparece a la izquierda del panel administrativo
 
 /**
  * @var string $nombre
  * @var string $rol
  */
+$tokenCsrf = \Nucleo\Sesion::generarTokenCsrf();
 ?>
 
 
@@ -63,16 +64,44 @@
                     Trazabilidad
                 </a>
             </li>
+
+            <?php if ($rol === 'tecnico'): ?>
+                <li class="nav-item">
+                    <a href="/zabbix/" class="nav-link">
+                        <svg
+                            class="nav-icon"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Monitoreo
+                    </a>
+                </li>
+            <?php endif; ?>
         </ul>
     </nav>
 
     <div class="sidebar-footer">
         <div class="user-info">
-            <div class="user-avatar">AD</div>
+            <div class="user-avatar"><?= e(strtoupper(substr($nombre ?: 'U', 0, 2))) ?></div>
             <div class="user-details">
-                <div class="user-name">$nombre</div>
-                <div class="user-role">$rol</div>
+                <div class="user-name"><?= e($nombre) ?></div>
+                <div class="user-role"><?= e($rol) ?></div>
             </div>
+            <form method="POST" action="/logout" class="user-logout">
+                <input type="hidden" name="token_csrf" value="<?= e($tokenCsrf) ?>">
+                <button type="submit" class="btn-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                </button>
+            </form>
         </div>
     </div>
 </aside>

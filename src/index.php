@@ -54,21 +54,42 @@ $enrutador = new \Nucleo\Enrutador();
 // 2. Registramos las páginas. 
 // Aquí definimos: (Método de envío, Dirección URL, [Nombre del Controlador, Nombre de la Función])
 
+// Rutas de autenticación
+$enrutador->get('/login', [\Controladores\ControladorAuth::class, 'mostrarLogin'])
+    ->middleware(\Nucleo\Middleware::invitado());
+
+$enrutador->post('/login', [\Controladores\ControladorAuth::class, 'login'])
+    ->middleware(\Nucleo\Middleware::invitado());
+
+$enrutador->post('/logout', [\Controladores\ControladorAuth::class, 'logout'])
+    ->middleware(\Nucleo\Middleware::auth());
+
+// Endpoint interno para SSO con Zabbix. No usar Middleware::auth()
+// porque queremos diferenciar 401 (no auth) vs 403 (auth sin rol).
+// La validación la hace el propio controlador.
+$enrutador->get('/zabbix/sso', [\Controladores\ControladorZabbixSSO::class, 'validar']);
+
 // Ruta para la Página de Inicio (Raíz)
-$enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
+$enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio'])
+    ->middleware(\Nucleo\Middleware::auth());
 
 // Pruebas con parametros
 // $enrutador->get('/prueba', [\Controladores\ControladorDocumentos::class, 'prueba']);
 // $enrutador->get('/prueba/{id}', [\Controladores\ControladorDocumentos::class, 'pruebaDetalle']);
 
 // Rutas del Módulo de Traslados (Ambulancias)
-$enrutador->get('/traslados', [\Controladores\ControladorTraslados::class, 'inicio']);
-$enrutador->get('/traslados/nuevo', [\Controladores\ControladorTraslados::class, 'nuevo']);
-$enrutador->get('/traslados/detalle', [\Controladores\ControladorTraslados::class, 'detalle']);
+$enrutador->get('/traslados', [\Controladores\ControladorTraslados::class, 'inicio'])
+    ->middleware(\Nucleo\Middleware::auth());
+$enrutador->get('/traslados/nuevo', [\Controladores\ControladorTraslados::class, 'nuevo'])
+    ->middleware(\Nucleo\Middleware::auth());
+$enrutador->get('/traslados/detalle', [\Controladores\ControladorTraslados::class, 'detalle'])
+    ->middleware(\Nucleo\Middleware::auth());
 
 // Acciones POST del Módulo de Traslados
-$enrutador->post('/traslados/guardar', [\Controladores\ControladorTraslados::class, 'guardar']);
-$enrutador->post('/traslados/actualizar-estado', [\Controladores\ControladorTraslados::class, 'actualizarEstado']);
+$enrutador->post('/traslados/guardar', [\Controladores\ControladorTraslados::class, 'guardar'])
+    ->middleware(\Nucleo\Middleware::auth());
+$enrutador->post('/traslados/actualizar-estado', [\Controladores\ControladorTraslados::class, 'actualizarEstado'])
+    ->middleware(\Nucleo\Middleware::auth());
 
 // 3. Ejecutamos el enrutador.
 // Le pasamos el método (si es GET o POST) y la dirección que el usuario escribió en el navegador.

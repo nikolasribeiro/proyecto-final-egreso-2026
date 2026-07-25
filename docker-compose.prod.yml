@@ -18,6 +18,14 @@ services:
   web:
     build: .
     container_name: songbird_web
+    environment:
+      # Host/puerto de la MariaDB consumidos por src/Nucleo/BD.php.
+      DB_HOST: db
+      DB_PORT: 3306
+      # Credenciales leídas por BD::conexion() desde getenv().
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - ./src:/var/www/html:z
     networks:
@@ -36,6 +44,11 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mariadb_data:/var/lib/mysql
+      # Inicialización del schema y seed de usuarios demo.
+      # MariaDB ejecuta /docker-entrypoint-initdb.d/*.sql SOLO cuando
+      # el volumen está vacío. Para volúmenes existentes, ejecutar el
+      # SQL manualmente (ver README.md).
+      - ./init:/docker-entrypoint-initdb.d:ro
     networks:
       - songbird_network
     restart: unless-stopped
@@ -131,6 +144,12 @@ services:
   zabbix-web:
     image: ${ZABBIX_WEB_IMAGE}
     container_name: zabbix-web-prod
+    entrypoint: /usr/local/bin/zabbix-entrypoint.sh
+    volumes:
+      # Wrapper del entrypoint: aplica fastcgi_param REMOTE_USER
+      # (necesario para HTTP Authentication via SSO) y luego invoca
+      # el entrypoint oficial de la imagen.
+      - ./zabbix/entrypoint-wrapper.sh:/usr/local/bin/zabbix-entrypoint.sh:ro,z
     environment:
       - TZ=${ZABBIX_TZ}
       - DB_SERVER_HOST=zabbix-db
@@ -145,6 +164,9 @@ services:
       # completa, emite redirects relativos que el navegador resuelve en
       # bucles infinitos al cruzar auth/login.
       - ZBX_BASE_URL=${ZABBIX_BASE_URL}
+      # Habilita HTTP Authentication en Zabbix. Combinado con nginx
+      # (auth_request + REMOTE_USER) permite SSO con la app PHP.
+      - ZBX_ALLOW_HTTP_AUTH=true
     # Puerto NO expuesto al host: el dashboard se accede vía nginx en
     # http://localhost:${APP_PORT}/zabbix/ (definido en nginx/default.conf).
     networks:

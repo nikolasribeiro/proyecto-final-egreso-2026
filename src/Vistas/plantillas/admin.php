@@ -21,7 +21,10 @@
 <body>
     <div class="app-container">
         <!-- Sidebar -->
-        <?php componente('admin/sidebar'); ?>
+        <?php componente('admin/sidebar', [
+            'nombre' => $nombre ?? '',
+            'rol' => $rol ?? '',
+        ]); ?>
 
         <!-- Main Content Wrapper -->
         <div class="main-wrapper">
