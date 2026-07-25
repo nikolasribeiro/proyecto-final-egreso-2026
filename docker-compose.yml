@@ -1,8 +1,12 @@
-# Este es el docker-compose.yml que utilizaremos en modo DESARROLLO, no sera el de produccion.
+# Este es el docker-compose.yml que utilizaremos en modo DESARROLLO.
 # En este caso, usamos PHP:8.2-apache como una imagen preconfigurada para PHP.
 # También utilizamos una base de datos MariaDB para almacenar los datos.
 # Finalmente, usamos PHPMyAdmin para administrar la base de datos.
 # El archivo de produccion sera docker-compose.prod.yml y no se utilizara phpmyadmin
+#
+# Los servicios de Zabbix están bajo el profile "monitoring" y NO se levantan
+# con `docker compose up` por defecto (ahorra ~400 MB de RAM en dev).
+# Para incluirlos: `docker compose --profile monitoring up -d`.
 
 services:
   proxy:
@@ -13,6 +17,8 @@ services:
     volumes:
       # configuracion del proxy
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:z
+    networks:
+      - songbird_network
     depends_on:
       - web
 
@@ -21,6 +27,8 @@ services:
     container_name: songbird_web
     volumes:
       - ./src:/var/www/html:z
+    networks:
+      - songbird_network
     depends_on:
       - db
 
@@ -34,17 +42,136 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mariadb_data:/var/lib/mysql
+    networks:
+      - songbird_network
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: songbird_pma
     environment:
       PMA_ABSOLUTE_URI: ${BASE_PATH}/phpmyadmin/
-      PMA_HOST: ${PMA_HOST} 
-      PMA_USER: ${PMA_USER} 
-      PMA_PASSWORD: ${PMA_PASSWORD} 
+      PMA_HOST: ${PMA_HOST}
+      PMA_USER: ${PMA_USER}
+      PMA_PASSWORD: ${PMA_PASSWORD}
+    networks:
+      - songbird_network
     depends_on:
       - db
 
+  # ==========================================
+  # AGENTES ZABBIX (profile: monitoring)
+  # ==========================================
+  # Levanta con: docker compose --profile monitoring up -d
+  zabbix-agent-proxy:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-proxy
+    profiles: [monitoring]
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_proxy
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird proxy nginx
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+
+  zabbix-agent-web:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-web
+    profiles: [monitoring]
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_web
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird web php-apache
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+
+  zabbix-agent-db:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-db
+    profiles: [monitoring]
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_db
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird db mariadb
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+
+  # ==========================================
+  # INFRAESTRUCTURA DE MONITOREO (ZABBIX) — profile: monitoring
+  # ==========================================
+  zabbix-db:
+    image: ${ZABBIX_DB_IMAGE}
+    container_name: zabbix-db-dev
+    profiles: [monitoring]
+    command: --log_bin_trust_function_creators=1
+    environment:
+      - TZ=${ZABBIX_TZ}
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${ZABBIX_DB_ROOT_PASSWORD}
+    volumes:
+      - zabbix-db-data:/var/lib/mysql
+    networks:
+      - songbird_network
+
+  zabbix-server:
+    image: ${ZABBIX_SERVER_IMAGE}
+    container_name: zabbix-server-dev
+    profiles: [monitoring]
+    environment:
+      - TZ=${ZABBIX_TZ}
+      - DB_SERVER_HOST=zabbix-db
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
+      - ZBX_LISTENPORT=${ZABBIX_SERVER_PORT}
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-db
+
+  zabbix-web:
+    image: ${ZABBIX_WEB_IMAGE}
+    container_name: zabbix-web-dev
+    profiles: [monitoring]
+    environment:
+      - TZ=${ZABBIX_TZ}
+      - DB_SERVER_HOST=zabbix-db
+      - MYSQL_DATABASE=${ZABBIX_DB_NAME}
+      - MYSQL_USER=${ZABBIX_DB_USER}
+      - MYSQL_PASSWORD=${ZABBIX_DB_PASSWORD}
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - PHP_TZ=${ZABBIX_TZ}
+      # URL pública del frontend. CRÍTICO cuando Zabbix vive detrás de
+      # un reverse proxy en sub-path: si Zabbix no conoce su URL pública
+      # completa, emite redirects relativos que el navegador resuelve en
+      # bucles infinitos al cruzar auth/login.
+      - ZBX_BASE_URL=${ZABBIX_BASE_URL}
+    networks:
+      - songbird_network
+    depends_on:
+      - zabbix-server
+
 volumes:
   mariadb_data:
+  zabbix-db-data:
+
+networks:
+  songbird_network:
+    driver: bridge
