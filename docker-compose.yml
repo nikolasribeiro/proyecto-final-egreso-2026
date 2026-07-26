@@ -59,7 +59,7 @@ services:
       - db
 
   # ==========================================
-  # AGENTES ZABBIX
+  # AGENTES ZABBIX 
   # ==========================================
   zabbix-agent-proxy:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -75,6 +75,7 @@ services:
       - songbird_network
     depends_on:
       - zabbix-server
+      - proxy
 
   zabbix-agent-web:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -90,6 +91,7 @@ services:
       - songbird_network
     depends_on:
       - zabbix-server
+      - web
 
   zabbix-agent-db:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -105,6 +107,7 @@ services:
       - songbird_network
     depends_on:
       - zabbix-server
+      - db
 
   # ==========================================
   # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
@@ -160,6 +163,7 @@ services:
       - songbird_network
     depends_on:
       - zabbix-server
+      - zabbix-db
 
 volumes:
   mariadb_data:
