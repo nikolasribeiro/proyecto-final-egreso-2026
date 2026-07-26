@@ -11,9 +11,21 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:z
     networks:
       - songbird_network
+    # proxy no arranca hasta que sus upstreams publicados estén healthy.
+    # En producción phpmyadmin NO existe, así que solo se esperan `web` y `zabbix-web`.
     depends_on:
-      - web
+      web:
+        condition: service_healthy
+      zabbix-web:
+        condition: service_healthy
     restart: unless-stopped
+    # Healthcheck HTTP local del propio nginx (config cargada + respuesta).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --timeout=5 http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 7s
+      retries: 6
+      start_period: 15s
 
   web:
     build: .
@@ -23,8 +35,19 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     restart: unless-stopped
+    # Healthcheck HTTP: `curl` viene incluido en php:8.2-apache.
+    # Acepta 2xx/3xx/4xx, rechaza 5xx (Apache vivo pero respondiendo error de app).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1/ | grep -qE '^[234][0-9][0-9]$'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   db:
     image: mariadb:10.11
@@ -39,6 +62,15 @@ services:
     networks:
       - songbird_network
     restart: unless-stopped
+    # Healthcheck MariaDB. `$$VAR` se expande dentro del contenedor.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mariadb-admin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   # ==========================================
   # AGENTES ZABBIX (sidecar por servicio)
@@ -55,9 +87,19 @@ services:
       - ZBX_METADATA=songbird proxy nginx
     networks:
       - songbird_network
+    # En prod el agente también espera al servicio que monitorea.
     depends_on:
-      - zabbix-server
+      zabbix-server:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   zabbix-agent-web:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -72,8 +114,17 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-server
+      zabbix-server:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   zabbix-agent-db:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -88,8 +139,17 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-server
+      zabbix-server:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # ==========================================
   # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
@@ -109,6 +169,14 @@ services:
     networks:
       - songbird_network
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
 
   zabbix-server:
     image: ${ZABBIX_SERVER_IMAGE}
@@ -125,8 +193,17 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-db
+      zabbix-db:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nc -z -w 3 127.0.0.1 "$${ZBX_LISTENPORT:-10051}" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
 
   zabbix-web:
     image: ${ZABBIX_WEB_IMAGE}
@@ -149,9 +226,19 @@ services:
     # http://localhost:${APP_PORT}/zabbix/ (definido en nginx/default.conf).
     networks:
       - songbird_network
+    # Restaurado: en prod también esperamos a `zabbix-db` (antes faltaba).
     depends_on:
-      - zabbix-server
+      zabbix-server:
+        condition: service_healthy
+      zabbix-db:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --timeout=5 http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 7s
+      retries: 12
+      start_period: 60s
 
 volumes:
   mariadb_data:
