@@ -4,9 +4,13 @@
 # Finalmente, usamos PHPMyAdmin para administrar la base de datos.
 # El archivo de produccion sera docker-compose.prod.yml y no se utilizara phpmyadmin
 #
-# Los servicios de Zabbix están bajo el profile "monitoring" y NO se levantan
-# con `docker compose up` por defecto (ahorra ~400 MB de RAM en dev).
-# Para incluirlos: `docker compose --profile monitoring up -d`.
+# Zabbix (server, web, db y 3 agentes) forma parte del arranque normal
+# del entorno de desarrollo. No se necesita ningún profile.
+#
+# Orquestación: cada servicio declara un `healthcheck:` y todas las
+# dependencias usan `condition: service_healthy`. Esto elimina la race
+# condition que provocaba un 502 transitorio en /zabbix/ cuando nginx
+# arrancaba antes de que zabbix-web terminara su inicialización interna.
 
 services:
   proxy:
@@ -19,8 +23,22 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:z
     networks:
       - songbird_network
+    # proxy no arranca hasta que TODOS sus upstreams están healthy.
+    # Esto garantiza que /zabbix/ y /phpmyadmin/ respondan al primer request.
     depends_on:
-      - web
+      web:
+        condition: service_healthy
+      phpmyadmin:
+        condition: service_healthy
+      zabbix-web:
+        condition: service_healthy
+    # Healthcheck del propio nginx (config cargada + respuesta HTTP local).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --timeout=5 http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 7s
+      retries: 6
+      start_period: 15s
 
   web:
     build: .
@@ -30,7 +48,18 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    # Healthcheck HTTP: `curl` viene incluido en php:8.2-apache.
+    # Acepta 2xx/3xx/4xx, rechaza 5xx (Apache vivo pero respondiendo error de app).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1/ | grep -qE '^[234][0-9][0-9]$'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
   db:
     image: mariadb:10.11
@@ -44,6 +73,16 @@ services:
       - mariadb_data:/var/lib/mysql
     networks:
       - songbird_network
+    # Healthcheck MariaDB: `mariadb-admin ping` (la imagen incluye ambos aliases).
+    # El doble `$$` escapa la variable para que la expanda el shell dentro del contenedor.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mariadb-admin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
@@ -56,10 +95,20 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    # phpMyAdmin incluye curl (es Debian-based). Mismo patrón que `web`.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1/ | grep -qE '^[234][0-9][0-9]$'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # ==========================================
-  # AGENTES ZABBIX 
+  # AGENTES ZABBIX
   # ==========================================
   zabbix-agent-proxy:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -73,9 +122,19 @@ services:
       - ZBX_METADATA=songbird proxy nginx
     networks:
       - songbird_network
+    # El agente espera al server y al servicio que monitorea.
     depends_on:
-      - zabbix-server
-      - proxy
+      zabbix-server:
+        condition: service_healthy
+      proxy:
+        condition: service_healthy
+    # Healthcheck TCP al puerto del agente (10050). `nc` está en Alpine.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   zabbix-agent-web:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -90,8 +149,16 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-server
-      - web
+      zabbix-server:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   zabbix-agent-db:
     image: ${ZABBIX_AGENT_IMAGE}
@@ -106,8 +173,16 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-server
-      - db
+      zabbix-server:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # ==========================================
   # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
@@ -126,6 +201,15 @@ services:
       - zabbix-db-data:/var/lib/mysql
     networks:
       - songbird_network
+    # Healthcheck MySQL 8.0.41: `mysqladmin ping` (incluido en la imagen).
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
 
   zabbix-server:
     image: ${ZABBIX_SERVER_IMAGE}
@@ -140,7 +224,18 @@ services:
     networks:
       - songbird_network
     depends_on:
-      - zabbix-db
+      zabbix-db:
+        condition: service_healthy
+    # Healthcheck TCP al puerto 10051. start_period generoso porque
+    # la inicialización del esquema puede tardar 30-60 s en el primer arranque.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - nc -z -w 3 127.0.0.1 "$${ZBX_LISTENPORT:-10051}" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
 
   zabbix-web:
     image: ${ZABBIX_WEB_IMAGE}
@@ -161,9 +256,19 @@ services:
       - ZBX_BASE_URL=${ZABBIX_BASE_URL}
     networks:
       - songbird_network
+    # zabbix-web espera a la BD y al server (ambos healthy) antes de arrancar.
     depends_on:
-      - zabbix-server
-      - zabbix-db
+      zabbix-server:
+        condition: service_healthy
+      zabbix-db:
+        condition: service_healthy
+    # Healthcheck HTTP al puerto interno 8080. wget está disponible en Alpine.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --timeout=5 http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 7s
+      retries: 12
+      start_period: 60s
 
 volumes:
   mariadb_data:

@@ -98,31 +98,52 @@ Para detener los contenedores (sin perder los datos de la base de datos), ejecut
 
 ## Monitoreo (Zabbix)
 
-El proyecto incluye **Zabbix 7.0** para monitorear los servicios `proxy`, `web` y `db` mediante agentes sidecar. Está disponible tanto en producción como en desarrollo (opt-in).
+El proyecto incluye **Zabbix 7.0** para monitorear los servicios `proxy`, `web` y `db` mediante agentes sidecar. El stack de Zabbix (server, web, su base MySQL y los 3 agentes) forma parte del arranque normal tanto en desarrollo como en producción. No se requiere ningún `--profile`.
 
-### Entorno de desarrollo (opt-in)
-
-En `docker-compose.yml` los servicios de Zabbix están bajo el perfil `monitoring`, por lo que **no se levantan con `docker compose up` por defecto** (ahorra ~400 MB de RAM cuando no los necesitás).
-
-Para levantar el stack de dev **con Zabbix**:
+### Levantar el entorno de desarrollo
 
 ```bash
-docker compose --profile monitoring up -d
+docker compose up -d
 ```
+
+Este comando inicia la aplicación, MariaDB, phpMyAdmin, Zabbix Server, Zabbix Web, su base MySQL y los tres agentes.
 
 > El `nginx/default.conf` ya incluye el bloque `location /zabbix/` que hace proxy al `zabbix-web`, por lo que el dashboard queda accesible en `http://localhost:${APP_PORT}/zabbix/` igual que en producción.
 >
-> Asegurate de tener las variables `ZABBIX_*` en tu `.env` (ver bloque `MONITOREO (Zabbix)` en `.env.example`).
+> Asegurate de definir las variables `ZABBIX_*` en tu `.env` (ver bloque `MONITOREO (Zabbix)` en `.env.example`).
 
-Sin el profile (`docker compose up -d`), el stack de dev se comporta como siempre: `proxy`, `web`, `db` y `phpmyadmin`.
-
-### Levantar el stack de producción con Zabbix
+### Levantar el stack de producción
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env up -d
 ```
 
 > Asegurate de que tu `.env` tenga todas las variables del bloque `MONITOREO (Zabbix)` definidas en `.env.example`.
+
+### Verificación de arranque
+
+Docker Compose espera a que cada servicio esté **healthy** (no solo "started") antes de iniciar sus dependientes. Esto elimina la race condition que provocaba un `502 Bad Gateway` transitorio al acceder a `/zabbix/` justo después del `up -d`.
+
+En el **primer arranque**, Zabbix puede tardar más de un minuto mientras inicializa su base de datos. Verificá el estado con:
+
+```bash
+docker compose ps
+```
+
+Todos los servicios deben figurar como `Up ... (healthy)`. Para producción:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env ps
+```
+
+Probá los dos accesos publicados:
+
+```bash
+curl -fsS "http://localhost:${APP_PORT}/"        > /dev/null
+curl -fsS "http://localhost:${APP_PORT}/zabbix/" > /dev/null
+```
+
+Ambos comandos deben finalizar con código `0` (sin 502).
 
 ### Accesos
 
@@ -153,24 +174,19 @@ Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bl
 
 - **"Connection refused" al agregar un host:** verificá que el contenedor `zabbix-agent-*` correspondiente está corriendo y pertenece a la red `songbird_network`:
   ```bash
-  # En desarrollo
-  docker compose --profile monitoring ps
-  # En producción
+  docker compose ps
   docker compose -f docker-compose.prod.yml ps
   ```
 - **El server de Zabbix no arranca:** revisá los logs:
   ```bash
-  # En desarrollo
-  docker compose --profile monitoring logs zabbix-server
-  # En producción
+  docker compose logs zabbix-server
   docker compose -f docker-compose.prod.yml logs zabbix-server
   ```
   Causa común: credenciales MySQL mal configuradas en `.env` (variables `ZABBIX_DB_PASSWORD` y `ZABBIX_DB_ROOT_PASSWORD`).
+- **Un servicio queda `(unhealthy)` tras `up -d`:** esperá un minuto y revisá los logs del servicio (`docker compose logs <servicio>`). El `start_period` cubre la inicialización; si supera ese margen suele haber credenciales mal o el upstream no responde.
 - **Resetear la contraseña del admin de Zabbix:**
   ```bash
-  # En desarrollo
   docker exec -u root zabbix-web-dev bash -c "supervisorctl restart zabbix"
-  # En producción
   docker exec -u root zabbix-web-prod bash -c "supervisorctl restart zabbix"
   ```
 
