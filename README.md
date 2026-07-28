@@ -94,6 +94,107 @@ Una vez que los contenedores estén levantados, accedé desde tu navegador:
 Para detener los contenedores (sin perder los datos de la base de datos), ejecutá:
 `docker-compose down`
 
+---
+
+## Monitoreo (Zabbix)
+
+El proyecto incluye **Zabbix 7.0** para monitorear los servicios `proxy`, `web` y `db` mediante agentes sidecar. El stack de Zabbix (server, web, su base MySQL y los 3 agentes) forma parte del arranque normal tanto en desarrollo como en producción. No se requiere ningún `--profile`.
+
+### Levantar el entorno de desarrollo
+
+```bash
+docker compose up -d
+```
+
+Este comando inicia la aplicación, MariaDB, phpMyAdmin, Zabbix Server, Zabbix Web, su base MySQL y los tres agentes.
+
+> El `nginx/default.conf` ya incluye el bloque `location /zabbix/` que hace proxy al `zabbix-web`, por lo que el dashboard queda accesible en `http://localhost:${APP_PORT}/zabbix/` igual que en producción.
+>
+> Asegurate de definir las variables `ZABBIX_*` en tu `.env` (ver bloque `MONITOREO (Zabbix)` en `.env.example`).
+
+### Levantar el stack de producción
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+```
+
+> Asegurate de que tu `.env` tenga todas las variables del bloque `MONITOREO (Zabbix)` definidas en `.env.example`.
+
+### Verificación de arranque
+
+Docker Compose espera a que cada servicio esté **healthy** (no solo "started") antes de iniciar sus dependientes. Esto elimina la race condition que provocaba un `502 Bad Gateway` transitorio al acceder a `/zabbix/` justo después del `up -d`.
+
+En el **primer arranque**, Zabbix puede tardar más de un minuto mientras inicializa su base de datos. Verificá el estado con:
+
+```bash
+docker compose ps
+```
+
+Todos los servicios deben figurar como `Up ... (healthy)`. Para producción:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env ps
+```
+
+Probá los dos accesos publicados:
+
+```bash
+curl -fsS "http://localhost:${APP_PORT}/"        > /dev/null
+curl -fsS "http://localhost:${APP_PORT}/zabbix/" > /dev/null
+```
+
+Ambos comandos deben finalizar con código `0` (sin 502).
+
+### Accesos
+
+- **UI de Zabbix:** http://localhost:[APP_PORT]/zabbix/
+  - Ejemplo: con `APP_PORT=8000` → http://localhost:8000/zabbix/
+  - Usuario por defecto: `Admin`
+  - Contraseña por defecto: `zabbix`
+  - ⚠️ **Cambialas inmediatamente en el primer login** (Users → Admin → Change password).
+- **Tráfico de agentes → server:** se realiza internamente en la red `songbird_network` (no expuesto al host).
+
+### Vincular los servicios como hosts
+
+Tras el primer arranque (esperá ~60 segundos a que el server inicialice la BD):
+
+1. En la UI, ir a **Configuration → Hosts → Create host**.
+2. Crear 3 hosts con estos datos:
+   - `songbird_proxy` — interface: IP del contenedor `zabbix-agent-proxy`, port `10050`.
+   - `songbird_web` — interface: IP del contenedor `zabbix-agent-web`, port `10050`.
+   - `songbird_db` — interface: IP del contenedor `zabbix-agent-db`, port `10050`.
+3. Asignar el template **`Linux by Zabbix agent 2`** a cada host.
+4. Esperar 1–2 minutos y verificar en **Monitoring → Latest data** que aparezcan métricas (CPU, memoria, red, filesystem).
+
+### Configuración
+
+Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bloque `MONITOREO (Zabbix)`). Ver `.env.example` para la lista completa.
+
+### Solución de problemas
+
+- **"Connection refused" al agregar un host:** verificá que el contenedor `zabbix-agent-*` correspondiente está corriendo y pertenece a la red `songbird_network`:
+  ```bash
+  docker compose ps
+  docker compose -f docker-compose.prod.yml ps
+  ```
+- **El server de Zabbix no arranca:** revisá los logs:
+  ```bash
+  docker compose logs zabbix-server
+  docker compose -f docker-compose.prod.yml logs zabbix-server
+  ```
+  Causa común: credenciales MySQL mal configuradas en `.env` (variables `ZABBIX_DB_PASSWORD` y `ZABBIX_DB_ROOT_PASSWORD`).
+- **Un servicio queda `(unhealthy)` tras `up -d`:** esperá un minuto y revisá los logs del servicio (`docker compose logs <servicio>`). El `start_period` cubre la inicialización; si supera ese margen suele haber credenciales mal o el upstream no responde.
+- **Resetear la contraseña del admin de Zabbix:**
+  ```bash
+  docker exec -u root zabbix-web-dev bash -c "supervisorctl restart zabbix"
+  docker exec -u root zabbix-web-prod bash -c "supervisorctl restart zabbix"
+  ```
+
+### Notas de seguridad
+
+- **No expongo puertos innecesariamente al host**: el dashboard de Zabbix se accede vía `nginx` en `/zabbix/`, y la comunicación agente→server ocurre dentro de la red `songbird_network`. Solo el puerto `${APP_PORT}` queda publicado.
+- En producción, hacé `chmod 600 .env` para restringir el acceso a credenciales.
+
 ### En caso de tener problemas con algunos sitemas como por ejemplo Linux Mint
 
 - sudo apt update
