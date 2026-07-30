@@ -151,6 +151,29 @@ services:
       retries: 6
       start_period: 30s
 
+  zabbix-agent-server:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: zabbix-agent-server
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      # Este nombre debe coincidir exactamente con el que Zabbix trae por defecto
+      - ZBX_HOSTNAME=Zabbix server 
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+    networks:
+      - songbird_network
+    depends_on:
+      zabbix-server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
   # ==========================================
   # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
   # ==========================================
