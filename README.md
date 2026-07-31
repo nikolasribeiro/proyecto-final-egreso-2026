@@ -219,3 +219,8 @@ Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bl
 - sudo systemctl start docker
 - sudo systemctl enable docker
 - sudo systemctl status docker
+
+### Para los casos donde el host es Windows y se requiere instalacion Docker
+- ir a panel de control, caracteristicas de Windows, y verificar en las casillas; "Hiper-V" y #Subsistema de Windows para Linux" esten marcadas.
+- instalar docker
+- luego ir a VS o GitBash (dependiendo de como lo tengan instalado en su pc) e iniciar el los dockers con el comando docker compose up -d desde la rama indicada.
