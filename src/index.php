@@ -70,6 +70,9 @@ $enrutador->get('/traslados/detalle', [\Controladores\ControladorTraslados::clas
 $enrutador->post('/traslados/guardar', [\Controladores\ControladorTraslados::class, 'guardar']);
 $enrutador->post('/traslados/actualizar-estado', [\Controladores\ControladorTraslados::class, 'actualizarEstado']);
 
+// Registrar endpoint del seeder
+$enrutador->get('/seed', [\Controladores\ControladorSeed::class, 'ejecutar']);
+
 // 3. Ejecutamos el enrutador.
 // Le pasamos el método (si es GET o POST) y la dirección que el usuario escribió en el navegador.
 $metodo = $_SERVER['REQUEST_METHOD'];

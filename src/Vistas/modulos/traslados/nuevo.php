@@ -1,4 +1,3 @@
-<!-- View: New Transfer Form -->
 <a href="/traslados" class="back-button">
     <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -11,7 +10,6 @@
         Nuevo Traslado
     </h2>
 
-    <!-- Alert: No vehicles -->
     <div class="alert alert-warning">
         <div class="alert-content">
             <svg class="alert-icon" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -26,7 +24,6 @@
 
     <form action="/traslados/guardar" method="POST">
 
-        <!-- Step 1: Transfer Type -->
         <div class="progressive-step completed">
             <div class="form-group">
                 <label class="form-label">Elemento a trasladar</label>
@@ -38,15 +35,22 @@
             </div>
         </div>
 
-         <!-- Step 2: Driver -->
-        <div class="progressive-step active">
+         <div class="progressive-step active">
             <div class="form-group">
                 <label class="form-label">Chofer</label>
-                <select class="form-select" name="chofer">
+                <select class="form-select" name="chofer" id="chofer" required>
                     <option value="">Seleccione un chofer</option>
-                    <option value="1">Juan Perez</option>
-                    <option value="2">Maria Garcia</option>
-                    <option value="3">Carlos Lopez</option>
+                    
+                    <?php if (!empty($choferes)): ?>
+                        <?php foreach ($choferes as $chofer): ?>
+                            <option value="<?= htmlspecialchars($chofer['ci']) ?>">
+                                <?= htmlspecialchars($chofer['nombre'] . ' ' . $chofer['apellido']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="" disabled>No hay choferes disponibles en la BD</option>
+                    <?php endif; ?>
+                    
                 </select>
                 <p class="form-hint">
                     Seleccione el chofer asignado al traslado
@@ -54,17 +58,27 @@
             </div>
         </div>
 
-        <!-- Step 3: Nurse (disabled until driver selected) -->
-        <div class="progressive-step">
-            <div class="form-group form-disabled">
+      <div class="progressive-step">
+            <div class="form-group">
                 <label class="form-label">Enfermero</label>
-                <div class="progressive-hint">
-                    Este campo se habilitara despues de seleccionar el chofer
-                </div>
+                <select class="form-select" name="ci_enfermero" id="enfermero">
+                    <option value="">Seleccione un enfermero</option>
+                    <?php if (!empty($enfermeros)): ?>
+                        <?php foreach ($enfermeros as $enf): ?>
+                            <option value="<?= htmlspecialchars($enf['ci']) ?>">
+                                <?= htmlspecialchars($enf['nombre'] . ' ' . $enf['apellido']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="" disabled>No hay enfermeros disponibles</option>
+                    <?php endif; ?>
+                </select>
+                <p class="form-hint">
+                    Seleccione el enfermero de traslado
+                </p>
             </div>
         </div>
 
-        <!-- Step 4: Additional Details (disabled) -->
         <div class="progressive-step">
             <div class="form-group form-disabled">
                 <label class="form-label">Detalles adicionales</label>
