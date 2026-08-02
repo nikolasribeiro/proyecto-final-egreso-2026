@@ -79,7 +79,6 @@ services:
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
     networks:
       - songbird_network
-    command: ["executable", "arg"]
     # Healthcheck MariaDB: `mariadb-admin ping` (la imagen incluye ambos aliases).
     # El doble `$$` escapa la variable para que la expanda el shell dentro del contenedor.
     healthcheck:
