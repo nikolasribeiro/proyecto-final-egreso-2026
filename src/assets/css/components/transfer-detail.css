@@ -200,12 +200,15 @@
   padding-bottom: 0;
 }
 
-/* Item actual: highlight sutil del bloque entero */
+/* Item actual: highlight sutil del bloque entero, sin desplazar la caja
+   para que el .timeline-marker quede alineado con el resto del timeline */
 .timeline-item.timeline-item-current {
-  background: var(--primary-blue-light);
-  margin: 0 calc(-1 * var(--space-3));
+  background: transparent;
+  box-shadow: inset 0 0 0 9999px var(--primary-blue-light);
+  border-radius: var(--radius-md);
+  margin: 0;
   padding: var(--space-3) var(--space-3) var(--space-3)
-    calc(32px + var(--space-4) + var(--space-3));
+    calc(32px + var(--space-4));
 }
 
 .timeline-marker {

@@ -196,12 +196,13 @@ class ControladorDashboard extends RutaProtegida
                 'conductor'        => $traslado['chofer_nombre'] ?? '-',
                 'enfermero'        => $traslado['enfermero_nombre'] ?? null,
                 'vehiculo'         => trim(($traslado['matricula'] ?? '') . ' — ' . ($traslado['tipo_vehiculo'] ?? '')),
-                'estado'           => $traslado['estado_nombre'] ?? 'PENDIENTE',
+                'estado'           => strtolower((string)($traslado['estado_nombre'] ?? 'PENDIENTE')),
+                'estado_nombre'    => $traslado['estado_nombre'] ?? 'PENDIENTE',
                 'prioridad'        => $traslado['prioridad'] ?? 'verde',
                 'destinos'         => $traslado['destinos'] ?? [],
-                'paso_actual'      => $traslado['paso_actual'] ?? 1,
+                'paso_info'        => $traslado['paso_info'] ?? null,
                 'fecha_salida'     => $traslado['fecha_hora_salida'] ?? null,
-                'volver_al_origen' => !empty($traslado['volver_al_origen']),
+                'volver_al_origen' => (bool)($traslado['volver_al_origen'] ?? false),
             ],
         ], 'admin');
     }

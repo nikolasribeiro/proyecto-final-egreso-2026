@@ -48,7 +48,8 @@ class ModeloTraslado
 
     /**
      * Devuelve una solicitud con sus destinos y reportes anidados.
-     * Calcula paso_actual según el estado de cada destino.
+     * Calcula paso_info (descriptor estructurado de la próxima acción)
+     * según el estado de cada destino.
      */
     public function obtenerPorId(int $id): ?array
     {
@@ -106,9 +107,46 @@ class ModeloTraslado
         }
         unset($d);
 
+        // Marcar la fila de regreso (última fila cuando volver_al_origen=true
+        // y su id_ubicacion coincide con el origen del traslado). El modelo ya
+        // la persiste así en crearSolicitud(); aquí solo etiquetamos para que
+        // la UI y el cliente la distingan de los destinos "normales".
+        $volverAlOrigen = !empty($traslado['volver_al_origen']);
+        $origenId = isset($traslado['id_ubicacion_origen']) ? (int)$traslado['id_ubicacion_origen'] : null;
+        foreach ($destinos as $idx => &$d) {
+            $d['es_retorno'] = false;
+        }
+        unset($d);
+        if ($volverAlOrigen && !empty($destinos)) {
+            $lastIdx = array_key_last($destinos);
+            if (
+                $origenId !== null
+                && (int)$destinos[$lastIdx]['id_ubicacion'] === $origenId
+            ) {
+                $destinos[$lastIdx]['es_retorno'] = true;
+            }
+        }
+
+        // Coerción explícita de tipos para que el JSON que consume el cliente
+        // llegue con booleanos y enteros reales (no "0"/"1" como strings,
+        // que rompen `!!` en JS).
+        $traslado['volver_al_origen'] = (bool)$volverAlOrigen;
+        $traslado['estado_critico'] = (bool)($traslado['estado_critico'] ?? false);
+        $traslado['requiere_camilla'] = (bool)($traslado['requiere_camilla'] ?? false);
+        foreach ($destinos as &$d) {
+            $d['id'] = (int)$d['id'];
+            $d['orden'] = (int)$d['orden'];
+            $d['id_ubicacion'] = (int)$d['id_ubicacion'];
+            $d['reportes'] = $d['reportes'] ?? [];
+        }
+        unset($d);
+
+        // Estado normalizado en lowercase para el cliente. estado_nombre sigue
+        // siendo la etiqueta legible ("PENDIENTE", "EN_TRÁNSITO", ...).
+        $traslado['estado'] = strtolower((string)($traslado['estado_nombre'] ?? 'pendiente'));
+
         $traslado['destinos'] = $destinos;
-        $traslado['reportes'] = $reportes;
-        $traslado['paso_actual'] = $this->calcularPasoActual($traslado, $destinos);
+        $traslado['paso_info'] = $this->calcularPasoInfo($traslado, $destinos);
 
         return $traslado;
     }
@@ -290,6 +328,12 @@ class ModeloTraslado
 
     public function registrarArribo(int $idSolicitud, int $ordenDestino, string $timestamp): array
     {
+        // El cliente envía el timestamp en ISO 8601 (`YYYY-MM-DDTHH:MM:SS.sssZ`)
+        // pero MySQL DATETIME requiere `YYYY-MM-DD HH:MM:SS`. Convertimos acá
+        // para mantener un contrato de API limpio (ISO) sin filtrar formatos
+        // específicos de motor al frontend.
+        $tsMysql = $this->normalizarTimestampMysql($timestamp);
+
         $stmt = $this->db->prepare(
             "UPDATE destinos_traslado
              SET estado_destino = 'ARRIBADO',
@@ -297,7 +341,7 @@ class ModeloTraslado
              WHERE id_solicitud = :s AND orden = :o AND estado_destino <> 'ARRIBADO'"
         );
         $stmt->execute([
-            'ts' => $timestamp,
+            'ts' => $tsMysql,
             's'  => $idSolicitud,
             'o'  => $ordenDestino,
         ]);
@@ -309,9 +353,40 @@ class ModeloTraslado
             'ACTUALIZAR',
             'destinos_traslado',
             $idSolicitud,
-            ['accion' => 'arribo', 'destino_orden' => $ordenDestino, 'timestamp' => $timestamp],
+            ['accion' => 'arribo', 'destino_orden' => $ordenDestino, 'timestamp' => $tsMysql],
         );
         return ['success' => true];
+    }
+
+    /**
+     * Normaliza un timestamp recibido por la API a formato MySQL DATETIME.
+     * Acepta:
+     *   - ISO 8601 con Z o offset (ej. "2026-08-02T17:21:35.579Z")
+     *   - "YYYY-MM-DD HH:MM:SS"
+     *   - "YYYY-MM-DD HH:MM:SS.uuuuuu"
+     * Devuelve el string en formato "Y-m-d H:i:s" listo para bind en PDO.
+     */
+    private function normalizarTimestampMysql(string $timestamp): string
+    {
+        // Si ya viene en formato MySQL-ish, normalizar longitud sin microsegundos.
+        if (preg_match('/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/', $timestamp)) {
+            $dt = \DateTimeImmutable::createFromFormat(
+                'Y-m-d H:i:s',
+                str_replace('T', ' ', substr($timestamp, 0, 19)),
+            );
+            if ($dt instanceof \DateTimeImmutable) {
+                return $dt->format('Y-m-d H:i:s');
+            }
+        }
+        // Fallback: intentar parsear como datetime genérico (ISO 8601 con Z/offset).
+        try {
+            $dt = new \DateTimeImmutable($timestamp);
+            return $dt->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            // Último recurso: NOW() del servidor. Logueamos el problema.
+            error_log('normalizarTimestampMysql: timestamp no parseable: ' . $timestamp);
+            return date('Y-m-d H:i:s');
+        }
     }
 
     /**
@@ -456,29 +531,45 @@ class ModeloTraslado
         $u->execute(['e' => $estadoId, 'id' => $idSolicitud]);
     }
 
-    private function calcularPasoActual(array $traslado, array $destinos): int
+    private function calcularPasoInfo(array $traslado, array $destinos): ?array
     {
-        // Cada destino aporta 2 pasos (EN_TRANSITO + ARRIBADO).
-        // Si volver_al_origen=true y todos los destinos llegaron, suma 2 más (regreso).
+        // Traslados terminales no tienen acciones pendientes.
+        $estadoNombre = strtoupper((string)($traslado['estado_nombre'] ?? ''));
+        if ($estadoNombre === 'CANCELADO' || $estadoNombre === 'FINALIZADO') {
+            return null;
+        }
         if (empty($destinos)) {
-            return 1;
+            return null;
         }
-        $paso = 1;
-        foreach ($destinos as $d) {
-            if ($d['estado_destino'] === 'ARRIBADO') {
-                $paso += 2;
+
+        // Defensa: el query ya ordena por `orden`, pero esta función es
+        // crítica para toda la UI; no se debe depender del orden de llegada.
+        $ordenados = $destinos;
+        usort($ordenados, fn($a, $b) => ((int)$a['orden']) <=> ((int)$b['orden']));
+
+        foreach ($ordenados as $d) {
+            $estado = strtoupper((string)($d['estado_destino'] ?? 'PENDIENTE'));
+            if ($estado === 'ARRIBADO') {
+                continue;
+            }
+            $esRetorno = (bool)($d['es_retorno'] ?? false);
+            $info = [
+                'destino_orden' => (int)$d['orden'],
+                'destino_id' => (int)$d['id'],
+                'destino_nombre' => (string)($d['nombre'] ?? ''),
+                'es_retorno' => $esRetorno,
+            ];
+            if ($estado === 'PENDIENTE') {
+                $info['tipo'] = $esRetorno ? 'inicio_retorno_central' : 'inicio_traslado';
             } else {
-                return $paso; // próximo destino pendiente
+                // EN_TRANSITO: esperando confirmación de llegada.
+                $info['tipo'] = $esRetorno ? 'registrar_llegada_central' : 'registrar_llegada';
             }
+            return $info;
         }
-        if (!empty($traslado['volver_al_origen'])) {
-            // Hay un destino adicional de regreso. Considerar si ya arribó.
-            $ultimo = end($destinos);
-            if ($ultimo && $ultimo['estado_destino'] === 'ARRIBADO') {
-                $paso += 2;
-            }
-        }
-        return $paso;
+
+        // Todos los destinos arribados: traslado listo para finalizar.
+        return null;
     }
 
     private function registrarAuditoria(string $accion, string $tabla, int $registroId, array $detalles): void
