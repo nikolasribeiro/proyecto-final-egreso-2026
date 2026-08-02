@@ -33,6 +33,16 @@
   border-color: var(--primary-blue);
 }
 
+/* Input con valor que no matchea ninguna opción del datalist */
+.form-input.is-invalid {
+  border-color: var(--danger-red);
+  background: rgba(220, 38, 38, 0.04);
+}
+.form-input.is-invalid:focus {
+  border-color: var(--danger-red);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+}
+
 .form-input::placeholder {
   color: var(--secondary-gray);
 }

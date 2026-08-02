@@ -119,3 +119,44 @@ CREATE TABLE IF NOT EXISTS `reporte_reemplazo` (
   `razon` VARCHAR(255) NOT NULL,
   FOREIGN KEY (`id_solicitud`) REFERENCES `solicitud_traslados`(`id`) ON DELETE CASCADE
 );
+
+-- ============================================================
+-- Migración feat/99-integrar-modulo-traslados
+-- Ampliación de solicitud_traslados + tablas hijas para
+-- multi-destino y reportes por destino.
+-- ============================================================
+
+-- Ampliar solicitud_traslados con tipo, datos clínicos, prioridad, vuelta
+ALTER TABLE `solicitud_traslados`
+  ADD COLUMN IF NOT EXISTS `tipo` ENUM('paciente_alta','biologico','equipamiento') NOT NULL DEFAULT 'paciente_alta' AFTER `id`,
+  ADD COLUMN IF NOT EXISTS `estado_critico` TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS `requiere_camilla` TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS `tipo_diagnostico` VARCHAR(50) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS `jerarquia_enfermero` ENUM('licenciado','auxiliar','profesional') DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS `volver_al_origen` TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS `prioridad` ENUM('rojo','amarillo','verde') NOT NULL DEFAULT 'verde';
+
+-- Tabla hija: múltiples destinos por solicitud, con estado individual
+CREATE TABLE IF NOT EXISTS `destinos_traslado` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `id_solicitud` INT NOT NULL,
+  `orden` INT NOT NULL,
+  `id_ubicacion` INT NOT NULL,
+  `fecha_llegada_estimada` DATETIME DEFAULT NULL,
+  `fecha_llegada_efectiva` DATETIME DEFAULT NULL,
+  `estado_destino` ENUM('PENDIENTE','EN_TRANSITO','ARRIBADO') NOT NULL DEFAULT 'PENDIENTE',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`id_solicitud`) REFERENCES `solicitud_traslados`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`id_ubicacion`) REFERENCES `ubicaciones`(`id`),
+  UNIQUE KEY `uq_solicitud_orden` (`id_solicitud`, `orden`)
+);
+
+-- Reportes por destino (reemplaza reporte_reemplazo de forma específica)
+CREATE TABLE IF NOT EXISTS `reportes_destino` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `id_destino` INT NOT NULL,
+  `tipo_problema` VARCHAR(100) NOT NULL,
+  `mensaje` TEXT NOT NULL,
+  `fecha_reporte` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`id_destino`) REFERENCES `destinos_traslado`(`id`) ON DELETE CASCADE
+);
