@@ -9,10 +9,14 @@
 <div class="transfer-detail-section">
     <div class="transfer-detail-header">
         <div class="transfer-detail-info">
-            <h3>Traslado #TRF-2024-0891</h3>
-            <p>Paciente - Hospital Central - Clinica Norte</p>
+            <h3>Traslado #TRF-<?= date('Y') ?>-<?= str_pad($traslado['id'], 4, '0', STR_PAD_LEFT) ?></h3>
+            <p><?= htmlspecialchars($traslado['origen']) ?> ➔ <?= htmlspecialchars($traslado['destino']) ?></p>
         </div>
-        <span class="transfer-type-badge badge-patient">Paciente</span>
+        <?php if (!empty($traslado['ci_paciente_externo'])): ?>
+            <span class="transfer-type-badge badge-patient">Paciente CI: <?= htmlspecialchars($traslado['ci_paciente_externo']) ?></span>
+        <?php else: ?>
+            <span class="transfer-type-badge badge-equipment">Logística Interna</span>
+        <?php endif; ?>
     </div>
 
     <!-- Stepper -->
@@ -57,6 +61,7 @@
     <div class="action-section">
         <h4>Proxima accion</h4>
         <form action="/traslados/actualizar-estado" method="POST">
+            <input type="hidden" name="id_traslado" value="<?= $traslado['id'] ?>"> <!-- Esta linea nos ayuda a saber que traslado quieren actualizar -->
             <button type="submit" class="btn btn-success btn-large">
                 <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
