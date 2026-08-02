@@ -12,12 +12,9 @@
   // Estado
   let state = {
     trasladoId: null,
-    pasoActual: 1,
     destinos: [],
     volverAlOrigen: false,
     estado: "",
-    prioridad: "verde",
-    tipo: "paciente_alta",
     pasoInfo: null,
     reportesExpandidos: new Set(), // keys: `${trasladoId}-${orden}` para los que el usuario expandió
   };
@@ -125,7 +122,6 @@
     elements = {
       container: document.getElementById("transfer-detail"),
       timelineList: document.getElementById("timeline-list"),
-      actionPanel: document.getElementById("action-panel"),
       actionDesc: document.getElementById("action-desc"),
       actionText: document.getElementById("action-text"),
       actionButton: document.getElementById("btn-main-action"),
@@ -168,6 +164,7 @@
       const result = await response.json();
       if (result.success) {
         mapResponseToState(result.data);
+        syncContainerChrome();
         renderTimeline();
         renderActionPanel();
         renderReportButton();
@@ -183,46 +180,32 @@
   function mapResponseToState(data) {
     state.destinos = data.destinos || [];
     state.volverAlOrigen = !!data.volver_al_origen;
-    state.pasoActual = data.paso_actual || 1;
     state.estado = (data.estado || "").toLowerCase();
-    state.prioridad = data.prioridad || "verde";
-    state.tipo = data.tipo || "paciente_alta";
-    state.pasoInfo = calcularPasoInfo();
+    state.pasoInfo = data.paso_info || null;
   }
 
-  function calcularPasoInfo() {
-    const totalDestinos = state.destinos.length;
-    let pasoLogico = state.pasoActual;
+  // Sincroniza clase del contenedor + badge del header para que la opacidad
+  // CSS y el label reflejen el estado actual sin necesidad de recargar.
+  function syncContainerChrome() {
+    if (!elements.container) return;
+    elements.container.dataset.estado = state.estado;
+    elements.container.classList.toggle("detail-transfer-finalizado", state.estado === "finalizado");
+    elements.container.classList.toggle("detail-transfer-cancelado", state.estado === "cancelado");
 
-    let contador = 1;
-    for (let i = 0; i < totalDestinos; i++) {
-      if (pasoLogico === contador) {
-        return {
-          tipo: "en_transito",
-          destinoOrden: state.destinos[i].orden,
-          destinoNombre: state.destinos[i].nombre,
-        };
-      }
-      contador++;
-      if (pasoLogico === contador) {
-        return {
-          tipo: "arribo",
-          destinoOrden: state.destinos[i].orden,
-          destinoNombre: state.destinos[i].nombre,
-        };
-      }
-      contador++;
+    const badge = elements.container.querySelector(".badge-estado");
+    if (badge) {
+      badge.textContent = estadoLabel(state.estado);
     }
-    if (state.volverAlOrigen) {
-      if (pasoLogico === contador) {
-        return { tipo: "en_transito_retorno", destinoOrden: null, destinoNombre: "Regreso" };
-      }
-      contador++;
-      if (pasoLogico === contador) {
-        return { tipo: "arribo_central", destinoOrden: null, destinoNombre: "Central" };
-      }
+  }
+
+  function estadoLabel(estado) {
+    switch (estado) {
+      case "pendiente":   return "PENDIENTE";
+      case "en_transito": return "EN TRÁNSITO";
+      case "finalizado":  return "FINALIZADO";
+      case "cancelado":   return "CANCELADO";
+      default:            return estado ? estado.toUpperCase() : "";
     }
-    return null;
   }
 
   // ==========================================
@@ -242,9 +225,7 @@
       const isCurrent =
         !isFinalizado &&
         state.pasoInfo &&
-        state.pasoInfo.destinoOrden === destino.orden &&
-        (state.pasoInfo.tipo === "en_transito" ||
-          state.pasoInfo.tipo === "arribo");
+        Number(state.pasoInfo.destino_orden) === Number(destino.orden);
       const isPast = destino.estado_destino === "ARRIBADO";
       const itemClass = isPast ? "done" : isCurrent ? "current" : "pending";
 
@@ -275,20 +256,6 @@
               </li>`;
     });
 
-    if (state.volverAlOrigen) {
-      const retornoClass =
-        state.pasoInfo && state.pasoInfo.tipo === "en_transito_retorno"
-          ? "current"
-          : "pending";
-      html += `<li class="timeline-item timeline-item-${retornoClass}" data-tipo="retorno">
-                <div class="timeline-marker"><span>↩</span></div>
-                <div class="timeline-body">
-                  <h4>Regreso a Central</h4>
-                  <p class="timeline-direction">Hospital de Clínicas</p>
-                </div>
-              </li>`;
-    }
-
     list.innerHTML = html;
     bindReportesToggles();
   }
@@ -315,7 +282,7 @@
       ? reportes.length - VISIBLES_INICIAL
       : 0;
 
-    let html = `<div class="timeline-reports" data-key="${escapeHtml(key)}">`;
+    let html = `<div class="timeline-reports">`;
     visibles.forEach((rep) => {
       html += `<div class="report-card">
                   <div class="report-card-header">
@@ -361,62 +328,76 @@
     const btn = elements.actionButton;
     if (!desc || !text || !btn) return;
 
+    // Reset total de variantes antes de aplicar la nueva.
+    btn.classList.remove("btn-primary", "btn-success", "btn-secondary");
+
     if (state.estado === "cancelado") {
       desc.textContent = "Este traslado fue cancelado y no admite más acciones.";
       text.textContent = "Traslado cancelado";
-      btn.disabled = true;
-      btn.classList.remove("btn-primary", "btn-success");
       btn.classList.add("btn-secondary");
+      btn.disabled = true;
       return;
     }
     if (state.estado === "finalizado") {
       desc.textContent = "El traslado se completó exitosamente. Todos los destinos fueron visitados.";
       text.textContent = "Traslado completado";
-      btn.disabled = true;
-      btn.classList.remove("btn-primary", "btn-success");
       btn.classList.add("btn-secondary");
+      btn.disabled = true;
       return;
     }
 
     if (!state.pasoInfo) {
       desc.textContent = "No hay acciones pendientes para este traslado.";
       text.textContent = "Sin acciones";
+      btn.classList.add("btn-secondary");
       btn.disabled = true;
       return;
     }
 
-    btn.disabled = false;
-    btn.classList.remove("btn-secondary");
-
     const p = state.pasoInfo;
-    if (p.tipo === "en_transito") {
-      desc.textContent = `El vehículo debe salir hacia ${p.destinoNombre}. Registra la salida cuando el vehículo parta.`;
-      text.textContent = `Registrar salida hacia ${p.destinoNombre}`;
-      btn.classList.remove("btn-success");
-      btn.classList.add("btn-primary");
-    } else if (p.tipo === "arribo") {
-      desc.textContent = `El vehículo debe arribar a ${p.destinoNombre}. Registra el arribo cuando confirmes la entrega.`;
-      text.textContent = `Registrar arribo a ${p.destinoNombre}`;
-      btn.classList.remove("btn-primary");
-      btn.classList.add("btn-success");
-    } else if (p.tipo === "en_transito_retorno") {
-      desc.textContent = "El vehículo debe regresar a Central. Registra la salida cuando parta desde el último destino.";
-      text.textContent = "Registrar salida (regreso)";
-      btn.classList.remove("btn-success");
-      btn.classList.add("btn-primary");
-    } else if (p.tipo === "arribo_central") {
-      desc.textContent = "El vehículo está regresando al Hospital de Clínicas. Registra el arribo para finalizar el traslado.";
-      text.textContent = "Finalizar traslado";
-      btn.classList.remove("btn-primary");
-      btn.classList.add("btn-success");
+    const destino = p.destino_nombre || "";
+    const origen = (state.destinos.find((d) => d.es_retorno) || {}).nombre || destino;
+
+    switch (p.tipo) {
+      case "inicio_traslado":
+        text.textContent = "Traslado iniciado";
+        desc.textContent = `Confirma el inicio del traslado hacia ${destino}.`;
+        btn.classList.add("btn-primary");
+        btn.disabled = false;
+        break;
+      case "registrar_llegada":
+        text.textContent = `Registrar llegada a ${destino}`;
+        desc.textContent = `Confirma la llegada al destino ${destino}.`;
+        btn.classList.add("btn-success");
+        btn.disabled = false;
+        break;
+      case "inicio_retorno_central":
+        text.textContent = "Inicio retorno central";
+        desc.textContent = `Inicia el regreso a ${origen}.`;
+        btn.classList.add("btn-primary");
+        btn.disabled = false;
+        break;
+      case "registrar_llegada_central":
+        text.textContent = "Registrar llegada a Central Hospital de Clínicas";
+        desc.textContent = `Confirma la llegada a ${origen} para finalizar el traslado.`;
+        btn.classList.add("btn-success");
+        btn.disabled = false;
+        break;
+      default:
+        text.textContent = "Sin acciones";
+        desc.textContent = "No hay acciones pendientes para este traslado.";
+        btn.classList.add("btn-secondary");
+        btn.disabled = true;
     }
   }
 
   function renderReportButton() {
     if (!elements.reportButton) return;
     const isFinal = state.estado === "finalizado" || state.estado === "cancelado";
-    elements.reportButton.disabled = isFinal;
-    elements.reportButton.classList.toggle("btn-disabled", isFinal);
+    const sinAccion = !state.pasoInfo;
+    const disabled = isFinal || sinAccion;
+    elements.reportButton.disabled = disabled;
+    elements.reportButton.classList.toggle("btn-disabled", disabled);
   }
 
   // ==========================================
@@ -427,38 +408,49 @@
     if (!state.pasoInfo) return;
     if (state.estado === "cancelado" || state.estado === "finalizado") return;
 
-    elements.actionButton.disabled = true;
-    elements.actionButton.classList.add("loading");
+    const btn = elements.actionButton;
+    btn.disabled = true;
+    btn.classList.add("loading");
 
     try {
       const p = state.pasoInfo;
+      const destinoOrden = Number(p.destino_orden);
 
-      if (p.tipo === "arribo" || p.tipo === "arribo_central") {
-        const result = await apiPost("/arribo", {
-          destino_orden: p.destinoOrden ?? 0,
-          timestamp: new Date().toISOString(),
-        });
-        if (!result.ok || !result.data.success) {
-          throw new Error(result.data.message || `Error HTTP ${result.status}`);
-        }
-        toast("Arribo registrado correctamente", "success");
-      } else if (p.tipo === "en_transito" || p.tipo === "en_transito_retorno") {
-        // Llamada real al backend para registrar salida
-        const result = await apiPost("/salida", {
-          destino_orden: p.destinoOrden ?? 0,
-        });
-        if (!result.ok || !result.data.success) {
-          throw new Error(result.data.message || `Error HTTP ${result.status}`);
-        }
-        toast("Salida registrada. Continúa con el arribo al destino.", "success");
+      // /arribo es para llegadas; /salida para salidas/inicio.
+      const esLlegada =
+        p.tipo === "registrar_llegada" || p.tipo === "registrar_llegada_central";
+
+      const body = esLlegada
+        ? { destino_orden: destinoOrden, timestamp: new Date().toISOString() }
+        : { destino_orden: destinoOrden };
+
+      const endpoint = esLlegada ? "/arribo" : "/salida";
+      const result = await apiPost(endpoint, body);
+      if (!result.ok || !result.data.success) {
+        throw new Error(result.data.message || `Error HTTP ${result.status}`);
       }
-
+      toast(
+        esLlegada
+          ? "Arribo registrado correctamente"
+          : "Salida registrada. Continúa con el arribo al destino.",
+        "success",
+      );
+      // Refresco SPA del timeline/badge para feedback inmediato, seguido de
+      // un reload completo que garantiza que el botón refleja el nuevo estado
+      // (por seguridad contra cualquier race entre el commit del POST y el
+      // GET que alimenta `paso_info`).
       await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error en accion:", error);
       toast(error.message || "Error al procesar la acción", "error");
     } finally {
-      elements.actionButton?.classList.remove("loading");
+      btn.classList.remove("loading");
+      // Si el reload aún no ocurrió (por error antes), re-habilitar según
+      // el estado actual.
+      const terminal =
+        state.estado === "cancelado" || state.estado === "finalizado";
+      btn.disabled = !state.pasoInfo || terminal;
     }
   }
 
@@ -488,7 +480,11 @@
       return;
     }
 
-    const destinoOrden = state.pasoInfo?.destinoOrden ?? 1;
+    if (!state.pasoInfo || state.pasoInfo.destino_orden == null) {
+      toast("No hay un destino activo para asociar el reporte.", "error");
+      return;
+    }
+    const destinoOrden = Number(state.pasoInfo.destino_orden);
 
     try {
       const result = await apiPost("/reportes", {
@@ -502,6 +498,7 @@
       cerrarModales();
       toast("Reporte registrado correctamente", "success");
       await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error al guardar reporte:", error);
       toast(error.message || "Error al guardar el reporte", "error");
@@ -516,7 +513,12 @@
       return;
     }
 
-    const destinoOrden = state.pasoInfo?.destinoOrden ?? 1;
+    // Cancelar no requiere un destino activo; si no hay, usamos 1 como
+    // primer destino del itinerario (el backend igual registra el evento
+    // a nivel de la solicitud, no del destino individual).
+    const destinoOrden = state.pasoInfo?.destino_orden
+      ? Number(state.pasoInfo.destino_orden)
+      : 1;
 
     if (
       !confirm(
@@ -538,6 +540,7 @@
       cerrarModales();
       toast("Traslado cancelado correctamente", "success");
       await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error al cancelar traslado:", error);
       toast(error.message || "Error al cancelar el traslado", "error");

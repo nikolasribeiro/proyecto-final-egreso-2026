@@ -152,9 +152,14 @@ $estadoLabel = match ($estadoNormalizado) {
                                         <strong><?= e(date('H:i', strtotime($destino['fecha_llegada_estimada']))) ?></strong>
                                     <?php endif; ?>
                                 </p>
-                                <?php if (!empty($destino['reportes'])): ?>
+                                <?php if (!empty($destino['reportes'])):
+                                    $reportesDestino = $destino['reportes'];
+                                    $totalReportes = count($reportesDestino);
+                                    $visiblesReportes = array_slice($reportesDestino, 0, 2);
+                                    $ocultosReportes = $totalReportes - count($visiblesReportes);
+                                ?>
                                     <div class="timeline-reports">
-                                        <?php foreach ($destino['reportes'] as $rep): ?>
+                                        <?php foreach ($visiblesReportes as $rep): ?>
                                             <div class="report-card">
                                                 <div class="report-card-header">
                                                     <span class="report-card-tipo"><?= e($rep['tipo_problema'] ?? 'Incidente') ?></span>
@@ -163,40 +168,102 @@ $estadoLabel = match ($estadoNormalizado) {
                                                 <p class="report-card-msg"><?= e($rep['mensaje'] ?? '') ?></p>
                                             </div>
                                         <?php endforeach; ?>
+                                        <?php if ($ocultosReportes > 0): ?>
+                                            <button type="button" class="report-toggle" data-orden="<?= (int)($destino['orden'] ?? 1) ?>" data-accion="expand">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                </svg>
+                                                Ver <?= $ocultosReportes ?> reporte<?= $ocultosReportes > 1 ? 's' : '' ?> más
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
                             </div>
                         </li>
                     <?php endforeach; ?>
-
-                    <?php if (!empty($td['volver_al_origen'])): ?>
-                        <li class="timeline-item timeline-item-pending" data-tipo="retorno">
-                            <div class="timeline-marker">
-                                <span>↩</span>
-                            </div>
-                            <div class="timeline-body">
-                                <h4>Regreso a <?= e($td['origen'] ?? 'Central') ?></h4>
-                                <p class="timeline-direction">Hospital de Clínicas - Base</p>
-                            </div>
-                        </li>
-                    <?php endif; ?>
                 </ol>
             <?php endif; ?>
         </aside>
 
         <!-- RIGHT: Action panel -->
+        <?php
+        $pasoInfo = $td['paso_info'] ?? null;
+        $actionText = 'Cargando…';
+        $actionDesc = 'Cargando información…';
+        $actionClass = 'btn-primary';
+        $actionDisabled = false;
+
+        if ($estadoNormalizado === 'cancelado') {
+            $actionText = 'Traslado cancelado';
+            $actionDesc = 'Este traslado fue cancelado y no admite más acciones.';
+            $actionClass = 'btn-secondary';
+            $actionDisabled = true;
+        } elseif ($estadoNormalizado === 'finalizado') {
+            $actionText = 'Traslado completado';
+            $actionDesc = 'El traslado se completó exitosamente. Todos los destinos fueron visitados.';
+            $actionClass = 'btn-secondary';
+            $actionDisabled = true;
+        } elseif ($pasoInfo === null) {
+            $actionText = 'Sin acciones';
+            $actionDesc = 'No hay acciones pendientes para este traslado.';
+            $actionClass = 'btn-secondary';
+            $actionDisabled = true;
+        } else {
+            $nombreDestino = e($pasoInfo['destino_nombre'] ?? '');
+            $origenNombre = e($td['origen'] ?? '');
+            switch ($pasoInfo['tipo'] ?? '') {
+                case 'inicio_traslado':
+                    $actionText = 'Traslado iniciado';
+                    $actionDesc = "Confirma el inicio del traslado hacia {$nombreDestino}.";
+                    $actionClass = 'btn-primary';
+                    break;
+                case 'registrar_llegada':
+                    $actionText = "Registrar llegada a {$nombreDestino}";
+                    $actionDesc = "Confirma la llegada al destino {$nombreDestino}.";
+                    $actionClass = 'btn-success';
+                    break;
+                case 'inicio_retorno_central':
+                    $actionText = 'Inicio retorno central';
+                    $actionDesc = "Inicia el regreso a {$origenNombre}.";
+                    $actionClass = 'btn-primary';
+                    break;
+                case 'registrar_llegada_central':
+                    $actionText = 'Registrar llegada a Central Hospital de Clínicas';
+                    $actionDesc = "Confirma la llegada a {$origenNombre} para finalizar el traslado.";
+                    $actionClass = 'btn-success';
+                    break;
+                default:
+                    $actionText = 'Sin acciones';
+                    $actionDesc = 'No hay acciones pendientes para este traslado.';
+                    $actionClass = 'btn-secondary';
+                    $actionDisabled = true;
+            }
+        }
+
+        // Helper dinámico: no asume cuál es el último destino.
+        $pendientes = 0;
+        foreach ($destinos as $dd) {
+            if (($dd['estado_destino'] ?? '') !== 'ARRIBADO') {
+                $pendientes++;
+            }
+        }
+        $helperText = 'El vehículo se considera disponible nuevamente al completar todo el itinerario.';
+        if ($pendientes > 0) {
+            $helperText .= ' Quedan ' . $pendientes . ' destino' . ($pendientes > 1 ? 's' : '') . ' por visitar.';
+        }
+        ?>
         <section class="detail-action-panel card" id="action-panel">
             <h3 class="detail-section-title">Próxima acción</h3>
-            <p class="detail-action-desc" id="action-desc">Cargando información…</p>
+            <p class="detail-action-desc" id="action-desc"><?= e($actionDesc) ?></p>
 
-            <button id="btn-main-action" class="btn btn-primary btn-lg btn-block" disabled>
+            <button id="btn-main-action" class="btn <?= e($actionClass) ?> btn-lg btn-block" <?= $actionDisabled ? 'disabled' : '' ?>>
                 <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                <span id="action-text">Cargando…</span>
+                <span id="action-text"><?= e($actionText) ?></span>
             </button>
 
-            <button id="btn-report" class="btn btn-outline-danger btn-block" disabled>
+            <button id="btn-report" class="btn btn-outline-danger btn-block" <?= $actionDisabled ? 'disabled' : '' ?>>
                 <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
@@ -207,14 +274,13 @@ $estadoLabel = match ($estadoNormalizado) {
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p>El vehículo se considera disponible nuevamente al registrar el arribo al último destino.</p>
+                <p><?= e($helperText) ?></p>
             </div>
         </section>
     </div>
 
     <!-- Hidden inputs para JS -->
     <input type="hidden" id="csrf-token" value="<?= e($csrf ?? '') ?>">
-    <input type="hidden" id="traslado-id" value="<?= (int)($traslado_id ?? 0) ?>">
 
     <!-- Report Modal -->
     <?php componente('modulos/traslados/detalle/report-modal') ?>
