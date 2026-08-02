@@ -1,0 +1,147 @@
+/* ==========================================================================
+   COMPONENTS - Documentos por Categoría
+   ========================================================================== */
+
+.docs-filtros {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.docs-filtros .form-label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.docs-filtros .form-select {
+  max-width: 320px;
+}
+
+.document-category {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* ========== Vista de categoría (destino del QR) ========== */
+
+.docs-categoria-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.doc-categoria-card {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.doc-categoria-card:hover {
+  border-color: var(--primary-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 102, 204, 0.12);
+  text-decoration: none;
+}
+
+.doc-categoria-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.doc-categoria-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.doc-categoria-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-categoria-titulo {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--black);
+}
+
+.doc-categoria-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--secondary-gray);
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.doc-categoria-arrow {
+  color: var(--primary-blue);
+  flex-shrink: 0;
+}
+
+.doc-categoria-arrow svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* ========== Empty state ========== */
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--secondary-gray);
+  opacity: 0.5;
+  margin: 0 auto 1rem auto;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--black);
+}
+
+.empty-state p {
+  color: var(--secondary-gray);
+  margin-bottom: 1.5rem;
+}
+
+.qr-url {
+  font-family: monospace;
+  font-size: 0.8rem;
+  background: var(--light-gray);
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  margin-top: 0.25rem;
+  word-break: break-all;
+}

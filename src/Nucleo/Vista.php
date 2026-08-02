@@ -13,7 +13,7 @@ class Vista
      * @param array $datos Datos extraídos como variables disponibles en la vista
      * @param string $plantillaBase El nombre del layout base (ej: 'admin')
      */
-    public static function mostrar(string $plantilla, array $datos = [], string $plantillaBase = 'admin'): void
+    public static function mostrar(string $plantilla, array $datos = [], ?string $plantillaBase = null): void
     {
         extract($datos);
 

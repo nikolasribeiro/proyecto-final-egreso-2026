@@ -27,7 +27,7 @@ function e(?string $string): string
  * @param array $datos Variables para la vista
  * @param string $plantillaBase El layout a utilizar
  */
-function vista(string $plantilla, array $datos = [], string $plantillaBase = 'admin'): void
+function vista(string $plantilla, array $datos = [], ?string $plantillaBase = null): void
 {
     Vista::mostrar($plantilla, $datos, $plantillaBase);
 }
@@ -87,6 +87,6 @@ function componente(string $ruta, array $datos = []): void
         require $archivo;
     } else {
         // Manejo amigable de errores en la interfaz para no romper todo el layout
-        echo "";
+        echo "Componente: $ruta - Error al traer el componente.";
     }
 }

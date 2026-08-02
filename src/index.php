@@ -11,11 +11,7 @@ header("X-Content-Type-Options: nosniff");
 header("X-XSS-Protection: 1; mode=block");
 
 // CSP (Content Security Policy)
-// Este es el que usaremos en PRODUCCION
-//header("Content-Security-Policy: default-src 'self';");
-
-// Este es el que usaremos en DESARROLLO
-header("Content-Security-Policy: default-src 'self' 'unsafe-inline';");
+header("Content-Security-Policy: default-src 'self' 'unsafe-inline'; img-src https://api.qrserver.com/v1/create-qr-code/; connect-src 'self' https://api.qrserver.com/v1/create-qr-code/;");
 
 spl_autoload_register(function ($nombre_clase) {
     $archivo = __DIR__ . '/' . str_replace('\\', '/', $nombre_clase) . '.php';
@@ -56,6 +52,40 @@ $enrutador = new \Nucleo\Enrutador();
 
 // Ruta para la Página de Inicio (Raíz)
 $enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
+
+// Rutas de Autenticación
+$enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
+$enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);
+$enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
+
+// Rutas del Dashboard (Luego de autenticacion)
+$enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
+$enrutador->get('/dashboard/documentos/categoria/{slug}', [\Controladores\ControladorDashboard::class, 'documentosCategoria']);
+$enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
+$enrutador->get('/dashboard/traslados/nuevo', [\Controladores\ControladorDashboard::class, 'nuevoTraslado']);
+$enrutador->get('/dashboard/traslados/{id}', [\Controladores\ControladorDashboard::class, 'detalleTraslado']);
+
+// Encuestas
+$enrutador->get('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestas']);
+$enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestaSubmit']);
+
+// Permisos (matriz)
+$enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
+
+// Usuarios (baja lógica)
+$enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);
+$enrutador->post('/dashboard/usuarios/{username}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
+$enrutador->post('/dashboard/usuarios/{username}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
+
+// Rutas API para traslados
+$enrutador->get('/api/traslados/{id}', [\Controladores\ControladorDashboard::class, 'apiObtenerTraslado']);
+$enrutador->post('/api/traslados/{id}/arribo', [\Controladores\ControladorDashboard::class, 'apiRegistrarArribo']);
+$enrutador->post('/api/traslados/{id}/reportes', [\Controladores\ControladorDashboard::class, 'apiCrearReporte']);
+$enrutador->post('/api/traslados/{id}/cancelar', [\Controladores\ControladorDashboard::class, 'apiCancelarTraslado']);
+
+
+// Ruta para la Página de Clientes (o Pacientes)
+// $enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);
 
 // Pruebas con parametros
 // $enrutador->get('/prueba', [\Controladores\ControladorDocumentos::class, 'prueba']);

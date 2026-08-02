@@ -1,0 +1,139 @@
+/* ==========================================================================
+   COMPONENTS - Cards
+   ========================================================================== */
+
+.card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-6);
+  border: 1px solid var(--border-gray);
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ========== Transfer Card ========== */
+.transfer-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.transfer-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.transfer-id {
+  font-size: var(--font-size-sm);
+  color: var(--secondary-gray);
+}
+
+.transfer-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.transfer-detail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.transfer-detail-row svg {
+  flex-shrink: 0;
+  color: var(--secondary-gray);
+}
+
+/* ========== Document Card ========== */
+.document-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.document-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--primary-blue-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-blue);
+  flex-shrink: 0;
+}
+
+.document-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.document-name {
+  font-weight: 600;
+  color: var(--black);
+  font-size: var(--font-size-sm);
+}
+
+.document-type {
+  font-size: var(--font-size-xs);
+  color: var(--secondary-gray);
+}
+
+/* ========== Empty State ========== */
+.empty-state {
+  text-align: center;
+  padding: var(--space-8) var(--space-6);
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--border-gray);
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto var(--space-4);
+  background: var(--light-gray);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-gray);
+}
+
+.empty-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.empty-text {
+  color: var(--secondary-gray);
+  margin-bottom: var(--space-6);
+}
