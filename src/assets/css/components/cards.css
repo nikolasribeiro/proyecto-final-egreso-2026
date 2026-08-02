@@ -42,6 +42,119 @@
   gap: var(--space-4);
 }
 
+/* ========== Traslados Toolbar (filter dropdown + priority chips) ========== */
+.traslados-filtros {
+  margin-bottom: 1rem;
+}
+
+.traslados-toolbar {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.traslados-toolbar-title {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--black);
+  margin: 0;
+}
+
+/* El form viejo (.traslados-filtro) ya no aplica — el wrapper ahora es
+   .traslados-filtros y el dropdown se acomoda directo en .traslados-toolbar. */
+.traslados-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+/* El dropdown del listado de traslados se alarga al ancho de los chips
+   en desktop y pasa a 100% en mobile/tablet. */
+.traslados-filtros .form-select {
+  width: 26%;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .traslados-filtros .form-select {
+    width: 100%;
+  }
+}
+
+/* Separador entre los filtros y la grilla de tarjetas. */
+.traslados-divider {
+  border: 0;
+  border-top: 1px solid var(--border-gray);
+  margin-block: 1rem;
+}
+
+/* ========== Traslados Priority Filter (toggle chips) ========== */
+.traslados-prioridades {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filtro-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: var(--light-gray);
+  color: var(--secondary-gray);
+  border: 1px solid var(--border-gray);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.55;
+}
+
+.filtro-chip:hover {
+  opacity: 0.85;
+}
+
+.filtro-chip .priority-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* Estados activos: cada chip toma el color de su prioridad */
+.filtro-chip.filtro-prio-verde.active {
+  background: var(--success-green-light);
+  color: var(--success-green);
+  border-color: var(--success-green);
+  opacity: 1;
+}
+
+.filtro-chip.filtro-prio-amarillo.active {
+  background: var(--warning-yellow-light);
+  color: var(--warning-yellow);
+  border-color: var(--warning-yellow);
+  opacity: 1;
+}
+
+.filtro-chip.filtro-prio-rojo.active {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+  border-color: var(--danger-red);
+  opacity: 1;
+}
+
+.filtro-chip.active .priority-dot {
+  opacity: 1;
+}
+
 .transfer-header {
   display: flex;
   align-items: center;

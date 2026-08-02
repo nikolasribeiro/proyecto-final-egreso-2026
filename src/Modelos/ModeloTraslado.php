@@ -17,11 +17,39 @@ class ModeloTraslado
     }
 
     /**
-     * Devuelve todas las solicitudes activas (PENDIENTE / EN_TRANSITO) con
-     * resumen de destinos concatenados y campos clínicos/prioridad.
+     * Devuelve solicitudes de traslado aplicando un filtro de estado y, opcionalmente,
+     * una lista blanca de prioridades.
+     *
+     * $filtro acepta:
+     *   - 'todos'       (default) → sin filtro, devuelve todas las filas.
+     *   - 'activos'     → solo PENDIENTE / EN_TRANSITO.
+     *   - 'completados' → solo FINALIZADO / CANCELADO.
+     * Cualquier otro valor cae al default 'todos' silenciosamente.
+     *
+     * $prioridades: array con valores permitidos ('verde', 'amarillo', 'rojo').
+     * Si está vacío, no se filtra por prioridad. Valores desconocidos se descartan.
      */
-    public function obtenerTodosActivos(): array
+    public function obtenerTodos(string $filtro = 'todos', array $prioridades = []): array
     {
+        $condiciones = [];
+
+        $condiciones[] = match ($filtro) {
+            'activos'     => "et.estado IN ('PENDIENTE', 'EN_TRANSITO')",
+            'completados' => "et.estado IN ('FINALIZADO', 'CANCELADO')",
+            default       => null,
+        };
+
+        if (!empty($prioridades)) {
+            $validas = array_values(array_intersect($prioridades, ['verde', 'amarillo', 'rojo']));
+            if (!empty($validas)) {
+                $lista = "'" . implode("','", $validas) . "'";
+                $condiciones[] = "st.prioridad IN ({$lista})";
+            }
+        }
+
+        $condiciones = array_filter($condiciones, fn($c) => $c !== null);
+        $where = empty($condiciones) ? '' : 'WHERE ' . implode(' AND ', $condiciones);
+
         $sql = "SELECT st.id, st.tipo, st.prioridad, st.estado_critico,
                        st.requiere_camilla, st.volver_al_origen,
                        st.fecha_hora_salida, st.id_estado,
@@ -40,7 +68,7 @@ class ModeloTraslado
                 JOIN vehiculos v ON st.id_vehiculo = v.id
                 JOIN tipo_vehiculo tv ON v.id_tipo_vehiculo = tv.id
                 JOIN usuarios uc ON st.ci_chofer = uc.ci
-                WHERE et.estado IN ('PENDIENTE', 'EN_TRANSITO')
+                {$where}
                 ORDER BY st.fecha_hora_salida DESC";
 
         return $this->db->query($sql)->fetchAll();
