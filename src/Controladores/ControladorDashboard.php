@@ -116,7 +116,35 @@ class ControladorDashboard extends RutaProtegida
      */
     public function trasladosInicio(): void
     {
-        $trasladosRaw = $this->modelo_traslado->obtenerTodosActivos();
+        // Filtro via query param: ?filtro=todos|activos|completados.
+        // Default 'todos'. Cualquier valor no reconocido cae al default.
+        $filtro = $_GET['filtro'] ?? 'todos';
+        if (!in_array($filtro, ['todos', 'activos', 'completados'], true)) {
+            $filtro = 'todos';
+        }
+
+        // Filtro de prioridades via query param: ?prioridades=verde,amarillo,rojo
+        // (lista separada por comas). Default = las 3 prioridades activas.
+        // Valores desconocidos se descartan.
+        $todasPrioridades = ['verde', 'amarillo', 'rojo'];
+        if (isset($_GET['prioridades'])) {
+            $entradas = array_filter(
+                array_map('trim', explode(',', (string)$_GET['prioridades'])),
+                fn($v) => $v !== '',
+            );
+            $prioridadesActivas = array_values(array_intersect($entradas, $todasPrioridades));
+            // Si la URL explicitamente envió el param pero quedó vacío tras
+            // el filtrado, eso significa "ninguna activa" → mantenemos array
+            // vacío (a diferencia del caso "no enviar param" que es default).
+            if (empty($prioridadesActivas) && !empty($entradas)) {
+                $prioridadesActivas = [];
+            }
+        } else {
+            // Sin param en URL: default = todas activas (no filtrar).
+            $prioridadesActivas = $todasPrioridades;
+        }
+
+        $trasladosRaw = $this->modelo_traslado->obtenerTodos($filtro, $prioridadesActivas);
 
         // Mapear al formato que espera la vista con datos reales del modelo
         $traslados = array_map(function ($t) {
@@ -126,11 +154,31 @@ class ControladorDashboard extends RutaProtegida
                 'equipamiento'  => 'Equipamiento',
                 default         => ucfirst((string)$t['tipo']),
             };
+            // Etiquetas semánticas (no colores literales) — consistentes con
+            // la página de detalle.
             $prioridadLegible = match ($t['prioridad'] ?? 'verde') {
-                'rojo'     => 'Rojo',
-                'amarillo' => 'Amarillo',
-                'verde'    => 'Verde',
-                default    => 'Sin prioridad',
+                'rojo'     => 'EMERGENCIA',
+                'amarillo' => 'URGENTE',
+                'verde'    => 'RUTINARIO',
+                default    => 'RUTINARIO',
+            };
+            $estadoInterno = strtolower($t['estado_nombre'] ?? 'pendiente');
+            // Labels humanizados para el chip de estado.
+            $estadoLegible = match ($estadoInterno) {
+                'pendiente'   => 'Esperando inicio',
+                'en_transito' => 'En curso',
+                'finalizado'  => 'Completado',
+                'cancelado'   => 'Cancelado',
+                default       => ucfirst($estadoInterno),
+            };
+            // Clase CSS modifier para el color del chip — coincide con los
+            // selectores ya definidos en badges.css.
+            $estadoClaseCss = match ($estadoInterno) {
+                'pendiente'   => 'status-pending',
+                'en_transito' => 'status-in-progress',
+                'finalizado'  => 'status-completed',
+                'cancelado'   => 'status-cancelled',
+                default       => '',
             };
             return [
                 'id'                => (string)$t['id'],
@@ -140,18 +188,21 @@ class ControladorDashboard extends RutaProtegida
                 'ubicacion_destino' => $t['destinos_texto'] ?? 'Sin destino',
                 'fecha_realizacion' => $t['fecha_hora_salida'] ?? '-',
                 'chofer'            => $t['conductor'] ?? '-',
-                'estado'            => $t['estado_nombre'] ?? 'PENDIENTE',
-                'estado_interno'    => strtolower($t['estado_nombre'] ?? 'pendiente'),
+                'estado'            => $estadoLegible,
+                'estado_interno'    => $estadoInterno,
+                'estado_clase_css'  => $estadoClaseCss,
                 'prioridad'         => $prioridadLegible,
                 'prioridad_interna' => $t['prioridad'] ?? 'verde',
             ];
         }, $trasladosRaw);
 
         vista('modulos/traslados/inicio', [
-            'titulo_pagina' => "Trazabilidad de Traslados",
+            'titulo_pagina' => "Traslados",
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
             'traslados' => $traslados,
+            'filtro_actual' => $filtro,
+            'prioridades_activas' => $prioridadesActivas,
             'puede_crear' => Roles::permiso($this->rol, 'traslados', 'crear'),
         ], 'admin');
     }

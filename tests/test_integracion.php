@@ -17,8 +17,8 @@ try {
 
     // 2. Probar ModeloTraslado
     $modTraslado = new ModeloTraslado();
-    $traslados = $modTraslado->obtenerTodosActivos();
-    echo "[OK] ModeloTraslado conectado. Total solicitudes de traslado activas: " . count($traslados) . "\n";
+    $traslados = $modTraslado->obtenerTodos('todos', ['verde', 'amarillo', 'rojo']);
+    echo "[OK] ModeloTraslado conectado. Total solicitudes de traslado: " . count($traslados) . "\n";
 
     echo "\n✔ PRUEBA DE INTEGRACIÓN EXITOSA: La capa de persistencia y controladores están listos.\n";
 } catch (\Exception $e) {
