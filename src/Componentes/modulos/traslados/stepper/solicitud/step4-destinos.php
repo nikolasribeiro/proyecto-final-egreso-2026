@@ -53,26 +53,19 @@
                 <input type="text" id="search-destino" placeholder="Buscar destino..." class="form-input">
             </div>
             <div class="destinos-suggestions" id="destinos-suggestions">
-                <?php
-                $destinos_disponibles = [
-                    ['id' => 1, 'nombre' => 'Hospital Maciel', 'direccion' => '25 de Mayo 174'],
-                    ['id' => 2, 'nombre' => 'Hospital Británico', 'direccion' => 'Av. Italia s/n'],
-                    ['id' => 3, 'nombre' => 'ASSE Central', 'direccion' => '18 de Julio 1892'],
-                    ['id' => 4, 'nombre' => 'Médica Uruguaya', 'direccion' => 'Constituyente 1824'],
-                    ['id' => 5, 'nombre' => 'Sanatorio Americano', 'direccion' => 'Guido 1900'],
-                    ['id' => 6, 'nombre' => 'Hospital Pasteur', 'direccion' => 'Monte Caseros 2629'],
-                ];
-                foreach ($destinos_disponibles as $destino):
+                <?php foreach (($ubicaciones ?? []) as $destino):
+                    // Excluir el origen (Hospital de Clínicas) de la lista
+                    if ((int)$destino['id'] === 1) continue;
                 ?>
-                    <button type="button" class="destino-suggestion" data-id="<?= $destino['id'] ?>" data-nombre="<?= $destino['nombre'] ?>">
+                    <button type="button" class="destino-suggestion" data-id="<?= (int)$destino['id'] ?>" data-nombre="<?= e($destino['nombre_lugar']) ?>">
                         <div class="suggestion-icon">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
                         </div>
                         <div class="suggestion-info">
-                            <span class="suggestion-nombre"><?= $destino['nombre'] ?></span>
-                            <span class="suggestion-direccion"><?= $destino['direccion'] ?></span>
+                            <span class="suggestion-nombre"><?= e($destino['nombre_lugar']) ?></span>
+                            <span class="suggestion-direccion"><?= e($destino['direccion'] ?? '') ?></span>
                         </div>
                     </button>
                 <?php endforeach; ?>

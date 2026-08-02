@@ -1,6 +1,6 @@
 /**
- * Detalle Traslado - One Button Workflow
- * Handles stepper advancement, arrival registration, and reports
+ * Detalle Traslado - Layout rediseñado (2 columnas)
+ * Timeline vertical + action panel + CSRF + toasts + reportes colapsables
  */
 (function () {
   "use strict";
@@ -9,20 +9,97 @@
     API_BASE: "/api/traslados",
   };
 
-  // State
+  // Estado
   let state = {
     trasladoId: null,
-    pasoActual: 1,
-    totalPasos: 0,
     destinos: [],
-    stepperData: [],
     volverAlOrigen: false,
     estado: "",
-    prioridad: "verde",
+    pasoInfo: null,
+    reportesExpandidos: new Set(), // keys: `${trasladoId}-${orden}` para los que el usuario expandió
   };
 
-  // DOM Elements
+  // Cache
   let elements = {};
+
+  // ==========================================
+  // HELPERS
+  // ==========================================
+
+  function getCsrf() {
+    return document.getElementById("csrf-token")?.value || "";
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text == null ? "" : String(text);
+    return div.innerHTML;
+  }
+
+  function formatTime(value) {
+    if (!value) return null;
+    try {
+      return new Date(value).toLocaleTimeString("es-UY", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async function apiPost(endpoint, body) {
+    const csrf = getCsrf();
+    const r = await fetch(`${CONFIG.API_BASE}/${state.trasladoId}${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+      },
+      body: JSON.stringify({ _csrf: csrf, ...body }),
+    });
+    const json = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data: json };
+  }
+
+  // ==========================================
+  // TOASTS (no más alerts)
+  // ==========================================
+
+  function ensureToastContainer() {
+    let c = document.getElementById("toast-container");
+    if (!c) {
+      c = document.createElement("div");
+      c.id = "toast-container";
+      c.className = "toast-container";
+      document.body.appendChild(c);
+    }
+    return c;
+  }
+
+  function toast(message, tipo = "info", duracion = 3500) {
+    const container = ensureToastContainer();
+    const t = document.createElement("div");
+    t.className = `toast toast-${tipo}`;
+    const iconos = {
+      success:
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>',
+      error:
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>',
+      info:
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    };
+    t.innerHTML = `
+      <span class="toast-icon">${iconos[tipo] || iconos.info}</span>
+      <span class="toast-msg">${escapeHtml(message)}</span>
+    `;
+    container.appendChild(t);
+    requestAnimationFrame(() => t.classList.add("toast-visible"));
+    setTimeout(() => {
+      t.classList.remove("toast-visible");
+      setTimeout(() => t.remove(), 300);
+    }, duracion);
+  }
 
   // ==========================================
   // INITIALIZATION
@@ -33,6 +110,7 @@
     if (!container) return;
 
     state.trasladoId = parseInt(container.dataset.trasladoId, 10);
+    state.estado = (container.dataset.estado || "").toLowerCase();
     if (!state.trasladoId) return;
 
     cacheElements();
@@ -43,42 +121,32 @@
   function cacheElements() {
     elements = {
       container: document.getElementById("transfer-detail"),
-      stepper: document.querySelector(".detail-stepper"),
-      actionSection: document.querySelector(".detail-action-section"),
+      timelineList: document.getElementById("timeline-list"),
+      actionDesc: document.getElementById("action-desc"),
+      actionText: document.getElementById("action-text"),
       actionButton: document.getElementById("btn-main-action"),
-      reportSection: document.querySelector(".detail-report-section"),
       reportButton: document.getElementById("btn-report"),
       modalReport: document.getElementById("report-modal"),
       reportForm: document.getElementById("report-form"),
       btnCancelTraslado: document.getElementById("btn-cancelar-traslado"),
-      transferInfo: document.querySelector(".transfer-detail-info"),
-      transferMeta: document.querySelector(".transfer-detail-meta"),
     };
   }
 
   function bindEvents() {
-    // Main action button
     elements.actionButton?.addEventListener("click", handleMainAction);
-
-    // Report button
     elements.reportButton?.addEventListener("click", abrirModalReporte);
 
-    // Modal close handlers
     document.querySelectorAll(".modal-close").forEach((btn) => {
       btn.addEventListener("click", cerrarModales);
     });
 
-    // Overlay click to close
     document.querySelectorAll(".modal-overlay").forEach((overlay) => {
       overlay.addEventListener("click", (e) => {
         if (e.target === overlay) cerrarModales();
       });
     });
 
-    // Report form submission
     elements.reportForm?.addEventListener("submit", handleReportSubmit);
-
-    // Cancelar traslado button
     elements.btnCancelTraslado?.addEventListener("click", handleCancelarTraslado);
   }
 
@@ -89,322 +157,247 @@
   async function cargarDatosTraslado() {
     try {
       const response = await fetch(`${CONFIG.API_BASE}/${state.trasladoId}`);
-
       if (!response.ok) {
-        const text = await response.text();
-        console.error("API Error:", response.status, text);
-        mostrarError(`Error: ${response.status} - No se pudo cargar el traslado`);
+        toast(`Error al cargar el traslado (HTTP ${response.status})`, "error");
         return;
       }
-
       const result = await response.json();
-
       if (result.success) {
         mapResponseToState(result.data);
-        renderAll();
+        syncContainerChrome();
+        renderTimeline();
+        renderActionPanel();
+        renderReportButton();
       } else {
-        mostrarError(result.message || "Traslado no encontrado");
+        toast(result.message || "Traslado no encontrado", "error");
       }
     } catch (error) {
       console.error("Error cargando traslado:", error);
-      mostrarError("Error al cargar los datos del traslado");
+      toast("Error al cargar los datos del traslado", "error");
     }
   }
 
   function mapResponseToState(data) {
     state.destinos = data.destinos || [];
-    state.volverAlOrigen = data.volver_al_origen || false;
-    state.pasoActual = data.paso_actual || 1;
-    state.estado = data.estado || "";
-    state.prioridad = data.prioridad || "verde";
-    state.stepperData = construirStepper(data.destinos, data.volver_al_origen);
-    state.totalPasos = state.stepperData.length;
+    state.volverAlOrigen = !!data.volver_al_origen;
+    state.estado = (data.estado || "").toLowerCase();
+    state.pasoInfo = data.paso_info || null;
   }
 
-  function construirStepper(destinos, volverAlOrigen) {
-    const pasos = [];
+  // Sincroniza clase del contenedor + badge del header para que la opacidad
+  // CSS y el label reflejen el estado actual sin necesidad de recargar.
+  function syncContainerChrome() {
+    if (!elements.container) return;
+    elements.container.dataset.estado = state.estado;
+    elements.container.classList.toggle("detail-transfer-finalizado", state.estado === "finalizado");
+    elements.container.classList.toggle("detail-transfer-cancelado", state.estado === "cancelado");
 
-    destinos.forEach((destino, index) => {
-      // Departure to destination
-      pasos.push({
-        tipo: "en_transito",
-        destinoOrden: destino.orden,
-        titulo: `En transito a ${destino.nombre}`,
-        destino: destino,
- reportesCount: destino.reportes?.length || 0,
-        reportes: destino.reportes || [],
-      });
-
-      // Arrival at destination
-      pasos.push({
-        tipo: "arribo",
-        destinoOrden: destino.orden,
-        titulo: `Arribo a ${destino.nombre}`,
-        destino: destino,
-        reportesCount: destino.reportes?.length || 0,
-        reportes: destino.reportes || [],
-      });
-    });
-
-    if (volverAlOrigen) {
-      // Return journey
-      pasos.push({
-        tipo: "en_transito_retorno",
-        destinoOrden: null,
-        titulo: "En transito regreso",
-        destino: null,
-        reportesCount: 0,
-        reportes: [],
-      });
-      pasos.push({
-        tipo: "arribo_central",
-        destinoOrden: null,
-        titulo: "Arribo a Central",
-        destino: null,
-        reportesCount: 0,
-        reportes: [],
-      });
+    const badge = elements.container.querySelector(".badge-estado");
+    if (badge) {
+      badge.textContent = estadoLabel(state.estado);
     }
+  }
 
-    return pasos;
+  function estadoLabel(estado) {
+    switch (estado) {
+      case "pendiente":   return "PENDIENTE";
+      case "en_transito": return "EN TRÁNSITO";
+      case "finalizado":  return "FINALIZADO";
+      case "cancelado":   return "CANCELADO";
+      default:            return estado ? estado.toUpperCase() : "";
+    }
   }
 
   // ==========================================
   // RENDERING
   // ==========================================
 
-  function renderAll() {
-    renderTransferInfo();
-    renderStepper();
-    renderActionButton();
-    renderReportButton();
-    renderTransferState();
+  function renderTimeline() {
+    const list = elements.timelineList;
+    if (!list) return;
+
+    const isFinalizado =
+      state.estado === "finalizado" || state.estado === "cancelado";
+
+    let html = "";
+
+    state.destinos.forEach((destino) => {
+      const isCurrent =
+        !isFinalizado &&
+        state.pasoInfo &&
+        Number(state.pasoInfo.destino_orden) === Number(destino.orden);
+      const isPast = destino.estado_destino === "ARRIBADO";
+      const itemClass = isPast ? "done" : isCurrent ? "current" : "pending";
+
+      html += `<li class="timeline-item timeline-item-${itemClass}"
+                     data-orden="${escapeHtml(destino.orden)}"
+                     data-estado="${escapeHtml(destino.estado_destino)}">
+                <div class="timeline-marker">
+                  ${
+                    isPast
+                      ? `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>`
+                      : `<span>${escapeHtml(destino.orden)}</span>`
+                  }
+                </div>
+                <div class="timeline-body">
+                  <h4>${escapeHtml(destino.nombre)}</h4>
+                  ${destino.direccion ? `<p class="timeline-direction">${escapeHtml(destino.direccion)}</p>` : ""}
+                  <p class="timeline-time">
+                    ${
+                      destino.fecha_llegada_efectiva
+                        ? `<span class="timeline-time-label">Arribado:</span> <strong>${escapeHtml(formatTime(destino.fecha_llegada_efectiva))}</strong>`
+                        : destino.fecha_llegada_estimada
+                          ? `<span class="timeline-time-label">Estimado:</span> <strong>${escapeHtml(formatTime(destino.fecha_llegada_estimada))}</strong>`
+                          : ""
+                    }
+                  </p>
+                  ${renderReportes(destino)}
+                </div>
+              </li>`;
+    });
+
+    list.innerHTML = html;
+    bindReportesToggles();
   }
 
-  function renderTransferState() {
-    if (!elements.container) return;
+  /**
+   * Render de reportes con colapso automático si hay más de 2.
+   * Los primeros 2 siempre se muestran. Los adicionales se ocultan
+   * detrás de un botón toggle que muestra "Ver N más" / "Ver menos".
+   */
+  function renderReportes(destino) {
+    const reportes = destino.reportes || [];
+    if (reportes.length === 0) return "";
 
-    // Remove all state classes
-    elements.container.classList.remove("detail-transfer-completed", "detail-transfer-cancelled");
+    const key = `${state.trasladoId}-${destino.orden}`;
+    const expandido = state.reportesExpandidos.has(key);
+    const VISIBLES_INICIAL = 2;
+    const tieneMas = reportes.length > VISIBLES_INICIAL;
 
-    // Add appropriate state class
-    if (state.estado === "completado") {
-      elements.container.classList.add("detail-transfer-completed");
-    } else if (state.estado === "cancelado") {
-      elements.container.classList.add("detail-transfer-cancelled");
+    const visibles = expandido || !tieneMas
+      ? reportes
+      : reportes.slice(0, VISIBLES_INICIAL);
+
+    const ocultos = tieneMas && !expandido
+      ? reportes.length - VISIBLES_INICIAL
+      : 0;
+
+    let html = `<div class="timeline-reports">`;
+    visibles.forEach((rep) => {
+      html += `<div class="report-card">
+                  <div class="report-card-header">
+                    <span class="report-card-tipo">${escapeHtml(rep.tipo_problema)}</span>
+                    <time class="report-card-time">${escapeHtml(formatTime(rep.fecha_reporte))}</time>
+                  </div>
+                  <p class="report-card-msg">${escapeHtml(rep.mensaje)}</p>
+                </div>`;
+    });
+    if (tieneMas) {
+      const label = expandido
+        ? "Ver menos"
+        : `Ver ${ocultos} reporte${ocultos > 1 ? "s" : ""} más`;
+      html += `<button type="button" class="report-toggle" data-orden="${escapeHtml(destino.orden)}" data-accion="${expandido ? "collapse" : "expand"}">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${expandido ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"}"/>
+                </svg>
+                ${escapeHtml(label)}
+              </button>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  function bindReportesToggles() {
+    document.querySelectorAll(".report-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const orden = btn.dataset.orden;
+        const key = `${state.trasladoId}-${orden}`;
+        if (btn.dataset.accion === "expand") {
+          state.reportesExpandidos.add(key);
+        } else {
+          state.reportesExpandidos.delete(key);
+        }
+        renderTimeline();
+      });
+    });
+  }
+
+  function renderActionPanel() {
+    const desc = elements.actionDesc;
+    const text = elements.actionText;
+    const btn = elements.actionButton;
+    if (!desc || !text || !btn) return;
+
+    // Reset total de variantes antes de aplicar la nueva.
+    btn.classList.remove("btn-primary", "btn-success", "btn-secondary");
+
+    if (state.estado === "cancelado") {
+      desc.textContent = "Este traslado fue cancelado y no admite más acciones.";
+      text.textContent = "Traslado cancelado";
+      btn.classList.add("btn-secondary");
+      btn.disabled = true;
+      return;
+    }
+    if (state.estado === "finalizado") {
+      desc.textContent = "El traslado se completó exitosamente. Todos los destinos fueron visitados.";
+      text.textContent = "Traslado completado";
+      btn.classList.add("btn-secondary");
+      btn.disabled = true;
+      return;
+    }
+
+    if (!state.pasoInfo) {
+      desc.textContent = "No hay acciones pendientes para este traslado.";
+      text.textContent = "Sin acciones";
+      btn.classList.add("btn-secondary");
+      btn.disabled = true;
+      return;
+    }
+
+    const p = state.pasoInfo;
+    const destino = p.destino_nombre || "";
+    const origen = (state.destinos.find((d) => d.es_retorno) || {}).nombre || destino;
+
+    switch (p.tipo) {
+      case "inicio_traslado":
+        text.textContent = "Traslado iniciado";
+        desc.textContent = `Confirma el inicio del traslado hacia ${destino}.`;
+        btn.classList.add("btn-primary");
+        btn.disabled = false;
+        break;
+      case "registrar_llegada":
+        text.textContent = `Registrar llegada a ${destino}`;
+        desc.textContent = `Confirma la llegada al destino ${destino}.`;
+        btn.classList.add("btn-success");
+        btn.disabled = false;
+        break;
+      case "inicio_retorno_central":
+        text.textContent = "Inicio retorno central";
+        desc.textContent = `Inicia el regreso a ${origen}.`;
+        btn.classList.add("btn-primary");
+        btn.disabled = false;
+        break;
+      case "registrar_llegada_central":
+        text.textContent = "Registrar llegada a Central Hospital de Clínicas";
+        desc.textContent = `Confirma la llegada a ${origen} para finalizar el traslado.`;
+        btn.classList.add("btn-success");
+        btn.disabled = false;
+        break;
+      default:
+        text.textContent = "Sin acciones";
+        desc.textContent = "No hay acciones pendientes para este traslado.";
+        btn.classList.add("btn-secondary");
+        btn.disabled = true;
     }
   }
 
   function renderReportButton() {
     if (!elements.reportButton) return;
-
-    const isDisabled = state.estado === "cancelado" || state.estado === "completado";
-    elements.reportButton.disabled = isDisabled;
-
-    if (isDisabled) {
-      elements.reportButton.classList.add("btn-disabled");
-    } else {
-      elements.reportButton.classList.remove("btn-disabled");
-    }
-  }
-
-  function renderTransferInfo() {
-    if (!elements.transferInfo || !state.destinos.length) return;
-
-    const primerDestino = state.destinos[0];
-    const info = elements.container.dataset;
-
-    // Determine badge class based on estado
-    let estadoBadge = "";
-    if (state.estado === "completado") {
-      estadoBadge = '<span class="transfer-type-badge badge-success">Completado</span>';
-    } else if (state.estado === "cancelado") {
-      estadoBadge = '<span class="transfer-type-badge badge-danger">Cancelado</span>';
-    } else if (state.estado === "en_proceso") {
-      estadoBadge = '<span class="transfer-type-badge badge-warning">En Proceso</span>';
-    }
-
-    // Tipo badge based on transfer type
-    let tipoBadge = "";
-    const tipoMap = {
-      "paciente_alta": "Paciente",
-      "biologico": "Biológico",
-      "equipamiento": "Equipamiento",
-      "doctor": "Doctor"
-    };
-    const tipoTexto = tipoMap[info.tipo] || info.tipo || "Traslado";
-    tipoBadge = `<span class="transfer-type-badge badge-patient">${tipoTexto}</span>`;
-
-    // Prioridad (semáforo) badge
-    const prioridadLabels = {
-      "rojo": "Rojo",
-      "amarillo": "Amarillo",
-      "verde": "Verde",
-    };
-    const prioridadClases = {
-      "rojo": "badge-priority-red",
-      "amarillo": "badge-priority-yellow",
-      "verde": "badge-priority-green",
-    };
-    const prioridadTexto = prioridadLabels[state.prioridad] || "Sin prioridad";
-    const prioridadClase = prioridadClases[state.prioridad] || "badge-priority-green";
-    const prioridadBadge = `<span class="transfer-priority-badge ${prioridadClase}" title="Prioridad: ${prioridadTexto}"><span class="priority-dot"></span>${prioridadTexto}</span>`;
-
-    elements.transferInfo.innerHTML = `
-      <h3>Traslado #${info.numero}</h3>
-      <p>${info.paciente} - ${info.origen} → ${primerDestino.nombre}</p>
-    `;
-
-    // Update badges in header
-    const header = document.querySelector(".transfer-detail-header");
-    if (header) {
-      // Limpia tanto badges de tipo como de prioridad
-      const existingBadges = header.querySelectorAll(
-        ".transfer-type-badge, .transfer-priority-badge"
-      );
-      existingBadges.forEach(b => b.remove());
-
-      // Add estado badge
-      if (estadoBadge) {
-        header.insertAdjacentHTML("beforeend", estadoBadge);
-      }
-      // Add prioridad badge
-      header.insertAdjacentHTML("beforeend", prioridadBadge);
-      // Add tipo badge
-      if (tipoBadge) {
-        header.insertAdjacentHTML("beforeend", tipoBadge);
-      }
-    }
-
-    if (elements.transferMeta) {
-      elements.transferMeta.innerHTML = `
-        <div class="transfer-detail-meta-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-          </svg>
-          <span>${info.conductor}</span>
-        </div>
-        <div class="transfer-detail-meta-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
-          </svg>
-          <span>${info.vehiculo}</span>
-        </div>
-      `;
-    }
-  }
-
-  function renderStepper() {
-    if (!elements.stepper) return;
-
-    const isFinalizado = state.estado === "completado" || state.estado === "cancelado";
-
-    let html = "";
-
-    state.stepperData.forEach((paso, index) => {
-      const pasoIndex = index + 1;
-
-      // Si está completado o cancelado, todos los pasos son completed
-      let esCompleted, esActive, esPending;
-      if (isFinalizado) {
-        esCompleted = true;
-        esActive = false;
-        esPending = false;
-      } else {
-        esCompleted = pasoIndex < state.pasoActual;
-        esActive = pasoIndex === state.pasoActual;
-        esPending = pasoIndex > state.pasoActual;
-      }
-
-      const estadoClase = esCompleted ? "completed" : esActive ? "active" : "pending";
-
-      // Step indicator content
-      let indicatorContent = "";
-      if (esCompleted) {
-        indicatorContent = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>`;
-      } else {
-        indicatorContent = pasoIndex;
-      }
-
-      // Time difference display
-      let timeInfo = "";
-      if (paso.destino?.tiempo_real && paso.tipo === "arribo") {
-        const diff = paso.destino.diferencia_minutos;
-        const sign = diff >= 0 ? "+" : "";
-        const diffClass = diff > 0 ? "time-late" : diff < 0 ? "time-early" : "time-ontime";
-        timeInfo = `<div class="detail-step-time ${diffClass}">${sign}${diff} min</div>`;
-      }
-
-      // Reports badge
-      let reportsBadge = "";
-      if (paso.reportesCount > 0) {
-        reportsBadge = `<span class="step-reports-badge" data-reportes='${JSON.stringify(paso.reportes)}'>${paso.reportesCount}</span>`;
-      }
-
-      // Connector
-      let connector = "";
-      if (index < state.stepperData.length - 1) {
-        const connectorClass = esCompleted ? "completed" : "";
-        connector = `<div class="detail-step-connector ${connectorClass}"></div>`;
-      }
-
-      html += `
-        <div class="detail-stepper-step ${estadoClase}" data-step="${pasoIndex}" data-tipo="${paso.tipo}" data-destino-orden="${paso.destinoOrden || ""}">
-          <div class="detail-step-indicator">${indicatorContent}${reportsBadge}</div>
-          <div class="detail-step-content">
-            <div class="detail-step-title">${paso.titulo}</div>
-            ${timeInfo}
-          </div>
-        </div>
-        ${connector}
-      `;
-    });
-
-    elements.stepper.innerHTML = html;
-
-    // Bind hover events for reports badges
-    document.querySelectorAll(".step-reports-badge").forEach((badge) => {
-      badge.addEventListener("mouseenter", mostrarTooltipReporte);
-      badge.addEventListener("mouseleave", ocultarTooltipReporte);
-    });
-  }
-
-  function renderActionButton() {
-    if (!elements.actionButton) return;
-
-    // Determine current step info
-    const paso = state.stepperData[state.pasoActual - 1];
-    if (!paso) return;
-
-    let buttonText = "";
-    let buttonClass = "btn btn-success btn-large";
-
-    if (state.estado === "cancelado") {
-      buttonText = "Traslado Cancelado";
-      buttonClass = "btn btn-secondary btn-large";
-      elements.actionButton.disabled = true;
-    } else if (state.estado === "completado") {
-      buttonText = "Traslado Completado";
-      buttonClass = "btn btn-primary btn-large";
-      elements.actionButton.disabled = true;
-    } else if (paso.tipo === "arribo") {
-      buttonText = `Registrar Arribo a ${paso.destino?.nombre || "destino"}`;
-    } else if (paso.tipo === "en_transito" || paso.tipo === "en_transito_retorno") {
-      buttonText = "Registrar Salida";
-    } else if (paso.tipo === "arribo_central") {
-      buttonText = "Finalizar Traslado";
-      buttonClass = "btn btn-primary btn-large";
-    }
-
-    elements.actionButton.innerHTML = `
-      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-      </svg>
-      ${buttonText}
-    `;
-    elements.actionButton.className = buttonClass;
-    elements.actionButton.disabled = false;
+    const isFinal = state.estado === "finalizado" || state.estado === "cancelado";
+    const sinAccion = !state.pasoInfo;
+    const disabled = isFinal || sinAccion;
+    elements.reportButton.disabled = disabled;
+    elements.reportButton.classList.toggle("btn-disabled", disabled);
   }
 
   // ==========================================
@@ -412,63 +405,53 @@
   // ==========================================
 
   async function handleMainAction() {
-    const paso = state.stepperData[state.pasoActual - 1];
-    if (!paso || state.estado === "cancelado" || state.estado === "completado") return;
+    if (!state.pasoInfo) return;
+    if (state.estado === "cancelado" || state.estado === "finalizado") return;
 
-    elements.actionButton.disabled = true;
-    elements.actionButton.classList.add("loading");
+    const btn = elements.actionButton;
+    btn.disabled = true;
+    btn.classList.add("loading");
 
     try {
-      if (paso.tipo === "arribo") {
-        await registrarArribo(paso);
-      } else if (paso.tipo === "en_transito" || paso.tipo === "en_transito_retorno") {
-        await registrarSalida(paso);
-      } else if (paso.tipo === "arribo_central") {
-        await finalizarTraslado();
+      const p = state.pasoInfo;
+      const destinoOrden = Number(p.destino_orden);
+
+      // /arribo es para llegadas; /salida para salidas/inicio.
+      const esLlegada =
+        p.tipo === "registrar_llegada" || p.tipo === "registrar_llegada_central";
+
+      const body = esLlegada
+        ? { destino_orden: destinoOrden, timestamp: new Date().toISOString() }
+        : { destino_orden: destinoOrden };
+
+      const endpoint = esLlegada ? "/arribo" : "/salida";
+      const result = await apiPost(endpoint, body);
+      if (!result.ok || !result.data.success) {
+        throw new Error(result.data.message || `Error HTTP ${result.status}`);
       }
+      toast(
+        esLlegada
+          ? "Arribo registrado correctamente"
+          : "Salida registrada. Continúa con el arribo al destino.",
+        "success",
+      );
+      // Refresco SPA del timeline/badge para feedback inmediato, seguido de
+      // un reload completo que garantiza que el botón refleja el nuevo estado
+      // (por seguridad contra cualquier race entre el commit del POST y el
+      // GET que alimenta `paso_info`).
+      await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error en accion:", error);
-      mostrarError("Error al procesar la accion");
+      toast(error.message || "Error al procesar la acción", "error");
     } finally {
-      elements.actionButton.disabled = false;
-      elements.actionButton.classList.remove("loading");
+      btn.classList.remove("loading");
+      // Si el reload aún no ocurrió (por error antes), re-habilitar según
+      // el estado actual.
+      const terminal =
+        state.estado === "cancelado" || state.estado === "finalizado";
+      btn.disabled = !state.pasoInfo || terminal;
     }
-  }
-
-  async function registrarArribo(paso) {
-    const timestamp = new Date().toISOString();
-
-    const response = await fetch(`${CONFIG.API_BASE}/${state.trasladoId}/arribo`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        destino_orden: paso.destinoOrden,
-        timestamp: timestamp,
-      }),
-    });
-
-    const result = await response.json();
-    if (result.success) {
-      state.pasoActual++;
-      renderAll();
-    } else {
-      throw new Error(result.message || "Error en servidor");
-    }
-  }
-
-  async function registrarSalida(paso) {
-    // For departure, we just advance the step without calling an API
-    // since there's no specific "departure" endpoint
-    state.pasoActual++;
-    renderAll();
-  }
-
-  async function finalizarTraslado() {
-    // Similar to departure - just advance and mark as completed
-    state.estado = "completado";
-    state.pasoActual++;
-    renderAll();
-    mostrarExito("Traslado completado exitosamente");
   }
 
   // ==========================================
@@ -485,155 +468,83 @@
     document.querySelectorAll(".modal-overlay").forEach((m) => {
       m.classList.remove("active");
     });
-    // Reset form
     elements.reportForm?.reset();
   }
 
   async function handleReportSubmit(e) {
     e.preventDefault();
-
     const tipo = document.getElementById("reporte-tipo")?.value;
     const mensaje = document.getElementById("reporte-mensaje")?.value;
-
     if (!tipo || !mensaje) {
-      mostrarError("Complete todos los campos");
+      toast("Complete todos los campos del reporte", "error");
       return;
     }
 
-    const paso = state.stepperData[state.pasoActual - 1];
+    if (!state.pasoInfo || state.pasoInfo.destino_orden == null) {
+      toast("No hay un destino activo para asociar el reporte.", "error");
+      return;
+    }
+    const destinoOrden = Number(state.pasoInfo.destino_orden);
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE}/${state.trasladoId}/reportes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destino_orden: paso.destinoOrden,
-          tipo_problema: tipo,
-          mensaje: mensaje,
-        }),
+      const result = await apiPost("/reportes", {
+        destino_orden: destinoOrden,
+        tipo_problema: tipo,
+        mensaje,
       });
-
-      const result = await response.json();
-      if (result.success) {
-        cerrarModales();
-        mostrarExito("Reporte registrado");
-        cargarDatosTraslado();
+      if (!result.ok || !result.data.success) {
+        throw new Error(result.data.message || `Error HTTP ${result.status}`);
       }
+      cerrarModales();
+      toast("Reporte registrado correctamente", "success");
+      await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error al guardar reporte:", error);
-      mostrarError("Error al guardar el reporte");
+      toast(error.message || "Error al guardar el reporte", "error");
     }
   }
 
   async function handleCancelarTraslado() {
     const tipo = document.getElementById("reporte-tipo")?.value;
     const mensaje = document.getElementById("reporte-mensaje")?.value;
-
     if (!tipo || !mensaje) {
-      mostrarError("Complete todos los campos antes de cancelar");
+      toast("Complete todos los campos antes de cancelar", "error");
       return;
     }
 
-    const paso = state.stepperData[state.pasoActual - 1];
+    // Cancelar no requiere un destino activo; si no hay, usamos 1 como
+    // primer destino del itinerario (el backend igual registra el evento
+    // a nivel de la solicitud, no del destino individual).
+    const destinoOrden = state.pasoInfo?.destino_orden
+      ? Number(state.pasoInfo.destino_orden)
+      : 1;
+
+    if (
+      !confirm(
+        "¿Estás seguro de cancelar este traslado? Esta acción no se puede deshacer.",
+      )
+    ) {
+      return;
+    }
 
     try {
-      const response = await fetch(`${CONFIG.API_BASE}/${state.trasladoId}/cancelar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destino_orden: paso.destinoOrden,
-          tipo_problema: tipo,
-          mensaje: mensaje,
-        }),
+      const result = await apiPost("/cancelar", {
+        destino_orden: destinoOrden,
+        tipo_problema: tipo,
+        mensaje,
       });
-
-      const result = await response.json();
-      if (result.success) {
-        cerrarModales();
-        state.estado = "cancelado";
-        renderAll();
-        mostrarExito("Traslado cancelado");
+      if (!result.ok || !result.data.success) {
+        throw new Error(result.data.message || `Error HTTP ${result.status}`);
       }
+      cerrarModales();
+      toast("Traslado cancelado correctamente", "success");
+      await cargarDatosTraslado();
+      window.location.reload();
     } catch (error) {
       console.error("Error al cancelar traslado:", error);
-      mostrarError("Error al cancelar el traslado");
+      toast(error.message || "Error al cancelar el traslado", "error");
     }
-  }
-
-  // ==========================================
-  // TOOLTIP
-  // ==========================================
-
-  function mostrarTooltipReporte(e) {
-    const badge = e.target;
-    const reportes = JSON.parse(badge.dataset.reportes || "[]");
-
-    if (!reportes.length) return;
-
-    // Find the step element (parent of the badge)
-    const step = badge.closest(".detail-stepper-step");
-    if (!step) return;
-
-    // Create tooltip if it doesn't exist - append to body for fixed positioning
-    let tooltip = document.body.querySelector(".report-tooltip");
-    if (!tooltip) {
-      tooltip = document.createElement("div");
-      tooltip.className = "report-tooltip";
-      document.body.appendChild(tooltip);
-    }
-
-    // Update tooltip content
-    tooltip.innerHTML = `
-      <div class="report-tooltip-title">Reportes (${reportes.length})</div>
-      <ul class="report-tooltip-list">
-        ${reportes.map((r) => `
-          <li>
-            <div class="report-tooltip-tipo">${escapeHtml(r.tipo)}</div>
-            <div class="report-tooltip-mensaje">${escapeHtml(r.mensaje)}</div>
-          </li>
-        `).join("")}
-      </ul>
-    `;
-
-    // Position tooltip using fixed positioning based on badge's viewport position
-    const rect = badge.getBoundingClientRect();
-
-    // Position above the badge, centered
-    const top = rect.top - 12;
-    const left = rect.left + rect.width / 2;
-
-    tooltip.style.top = `${top}px`;
-    tooltip.style.left = `${left}px`;
-    tooltip.style.transform = "translateX(-50%) translateY(-100%)";
-
-    requestAnimationFrame(() => {
-      tooltip.classList.add("visible");
-    });
-  }
-
-  function ocultarTooltipReporte(e) {
-    const tooltip = document.body.querySelector(".report-tooltip");
-    if (tooltip) {
-      tooltip.classList.remove("visible");
-    }
-  }
-
-  // ==========================================
-  // HELPERS
-  // ==========================================
-
-  function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  function mostrarError(mensaje) {
-    alert(mensaje);
-  }
-
-  function mostrarExito(mensaje) {
-    alert(mensaje);
   }
 
   // ==========================================

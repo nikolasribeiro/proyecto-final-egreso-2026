@@ -116,58 +116,99 @@ class ControladorDashboard extends RutaProtegida
      */
     public function trasladosInicio(): void
     {
-        $trasladosRaw = $this->modelo_traslado->obtenerTodosActivos();
+        // Filtro via query param: ?filtro=todos|activos|completados.
+        // Default 'todos'. Cualquier valor no reconocido cae al default.
+        $filtro = $_GET['filtro'] ?? 'todos';
+        if (!in_array($filtro, ['todos', 'activos', 'completados'], true)) {
+            $filtro = 'todos';
+        }
 
-        // Transformar datos al formato que espera la vista
+        // Filtro de prioridades via query param: ?prioridades=verde,amarillo,rojo
+        // (lista separada por comas). Default = las 3 prioridades activas.
+        // Valores desconocidos se descartan.
+        $todasPrioridades = ['verde', 'amarillo', 'rojo'];
+        if (isset($_GET['prioridades'])) {
+            $entradas = array_filter(
+                array_map('trim', explode(',', (string)$_GET['prioridades'])),
+                fn($v) => $v !== '',
+            );
+            $prioridadesActivas = array_values(array_intersect($entradas, $todasPrioridades));
+            // Si la URL explicitamente envió el param pero quedó vacío tras
+            // el filtrado, eso significa "ninguna activa" → mantenemos array
+            // vacío (a diferencia del caso "no enviar param" que es default).
+            if (empty($prioridadesActivas) && !empty($entradas)) {
+                $prioridadesActivas = [];
+            }
+        } else {
+            // Sin param en URL: default = todas activas (no filtrar).
+            $prioridadesActivas = $todasPrioridades;
+        }
+
+        $trasladosRaw = $this->modelo_traslado->obtenerTodos($filtro, $prioridadesActivas);
+
+        // Mapear al formato que espera la vista con datos reales del modelo
         $traslados = array_map(function ($t) {
-            $primerDestino = $t['destinos'][0]['nombre'] ?? 'Sin destino';
-
-            $estadoMap = [
-                'solicitado' => 'Solicitado',
-                'en_proceso' => 'En Proceso',
-                'completado' => 'Finalizado',
-                'cancelado' => 'Cancelado',
-            ];
-
-            $tipoMap = [
+            $tipoLegible = match ($t['tipo'] ?? 'paciente_alta') {
                 'paciente_alta' => 'Paciente',
-                'biologico' => 'Biológico',
-                'equipamiento' => 'Equipamiento',
-                'doctor' => 'Doctor',
-            ];
-
-            $prioridadMap = [
-                'rojo' => 'Rojo',
-                'amarillo' => 'Amarillo',
-                'verde' => 'Verde',
-            ];
-
+                'biologico'     => 'Biológico',
+                'equipamiento'  => 'Equipamiento',
+                default         => ucfirst((string)$t['tipo']),
+            };
+            // Etiquetas semánticas (no colores literales) — consistentes con
+            // la página de detalle.
+            $prioridadLegible = match ($t['prioridad'] ?? 'verde') {
+                'rojo'     => 'EMERGENCIA',
+                'amarillo' => 'URGENTE',
+                'verde'    => 'RUTINARIO',
+                default    => 'RUTINARIO',
+            };
+            $estadoInterno = strtolower($t['estado_nombre'] ?? 'pendiente');
+            // Labels humanizados para el chip de estado.
+            $estadoLegible = match ($estadoInterno) {
+                'pendiente'   => 'Esperando inicio',
+                'en_transito' => 'En curso',
+                'finalizado'  => 'Completado',
+                'cancelado'   => 'Cancelado',
+                default       => ucfirst($estadoInterno),
+            };
+            // Clase CSS modifier para el color del chip — coincide con los
+            // selectores ya definidos en badges.css.
+            $estadoClaseCss = match ($estadoInterno) {
+                'pendiente'   => 'status-pending',
+                'en_transito' => 'status-in-progress',
+                'finalizado'  => 'status-completed',
+                'cancelado'   => 'status-cancelled',
+                default       => '',
+            };
             return [
-                'id' => (string) $t['id'],
-                'tipo' => $tipoMap[$t['tipo']] ?? $t['tipo'],
-                'ubicacion_origen' => $t['origen'],
-                'ubicacion_destino' => $primerDestino,
-                'fecha_realizacion' => 'Hace ' . rand(1, 7) . ' dias',
-                'chofer' => $t['conductor'],
-                'estado' => $estadoMap[$t['estado']] ?? $t['estado'],
-                'estado_interno' => $t['estado'],
-                'prioridad' => $prioridadMap[$t['prioridad']] ?? 'Sin prioridad',
+                'id'                => (string)$t['id'],
+                'tipo'              => $tipoLegible,
+                'tipo_interno'      => $t['tipo'] ?? 'paciente_alta',
+                'ubicacion_origen'  => $t['origen'] ?? '-',
+                'ubicacion_destino' => $t['destinos_texto'] ?? 'Sin destino',
+                'fecha_realizacion' => $t['fecha_hora_salida'] ?? '-',
+                'chofer'            => $t['conductor'] ?? '-',
+                'estado'            => $estadoLegible,
+                'estado_interno'    => $estadoInterno,
+                'estado_clase_css'  => $estadoClaseCss,
+                'prioridad'         => $prioridadLegible,
                 'prioridad_interna' => $t['prioridad'] ?? 'verde',
             ];
         }, $trasladosRaw);
 
         vista('modulos/traslados/inicio', [
-            'titulo_pagina' => "Trazabilidad de Traslados",
+            'titulo_pagina' => "Traslados",
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
             'traslados' => $traslados,
+            'filtro_actual' => $filtro,
+            'prioridades_activas' => $prioridadesActivas,
             'puede_crear' => Roles::permiso($this->rol, 'traslados', 'crear'),
         ], 'admin');
     }
 
     public function nuevoTraslado(): void
     {
-
         $choferes = $this->modelo_traslado->obtenerChoferesDisponibles();
         $enfermeros = $this->modelo_traslado->obtenerEnfermeros();
         $vehiculos  = $this->modelo_traslado->obtenerVehiculosDisponibles();
@@ -180,27 +221,94 @@ class ControladorDashboard extends RutaProtegida
             'choferes'      => $choferes,
             'enfermeros'    => $enfermeros,
             'vehiculos'     => $vehiculos,
-            'ubicaciones'   => $ubicaciones
+            'ubicaciones'   => $ubicaciones,
+            'csrf'          => Sesion::generarTokenCsrf(),
         ], 'admin');
     }
 
     public function detalleTraslado(int $id): void
     {
-
-        $id = (int)($params['id'] ?? 0);
         $traslado = $id > 0 ? $this->modelo_traslado->obtenerPorId($id) : null;
+        if (!$traslado) {
+            abortar(404);
+        }
 
-        vista('modulos/traslados/detalle', [
-            'titulo_pagina' => 'Detalle del Traslado',
-            'nombre' => $this->nombre_usuario,
-            'rol' => $this->rol,
-            'traslado'      => $traslado        // <-- Inyectamos el traslado específico
+        vista('modulos/traslados/detalle/inicio', [
+            'titulo_pagina' => 'Detalle del Traslado #' . $id,
+            'nombre'        => $this->nombre_usuario,
+            'rol'           => $this->rol,
+            'csrf'          => Sesion::generarTokenCsrf(),
+            'traslado_id'   => (int)$traslado['id'],
+            'traslado_data' => [
+                'numero'           => 'TRF-' . $traslado['id'],
+                'tipo'             => $traslado['tipo'] ?? 'paciente_alta',
+                'paciente'         => $traslado['ci_paciente_externo'] ?? 'Traslado ' . $traslado['id'],
+                'origen'           => $traslado['origen'] ?? '-',
+                'conductor'        => $traslado['chofer_nombre'] ?? '-',
+                'enfermero'        => $traslado['enfermero_nombre'] ?? null,
+                'vehiculo'         => trim(($traslado['matricula'] ?? '') . ' — ' . ($traslado['tipo_vehiculo'] ?? '')),
+                'estado'           => strtolower((string)($traslado['estado_nombre'] ?? 'PENDIENTE')),
+                'estado_nombre'    => $traslado['estado_nombre'] ?? 'PENDIENTE',
+                'prioridad'        => $traslado['prioridad'] ?? 'verde',
+                'destinos'         => $traslado['destinos'] ?? [],
+                'paso_info'        => $traslado['paso_info'] ?? null,
+                'fecha_salida'     => $traslado['fecha_hora_salida'] ?? null,
+                'volver_al_origen' => (bool)($traslado['volver_al_origen'] ?? false),
+            ],
         ], 'admin');
     }
 
     // ==========================================
     // API METHODS
     // ==========================================
+
+    /**
+     * Lee el body JSON y valida CSRF.
+     * Devuelve el array de datos si todo OK, o null si CSRF inválido
+     * (en cuyo caso ya se envió la respuesta 419).
+     */
+    private function leerBodyConCsrf(): ?array
+    {
+        $raw = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($raw)) {
+            $raw = [];
+        }
+        $csrf = $raw['_csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (!Sesion::validarTokenCsrf((string)$csrf)) {
+            http_response_code(419);
+            echo json_encode(['success' => false, 'message' => 'CSRF inválido']);
+            return null;
+        }
+        return $raw;
+    }
+
+    public function apiCrearTraslado(): void
+    {
+        header('Content-Type: application/json');
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        if (
+            empty($data['tipo']) || empty($data['id_vehiculo']) ||
+            empty($data['ci_chofer']) || empty($data['destinos'])
+        ) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        try {
+            $user = Sesion::obtener('user');
+            $data['ci_administrativo'] = $user['ci'] ?? 11111111; // fallback dev
+
+            $id = $this->modelo_traslado->crearSolicitud($data);
+            echo json_encode(['success' => true, 'id' => $id]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
     public function apiObtenerTraslado(int $id): void
     {
         header('Content-Type: application/json');
@@ -219,8 +327,8 @@ class ControladorDashboard extends RutaProtegida
     public function apiRegistrarArribo(int $id): void
     {
         header('Content-Type: application/json');
-
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
 
         if (!isset($data['destino_orden']) || !isset($data['timestamp'])) {
             http_response_code(400);
@@ -230,13 +338,29 @@ class ControladorDashboard extends RutaProtegida
 
         $resultado = $this->modelo_traslado->registrarArribo(
             $id,
-            $data['destino_orden'],
-            $data['timestamp']
+            (int)$data['destino_orden'],
+            (string)$data['timestamp']
         );
 
-        if ($resultado['success']) {
-            $this->modelo_traslado->avanzarPaso($id);
+        echo json_encode($resultado);
+    }
+
+    public function apiRegistrarSalida(int $id): void
+    {
+        header('Content-Type: application/json');
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        if (!isset($data['destino_orden'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
         }
+
+        $resultado = $this->modelo_traslado->registrarSalida(
+            $id,
+            (int)$data['destino_orden']
+        );
 
         echo json_encode($resultado);
     }
@@ -244,8 +368,8 @@ class ControladorDashboard extends RutaProtegida
     public function apiCrearReporte(int $id): void
     {
         header('Content-Type: application/json');
-
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
 
         if (!isset($data['destino_orden']) || !isset($data['tipo_problema']) || !isset($data['mensaje'])) {
             http_response_code(400);
@@ -255,9 +379,9 @@ class ControladorDashboard extends RutaProtegida
 
         $resultado = $this->modelo_traslado->crearReporte(
             $id,
-            $data['destino_orden'],
-            $data['tipo_problema'],
-            $data['mensaje']
+            (int)$data['destino_orden'],
+            (string)$data['tipo_problema'],
+            (string)$data['mensaje']
         );
 
         echo json_encode($resultado);
@@ -266,8 +390,8 @@ class ControladorDashboard extends RutaProtegida
     public function apiCancelarTraslado(int $id): void
     {
         header('Content-Type: application/json');
-
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
 
         if (!isset($data['destino_orden']) || !isset($data['tipo_problema']) || !isset($data['mensaje'])) {
             http_response_code(400);
@@ -277,9 +401,9 @@ class ControladorDashboard extends RutaProtegida
 
         $resultado = $this->modelo_traslado->cancelar(
             $id,
-            $data['destino_orden'],
-            $data['tipo_problema'],
-            $data['mensaje']
+            (int)$data['destino_orden'],
+            (string)$data['tipo_problema'],
+            (string)$data['mensaje']
         );
 
         echo json_encode($resultado);

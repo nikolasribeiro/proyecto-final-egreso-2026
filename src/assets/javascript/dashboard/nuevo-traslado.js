@@ -47,13 +47,20 @@ document.addEventListener("DOMContentLoaded", function () {
     resumenDiagnosticoRow: document.getElementById("resumen-diagnostico-row"),
     resumenDiagnostico: document.getElementById("resumen-diagnostico"),
     btnSolicitarSame: document.getElementById("btn-solicitar-same"),
+    conductorInput: document.getElementById("conductor-input"),
     conductorSelect: document.getElementById("conductor"),
+    conductorWrapper: document.getElementById("conductor-wrapper"),
+    conductorDropdown: document.getElementById("conductor-dropdown"),
+    enfermeroInput: document.getElementById("enfermero-input"),
     enfermeroSelect: document.getElementById("enfermero"),
+    enfermeroWrapper: document.getElementById("enfermero-wrapper"),
+    enfermeroDropdown: document.getElementById("enfermero-dropdown"),
     jerarquiaSelect: document.getElementById("jerarquia-enfermero"),
     jerarquiaGroup: document.getElementById("jerarquia-enfermero-group"),
     estadoCritico: document.getElementById("estado-critico"),
     requiereCamilla: document.getElementById("requiere-camilla"),
     tipoDiagnostico: document.getElementById("tipo-diagnostico"),
+    csrfToken: document.getElementById("csrf-token"),
   };
 
   // Labels legibles para los diagnósticos
@@ -109,6 +116,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
+   * Devuelve el paso anterior VISIBLE, saltando los pasos que estén skipped.
+   * Sirve para que los botones "Volver" no caigan en un paso oculto
+   * (ej: paso 2 cuando el tipo de traslado no es paciente_alta).
+   */
+  function pasoAnteriorVisible(actual) {
+    let prev = actual - 1;
+    while (prev >= 1) {
+      if (
+        prev === 2 &&
+        estado.tipoTraslado &&
+        estado.tipoTraslado !== "paciente_alta"
+      ) {
+        prev--;
+        continue;
+      }
+      return prev;
+    }
+    return 1;
+  }
+
+  /**
    * Inicializar el formulario
    */
   function init() {
@@ -121,6 +149,7 @@ document.addEventListener("DOMContentLoaded", function () {
     // Vincular eventos
     bindEventos();
     bindDestinos();
+    bindAutocompletes();
 
     // Aplicar restricciones iniciales de vehículos
     aplicarRestriccionesVehiculos();
@@ -165,13 +194,29 @@ document.addEventListener("DOMContentLoaded", function () {
       if (radio) radio.checked = true;
     }
 
-    // Restaurar conductor y enfermero
-    if (elementos.conductorSelect && estado.conductor) {
-      elementos.conductorSelect.value = estado.conductor;
-    }
-    if (elementos.enfermeroSelect && estado.enfermero) {
-      elementos.enfermeroSelect.value = estado.enfermero;
-    }
+    // Restaurar conductor y enfermero (select oculto + input visible)
+    const restoreSelect = (selectEl, inputEl, val) => {
+      if (!selectEl || !val) return;
+      selectEl.value = val;
+      if (inputEl) {
+        const opt = Array.from(selectEl.options).find(
+          (o) => String(o.value) === String(val),
+        );
+        if (opt && opt.dataset.nombre) {
+          inputEl.value = opt.dataset.nombre;
+        }
+      }
+    };
+    restoreSelect(
+      elementos.conductorSelect,
+      elementos.conductorInput,
+      estado.conductor,
+    );
+    restoreSelect(
+      elementos.enfermeroSelect,
+      elementos.enfermeroInput,
+      estado.enfermero,
+    );
     if (elementos.jerarquiaSelect && estado.jerarquiaEnfermero) {
       elementos.jerarquiaSelect.value = estado.jerarquiaEnfermero;
     }
@@ -200,40 +245,43 @@ document.addEventListener("DOMContentLoaded", function () {
     // Navegación entre pasos (7 pasos totales)
     document
       .getElementById("btn-step-1")
-      ?.addEventListener("click", () => irAPaso(2));
+      ?.addEventListener("click", () => {
+        // Si el tipo NO es paciente_alta, saltar paso 2 (datos clínicos)
+        irAPaso(estado.tipoTraslado === "paciente_alta" ? 2 : 3);
+      });
     document
       .getElementById("btn-back-2")
-      ?.addEventListener("click", () => irAPaso(1));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(2)));
     document
       .getElementById("btn-step-2")
       ?.addEventListener("click", () => irAPaso(3));
     document
       .getElementById("btn-back-3")
-      ?.addEventListener("click", () => irAPaso(2));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(3)));
     document
       .getElementById("btn-step-3")
       ?.addEventListener("click", () => irAPaso(4));
     document
       .getElementById("btn-back-4")
-      ?.addEventListener("click", () => irAPaso(3));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(4)));
     document
       .getElementById("btn-step-4")
       ?.addEventListener("click", () => irAPaso(5));
     document
       .getElementById("btn-back-5")
-      ?.addEventListener("click", () => irAPaso(4));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(5)));
     document
       .getElementById("btn-step-5")
       ?.addEventListener("click", () => irAPaso(6));
     document
       .getElementById("btn-back-6")
-      ?.addEventListener("click", () => irAPaso(5));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(6)));
     document
       .getElementById("btn-step-6")
       ?.addEventListener("click", () => irAPaso(7));
     document
       .getElementById("btn-back-7")
-      ?.addEventListener("click", () => irAPaso(6));
+      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(7)));
     elementos.btnConfirmar.addEventListener("click", confirmarTraslado);
 
     // Conductor y Enfermero
@@ -343,6 +391,169 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
+   * Vincular combobox custom (input text + dropdown filtrado + select oculto)
+   * para conductor y enfermero. Reemplaza al <datalist> que no filtraba
+   * consistentemente entre navegadores.
+   */
+  function bindAutocompletes() {
+    const escapeHtml = (s) =>
+      String(s).replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[ch]);
+
+    const highlight = (text, query) => {
+      if (!query) return escapeHtml(text);
+      const lower = text.toLowerCase();
+      const q = query.toLowerCase();
+      const idx = lower.indexOf(q);
+      if (idx === -1) return escapeHtml(text);
+      return (
+        escapeHtml(text.slice(0, idx)) +
+        "<mark>" +
+        escapeHtml(text.slice(idx, idx + q.length)) +
+        "</mark>" +
+        escapeHtml(text.slice(idx + q.length))
+      );
+    };
+
+    const wireCombobox = (inputEl, selectEl, dropdownEl, wrapperEl, onPick) => {
+      if (!inputEl || !selectEl || !dropdownEl || !wrapperEl) return;
+
+      // Cachear opciones del select oculto
+      const allOptions = Array.from(selectEl.options)
+        .filter((o) => o.value)
+        .map((o) => ({
+          ci: o.dataset.ci,
+          nombre: o.dataset.nombre,
+        }));
+
+      const render = (query) => {
+        const q = (query || "").toLowerCase().trim();
+        const matches =
+          q.length === 0
+            ? allOptions
+            : allOptions.filter(
+                (o) =>
+                  o.nombre.toLowerCase().includes(q) ||
+                  String(o.ci).includes(q),
+              );
+
+        if (matches.length === 0) {
+          dropdownEl.innerHTML =
+            '<div class="autocomplete-empty">Sin resultados</div>';
+          dropdownEl.hidden = false;
+          return;
+        }
+
+        dropdownEl.innerHTML = matches
+          .map(
+            (o) =>
+              `<button type="button" class="autocomplete-item" data-ci="${escapeHtml(o.ci)}">
+                <span class="autocomplete-nombre">${highlight(o.nombre, q)}</span>
+                <span class="autocomplete-ci">CI ${escapeHtml(o.ci)}</span>
+              </button>`,
+          )
+          .join("");
+        dropdownEl.hidden = false;
+      };
+
+      const close = () => {
+        dropdownEl.hidden = true;
+      };
+
+      const selectOption = (ci) => {
+        const opt = allOptions.find((o) => String(o.ci) === String(ci));
+        if (!opt) return;
+        inputEl.value = opt.nombre;
+        selectEl.value = opt.ci;
+        inputEl.classList.remove("is-invalid");
+        close();
+        if (typeof onPick === "function") onPick(opt.ci);
+      };
+
+      // Eventos
+      inputEl.addEventListener("focus", () => render(inputEl.value));
+      inputEl.addEventListener("input", () => {
+        render(inputEl.value);
+        // Quitar marca de error mientras se tipea (no marcar hasta perder foco)
+        inputEl.classList.remove("is-invalid");
+        // Resetear selección hasta que el usuario elija del dropdown
+        selectEl.value = "";
+      });
+
+      // mousedown (no click) para que dispere antes que el blur del input
+      dropdownEl.addEventListener("mousedown", (e) => {
+        const btn = e.target.closest(".autocomplete-item");
+        if (btn) {
+          e.preventDefault();
+          selectOption(btn.dataset.ci);
+        }
+      });
+
+      inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          close();
+          return;
+        }
+        if (e.key === "Enter") {
+          const firstItem = dropdownEl.querySelector(".autocomplete-item");
+          if (firstItem && !dropdownEl.hidden) {
+            e.preventDefault();
+            selectOption(firstItem.dataset.ci);
+          }
+        }
+      });
+
+      // Validar al perder foco (solo si quedó texto que no matchea)
+      inputEl.addEventListener("blur", () => {
+        setTimeout(() => {
+          const val = inputEl.value.trim();
+          const opt = allOptions.find((o) => o.nombre === val);
+          inputEl.classList.toggle("is-invalid", !!val && !opt);
+          close();
+        }, 150);
+      });
+
+      // Click fuera cierra
+      document.addEventListener("click", (e) => {
+        if (!wrapperEl.contains(e.target)) close();
+      });
+    };
+
+    wireCombobox(
+      elementos.conductorInput,
+      elementos.conductorSelect,
+      elementos.conductorDropdown,
+      elementos.conductorWrapper,
+      (ci) => {
+        estado.conductor = ci;
+        guardarEstado();
+        actualizarBotonPaso5();
+      },
+    );
+
+    wireCombobox(
+      elementos.enfermeroInput,
+      elementos.enfermeroSelect,
+      elementos.enfermeroDropdown,
+      elementos.enfermeroWrapper,
+      (ci) => {
+        estado.enfermero = ci;
+        if (!ci) {
+          estado.jerarquiaEnfermero = null;
+          if (elementos.jerarquiaSelect) elementos.jerarquiaSelect.value = "";
+        }
+        guardarEstado();
+        actualizarVisibilidadJerarquia();
+      },
+    );
+  }
+
+  /**
    * Ir a un paso específico
    */
   function irAPaso(paso) {
@@ -389,23 +600,43 @@ document.addEventListener("DOMContentLoaded", function () {
    * Actualizar el stepper visual
    */
   function actualizarStepper() {
+    // pasoActual ya representa el paso real del usuario porque los
+    // handlers de los botones ajustan el salto cuando el paso 2 está skipped.
+    // El único caso en que difiere es si por alguna razón pasoActual === 2
+    // con tipo distinto de paciente_alta (estado defensivo).
+    const pasoVisual =
+      estado.pasoActual === 2 &&
+      estado.tipoTraslado &&
+      estado.tipoTraslado !== "paciente_alta"
+        ? 3
+        : estado.pasoActual;
+
     elementos.pasos.forEach((paso, index) => {
       const numPaso = index + 1;
-      paso.classList.remove("active", "completed");
+      paso.classList.remove("active", "completed", "skipped");
 
-      if (numPaso < estado.pasoActual) {
+      // Marcar paso 2 como skipped si el tipo no es paciente_alta
+      if (
+        numPaso === 2 &&
+        estado.tipoTraslado &&
+        estado.tipoTraslado !== "paciente_alta"
+      ) {
+        paso.classList.add("skipped");
+        return;
+      }
+
+      if (numPaso < pasoVisual) {
         paso.classList.add("completed");
-      } else if (numPaso === estado.pasoActual) {
+      } else if (numPaso === pasoVisual) {
         paso.classList.add("active");
       }
     });
 
+    // Líneas: la línea N (entre paso N y N+1) está completa cuando
+    // el usuario ya pasó más allá del paso N+1 (pasoVisual > N+1).
     elementos.lineas.forEach((linea, index) => {
-      if (index < estado.pasoActual - 1) {
-        linea.classList.add("completed");
-      } else {
-        linea.classList.remove("completed");
-      }
+      const numLinea = index + 1;
+      linea.classList.toggle("completed", pasoVisual > numLinea + 1);
     });
   }
 
@@ -413,13 +644,16 @@ document.addEventListener("DOMContentLoaded", function () {
    * Actualizar la visibilidad de los pasos del formulario
    */
   function actualizarPasos() {
+    const pasoVisual =
+      estado.pasoActual === 2 &&
+      estado.tipoTraslado &&
+      estado.tipoTraslado !== "paciente_alta"
+        ? 3
+        : estado.pasoActual;
+
     elementos.steps.forEach((step, index) => {
       const numPaso = index + 1;
-      if (numPaso === estado.pasoActual) {
-        step.classList.add("active");
-      } else {
-        step.classList.remove("active");
-      }
+      step.classList.toggle("active", numPaso === pasoVisual);
     });
   }
 
@@ -464,41 +698,30 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Aplicar restricciones de vehículos según tipo de traslado
+   * Mostrar/ocultar vehículos según el tipo de traslado.
+   * Camión SOLO visible cuando el tipo es "equipamiento".
    */
   function aplicarRestriccionesVehiculos() {
     if (!elementos.vehiculosGrid) return;
 
-    const cards = elementos.vehiculosGrid.querySelectorAll(".vehiculo-card");
-    const esPacienteOBiologico =
-      estado.tipoTraslado === "paciente_alta" ||
-      estado.tipoTraslado === "biologico";
+    const esEquipamiento = estado.tipoTraslado === "equipamiento";
 
-    cards.forEach((card) => {
-      const esCamion = card.dataset.restringido === "true";
-      const esDisponible = !card.classList.contains("no-disponible");
-      const input = card.querySelector('input[type="radio"]');
-
-      if (esCamion && esPacienteOBiologico && esDisponible) {
-        // Deshabilitar completamente el camión para paciente/biológico
-        card.classList.add("restringido");
-        if (input) {
-          input.disabled = true;
-          input.checked = false;
-          // Resetear vehículo si era el camión
-          if (estado.vehiculo === input.value) {
+    elementos.vehiculosGrid
+      .querySelectorAll(".vehiculo-card")
+      .forEach((card) => {
+        const esCamion = card.dataset.restringido === "true";
+        const input = card.querySelector('input[type="radio"]');
+        if (esCamion && !esEquipamiento) {
+          card.style.display = "none";
+          if (input && estado.vehiculo === input.value) {
             estado.vehiculo = null;
             guardarEstado();
             actualizarBotonPaso6();
           }
+        } else {
+          card.style.display = "";
         }
-      } else {
-        card.classList.remove("restringido");
-        if (input && !card.classList.contains("no-disponible")) {
-          input.disabled = false;
-        }
-      }
-    });
+      });
   }
 
   /**
@@ -716,31 +939,63 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Confirmar el traslado
+   * Confirmar el traslado: envía los datos al backend.
    */
-  function confirmarTraslado() {
-    const datosTraslado = {
+  async function confirmarTraslado() {
+    const csrf = elementos.csrfToken ? elementos.csrfToken.value : "";
+
+    // Validación cliente: camión solo para equipamiento
+    const vehiculoRadio = document.querySelector(
+      `input[name="vehiculo"][value="${estado.vehiculo}"]`,
+    );
+    const vehiculoCard = vehiculoRadio ? vehiculoRadio.closest(".vehiculo-card") : null;
+    const esCamion = vehiculoCard && vehiculoCard.dataset.restringido === "true";
+    if (esCamion && estado.tipoTraslado !== "equipamiento") {
+      alert("El camión solo está disponible para traslados de equipamiento.");
+      return;
+    }
+
+    const payload = {
+      _csrf: csrf,
       tipo: estado.tipoTraslado,
-      estadoCritico: estado.estadoCritico,
-      requiereCamilla: estado.requiereCamilla,
-      tipoDiagnostico: estado.tipoDiagnostico,
-      origen: "Hospital de Clínicas",
+      estadoCritico: !!estado.estadoCritico,
+      requiereCamilla: !!estado.requiereCamilla,
+      tipoDiagnostico: estado.tipoDiagnostico || null,
+      id_ubicacion_origen: window.ORIGEN_ID || 1,
       destinos: estado.destinos,
-      conductor: estado.conductor,
-      enfermero: estado.enfermero,
-      jerarquiaEnfermero: estado.jerarquiaEnfermero,
-      vehiculo: estado.vehiculo,
-      volverOrigen: estado.volverOrigen,
+      ci_chofer: parseInt(estado.conductor, 10),
+      ci_enfermero: estado.enfermero ? parseInt(estado.enfermero, 10) : null,
+      jerarquia_enfermero: estado.jerarquiaEnfermero || null,
+      id_vehiculo: parseInt(estado.vehiculo, 10),
+      volver_origen: !!estado.volverOrigen,
     };
 
-    console.log("Datos del traslado:", datosTraslado);
+    if (!elementos.btnConfirmar) return;
+    elementos.btnConfirmar.disabled = true;
+    const textoOriginal = elementos.btnConfirmar.innerHTML;
+    elementos.btnConfirmar.textContent = "Enviando...";
 
-    alert(
-      "Traslado confirmado correctamente. En un entorno real, esto enviaría los datos al servidor.",
-    );
+    try {
+      const r = await fetch("/api/traslados", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf,
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok || !json.success) {
+        throw new Error(json.message || `Error HTTP ${r.status}`);
+      }
 
-    limpiarEstado();
-    // window.location.href = '/dashboard/traslados';
+      limpiarEstado();
+      window.location.href = "/dashboard/traslados";
+    } catch (e) {
+      alert("Error al crear traslado: " + e.message);
+      elementos.btnConfirmar.disabled = false;
+      elementos.btnConfirmar.innerHTML = textoOriginal;
+    }
   }
 
   // Inicializar
