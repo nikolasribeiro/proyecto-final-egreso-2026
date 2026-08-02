@@ -43,6 +43,8 @@ services:
   web:
     build: .
     container_name: songbird_web
+    env_file:
+      - .env
     volumes:
       - ./src:/var/www/html:z
     networks:
@@ -71,6 +73,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mariadb_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - songbird_network
     # Healthcheck MariaDB: `mariadb-admin ping` (la imagen incluye ambos aliases).
