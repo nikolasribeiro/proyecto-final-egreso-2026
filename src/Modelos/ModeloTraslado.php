@@ -115,4 +115,20 @@ class ModeloTraslado
         $sql = "SELECT id, nombre_lugar, direccion FROM ubicaciones";
         return $this->db->query($sql)->fetchAll();
     }
+
+
+    public function registrarArribo(int $id, string $destino_orden, string $timestamp): array
+    {
+        return [];
+    }
+    public function avanzarPaso(int $id) {}
+    public function crearReporte(int $id, string $destino_orden, string $tipo_problema, string $mensaje): array
+    {
+        return [];
+    }
+
+    public function cancelar(int $id, string $destino_orden, string $tipo_problema, string $mensaje): array
+    {
+        return [];
+    }
 }

@@ -13,6 +13,7 @@ class ControladorDashboard extends RutaProtegida
 {
     private string $nombre_usuario;
     private string $rol;
+    private ModeloTraslado $modelo_traslado;
 
     /**
      * Mock de documentos. Incluye el campo `categoria` (slug + nombre legible)
@@ -62,6 +63,7 @@ class ControladorDashboard extends RutaProtegida
         parent::__construct();
 
         $usuario = Sesion::obtener('user');
+        $this->modelo_traslado = new ModeloTraslado();
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];
     }
@@ -87,7 +89,7 @@ class ControladorDashboard extends RutaProtegida
     {
         $documentos = array_values(array_filter(
             self::DOCUMENTOS,
-            fn ($d) => $d['categoria']['slug'] === $slug
+            fn($d) => $d['categoria']['slug'] === $slug
         ));
 
         // Buscar el nombre legible de la categoría
@@ -114,7 +116,7 @@ class ControladorDashboard extends RutaProtegida
      */
     public function trasladosInicio(): void
     {
-        $trasladosRaw = ModeloTraslado::obtenerTodos();
+        $trasladosRaw = $this->modelo_traslado->obtenerTodosActivos();
 
         // Transformar datos al formato que espera la vista
         $traslados = array_map(function ($t) {
@@ -165,34 +167,45 @@ class ControladorDashboard extends RutaProtegida
 
     public function nuevoTraslado(): void
     {
-        // Mostrar contenido del panel principal
+
+        $choferes = $this->modelo_traslado->obtenerChoferesDisponibles();
+        $enfermeros = $this->modelo_traslado->obtenerEnfermeros();
+        $vehiculos  = $this->modelo_traslado->obtenerVehiculosDisponibles();
+        $ubicaciones = $this->modelo_traslado->obtenerUbicaciones();
+
         vista('modulos/traslados/nuevo/inicio', [
-            'titulo_pagina' => "Solicita un nuevo traslado",
+            'titulo_pagina' => 'Nuevo Traslado',
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
+            'choferes'      => $choferes,
+            'enfermeros'    => $enfermeros,
+            'vehiculos'     => $vehiculos,
+            'ubicaciones'   => $ubicaciones
         ], 'admin');
     }
 
     public function detalleTraslado(int $id): void
     {
-        // Mostrar contenido del panel principal
-        vista('modulos/traslados/detalle/inicio', [
-            'titulo_pagina' => "Detalle del traslado",
-            'traslado_id' => $id,
+
+        $id = (int)($params['id'] ?? 0);
+        $traslado = $id > 0 ? $this->modelo_traslado->obtenerPorId($id) : null;
+
+        vista('modulos/traslados/detalle', [
+            'titulo_pagina' => 'Detalle del Traslado',
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
+            'traslado'      => $traslado        // <-- Inyectamos el traslado específico
         ], 'admin');
     }
 
     // ==========================================
     // API METHODS
     // ==========================================
-
     public function apiObtenerTraslado(int $id): void
     {
         header('Content-Type: application/json');
 
-        $traslado = ModeloTraslado::obtenerPorId($id);
+        $traslado = $this->modelo_traslado->obtenerPorId($id);
 
         if (!$traslado) {
             http_response_code(404);
@@ -215,14 +228,14 @@ class ControladorDashboard extends RutaProtegida
             return;
         }
 
-        $resultado = ModeloTraslado::registrarArribo(
+        $resultado = $this->modelo_traslado->registrarArribo(
             $id,
             $data['destino_orden'],
             $data['timestamp']
         );
 
         if ($resultado['success']) {
-            ModeloTraslado::avanzarPaso($id);
+            $this->modelo_traslado->avanzarPaso($id);
         }
 
         echo json_encode($resultado);
@@ -240,7 +253,7 @@ class ControladorDashboard extends RutaProtegida
             return;
         }
 
-        $resultado = ModeloTraslado::crearReporte(
+        $resultado = $this->modelo_traslado->crearReporte(
             $id,
             $data['destino_orden'],
             $data['tipo_problema'],
@@ -262,7 +275,7 @@ class ControladorDashboard extends RutaProtegida
             return;
         }
 
-        $resultado = ModeloTraslado::cancelar(
+        $resultado = $this->modelo_traslado->cancelar(
             $id,
             $data['destino_orden'],
             $data['tipo_problema'],

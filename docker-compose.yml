@@ -43,8 +43,11 @@ services:
   web:
     build: .
     container_name: songbird_web
-    env_file:
-      - .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - ./src:/var/www/html:z
     networks:
@@ -73,9 +76,10 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mariadb_data:/var/lib/mysql
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
     networks:
       - songbird_network
+    command: ["executable", "arg"]
     # Healthcheck MariaDB: `mariadb-admin ping` (la imagen incluye ambos aliases).
     # El doble `$$` escapa la variable para que la expanda el shell dentro del contenedor.
     healthcheck:
