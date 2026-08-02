@@ -1,13 +1,13 @@
 <!-- View: Transfer Detail - One Button Workflow -->
 <div id="transfer-detail"
  class="view-section"
-     data-traslado-id="<?= $traslado_id ?>"
-     data-numero="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['numero']) : 'TRF-2024-0891' ?>"
-     data-paciente="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['paciente']) : 'Juan Pérez' ?>"
-     data-origen="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['origen']) : 'Hospital Central' ?>"
-     data-conductor="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['conductor']) : 'Carlos López' ?>"
-     data-vehiculo="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['vehiculo']) : 'Ambulancia 001' ?>"
-     data-tipo="<?= isset($traslado_data) ? htmlspecialchars($traslado_data['tipo']) : 'paciente_alta' ?>">
+     data-traslado-id="<?= (int)$traslado_id ?>"
+     data-numero="<?= e($traslado_data['numero']) ?>"
+     data-paciente="<?= e($traslado_data['paciente']) ?>"
+     data-origen="<?= e($traslado_data['origen']) ?>"
+     data-conductor="<?= e($traslado_data['conductor']) ?>"
+     data-vehiculo="<?= e($traslado_data['vehiculo']) ?>"
+     data-tipo="<?= e($traslado_data['tipo']) ?>">
 
     <a class="back-button" href="/dashboard/traslados">
         <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -20,7 +20,7 @@
         <!-- Header with transfer info -->
         <div class="transfer-detail-header">
             <div class="transfer-detail-info">
-                <h3>Traslado #<?= isset($traslado_data) ? htmlspecialchars($traslado_data['numero']) : 'TRF-2024-0891' ?></h3>
+                <h3>Traslado #<?= e($traslado_data['numero']) ?></h3>
                 <p>Cargando información...</p>
             </div>
             <span class="transfer-type-badge badge-patient">Paciente</span>

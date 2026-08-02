@@ -2,7 +2,9 @@
 
 namespace Controladores;
 
+use Nucleo\Conexion;
 use Nucleo\Sesion;
+use PDO;
 
 class ControladorAuth
 {
@@ -74,8 +76,16 @@ class ControladorAuth
             'soporte'   => 'soporte123',
         ];
 
-        // Mapa explícito username → rol del sistema.
+        // Mapa explícito username → CI del usuario seedeado (para auditoría).
         // Cualquier username que no esté acá caerá en el fallback.
+        $mapaUsuarios = [
+            'admin'     => ['ci' => 11111111, 'nombre' => 'Administrador', 'apellido' => 'Prueba'],
+            'medico'    => ['ci' => 22222222, 'nombre' => 'Medico',        'apellido' => 'Prueba'],
+            'enfermero' => ['ci' => 44444444, 'nombre' => 'Enfermero',     'apellido' => 'Prueba'],
+            'soporte'   => ['ci' => 33333333, 'nombre' => 'Chofer',        'apellido' => 'Prueba'],
+        ];
+
+        // Mapa explícito username → rol del sistema.
         $mapaRoles = [
             'admin'     => 'administrador',
             'medico'    => 'medico',
@@ -84,10 +94,31 @@ class ControladorAuth
         ];
 
         if (isset($usuariosValidos[$username]) && $usuariosValidos[$username] === $password) {
-            // Login exitoso
+            // Login exitoso. Buscar id del usuario en la BD para auditoría.
+            $infoUsuario = $mapaUsuarios[$username] ?? null;
+            $userId = null;
+
+            if ($infoUsuario) {
+                try {
+                    $db = Conexion::obtenerInstancia();
+                    $stmt = $db->prepare("SELECT id FROM usuarios WHERE ci = :ci AND activo = TRUE LIMIT 1");
+                    $stmt->execute(['ci' => $infoUsuario['ci']]);
+                    $row = $stmt->fetch();
+                    if ($row) {
+                        $userId = (int)$row['id'];
+                    }
+                } catch (\Throwable $e) {
+                    // Si falla la BD, el id_usuario quedará NULL en la auditoría
+                    error_log('Auth: fallo al buscar usuario por CI: ' . $e->getMessage());
+                }
+            }
+
             Sesion::guardar('user', [
+                'id'        => $userId,
                 'username'  => $username,
-                'nombre'    => ucfirst($username),
+                'nombre'    => $infoUsuario['nombre'] ?? ucfirst($username),
+                'apellido'  => $infoUsuario['apellido'] ?? '',
+                'ci'        => $infoUsuario['ci'] ?? null,
                 'rol'       => $mapaRoles[$username] ?? 'usuario',
                 'login_at'  => date('Y-m-d H:i:s'),
             ]);

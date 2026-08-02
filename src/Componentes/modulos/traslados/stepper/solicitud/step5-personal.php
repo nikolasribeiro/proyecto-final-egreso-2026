@@ -6,35 +6,49 @@
 
     <div class="personal-form">
         <div class="form-group">
-            <label for="conductor" class="form-label required">Conductor</label>
-            <select id="conductor" name="conductor" class="form-select" required>
-                <option value="">Seleccionar conductor...</option>
-                <?php
-                $conductores = [
-                    ['id' => 1, 'nombre' => 'Juan Pérez', 'cedula' => '1.234.567-8'],
-                    ['id' => 2, 'nombre' => 'Carlos Rodríguez', 'cedula' => '2.345.678-9'],
-                    ['id' => 3, 'nombre' => 'María García', 'cedula' => '3.456.789-0'],
-                ];
-                foreach ($conductores as $conductor):
-                ?>
-                    <option value="<?= $conductor['id'] ?>"><?= $conductor['nombre'] ?> (<?= $conductor['cedula'] ?>)</option>
+            <label for="conductor-input" class="form-label required">Conductor</label>
+            <div class="autocomplete-wrapper" id="conductor-wrapper">
+                <input
+                    type="text"
+                    id="conductor-input"
+                    class="form-input"
+                    autocomplete="off"
+                    placeholder="Escribí el nombre o la CI..."
+                    required>
+                <div class="autocomplete-dropdown" id="conductor-dropdown" hidden role="listbox"></div>
+            </div>
+            <select id="conductor" name="conductor" hidden required>
+                <option value="">—</option>
+                <?php foreach (($choferes ?? []) as $c): ?>
+                    <option value="<?= (int)$c['ci'] ?>"
+                            data-ci="<?= (int)$c['ci'] ?>"
+                            data-nombre="<?= e($c['nombre'].' '.$c['apellido']) ?>">
+                        <?= e($c['nombre'].' '.$c['apellido']) ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
+            <p class="step-hint">Tipeá para filtrar. Seleccioná una opción de la lista.</p>
         </div>
 
         <div class="form-group">
-            <label for="enfermero" class="form-label">Enfermero <span class="optional">(Opcional)</span></label>
-            <select id="enfermero" name="enfermero" class="form-select">
-                <option value="">Sin enfermero</option>
-                <?php
-                $enfermeros = [
-                    ['id' => 1, 'nombre' => 'Ana Martínez', 'cedula' => '4.567.890-1'],
-                    ['id' => 2, 'nombre' => 'Roberto López', 'cedula' => '5.678.901-2'],
-                    ['id' => 3, 'nombre' => 'Laura Fernández', 'cedula' => '6.789.012-3'],
-                ];
-                foreach ($enfermeros as $enfermero):
-                ?>
-                    <option value="<?= $enfermero['id'] ?>"><?= $enfermero['nombre'] ?> (<?= $enfermero['cedula'] ?>)</option>
+            <label for="enfermero-input" class="form-label">Enfermero <span class="optional">(Opcional)</span></label>
+            <div class="autocomplete-wrapper" id="enfermero-wrapper">
+                <input
+                    type="text"
+                    id="enfermero-input"
+                    class="form-input"
+                    autocomplete="off"
+                    placeholder="Escribí el nombre o la CI...">
+                <div class="autocomplete-dropdown" id="enfermero-dropdown" hidden role="listbox"></div>
+            </div>
+            <select id="enfermero" name="enfermero" hidden>
+                <option value="">—</option>
+                <?php foreach (($enfermeros ?? []) as $e): ?>
+                    <option value="<?= (int)$e['ci'] ?>"
+                            data-ci="<?= (int)$e['ci'] ?>"
+                            data-nombre="<?= e($e['nombre'].' '.$e['apellido']) ?>">
+                        <?= e($e['nombre'].' '.$e['apellido']) ?>
+                    </option>
                 <?php endforeach; ?>
             </select>
         </div>

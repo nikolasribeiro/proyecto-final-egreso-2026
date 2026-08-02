@@ -50,6 +50,22 @@
   color: var(--white);
 }
 
+/* Paso del stepper que no aplica al tipo de traslado elegido */
+.stepper-item.skipped {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.stepper-item.skipped .stepper-bubble {
+  background: var(--border-gray);
+  border-color: var(--border-gray);
+  color: var(--secondary-gray);
+  animation: none;
+}
+.stepper-item.skipped .stepper-label {
+  color: var(--secondary-gray);
+  text-decoration: line-through;
+}
+
 .stepper-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -651,21 +667,118 @@
 }
 
 .vehiculo-restriction {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 0.5rem;
-  padding: 0.5rem;
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
   background: var(--warning-yellow-light);
+  border: 1px solid var(--warning-yellow);
   border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--warning-yellow);
 }
 
-.vehiculo-card[data-restringido="true"]:not(.no-disponible)
-  .vehiculo-restriction {
+.vehiculo-restriction svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* El badge solo se muestra dentro del camión */
+.vehiculo-card:not([data-restringido="true"]) .vehiculo-restriction {
+  display: none;
+}
+
+/* ========== Autocomplete (Paso 5) ========== */
+.autocomplete-wrapper {
+  position: relative;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% - 2px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--white);
+  border: 2px solid var(--primary-blue);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.autocomplete-dropdown[hidden] {
+  display: none;
+}
+
+.autocomplete-item {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--light-gray);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--black);
+  transition: background 0.15s ease;
+}
+
+.autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item:focus-visible {
+  background: var(--primary-blue);
+  color: var(--white);
+  outline: none;
+}
+
+.autocomplete-item:hover .autocomplete-ci,
+.autocomplete-item:focus-visible .autocomplete-ci {
+  color: var(--white);
+}
+
+.autocomplete-nombre {
+  font-weight: 600;
+  flex: 1;
+}
+
+.autocomplete-ci {
+  font-size: 0.75rem;
+  color: var(--secondary-gray);
+  font-weight: 500;
+}
+
+.autocomplete-item mark {
+  background: var(--primary-blue);
+  color: var(--white);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.autocomplete-item:hover mark,
+.autocomplete-item:focus-visible mark {
+  background: var(--white);
+  color: var(--primary-blue);
+}
+
+.autocomplete-empty {
+  padding: 0.9rem;
+  text-align: center;
+  color: var(--secondary-gray);
+  font-style: italic;
+  font-size: 0.85rem;
 }
 
 /* ========== No Vehiculos Alert ========== */
