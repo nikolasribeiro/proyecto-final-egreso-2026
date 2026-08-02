@@ -1,4 +1,4 @@
-CREATE TABLE `usuarios` (
+CREATE TABLE IF NOT EXISTS `usuarios` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `ci` INT UNIQUE NOT NULL,
   `nombre` VARCHAR(100) NOT NULL,
@@ -8,40 +8,40 @@ CREATE TABLE `usuarios` (
   `activo` BOOLEAN DEFAULT TRUE
 );
 
-CREATE TABLE `roles` (
+CREATE TABLE IF NOT EXISTS `roles` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `descripcion_rol` VARCHAR(100),
   `tipo_rol` ENUM('ADMINISTRATIVO', 'MEDICO', 'CHOFER', 'ENFERMERO') NOT NULL
 );
 
-CREATE TABLE `categorias_documentos` (
+CREATE TABLE IF NOT EXISTS `categorias_documentos` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `nombre_categoria` VARCHAR(100) NOT NULL
 );
 
-CREATE TABLE `encuestas` (
+CREATE TABLE IF NOT EXISTS `encuestas` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `segmento_dirigido` VARCHAR(150) NOT NULL
 );
 
-CREATE TABLE `ubicaciones` (
+CREATE TABLE IF NOT EXISTS `ubicaciones` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `nombre_lugar` VARCHAR(150) NOT NULL,
   `direccion` VARCHAR(255)
 );
 
-CREATE TABLE `estado_traslados` (
+CREATE TABLE IF NOT EXISTS `estado_traslados` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `estado` ENUM('PENDIENTE', 'EN_TRANSITO', 'FINALIZADO', 'CANCELADO') NOT NULL
 );
 
-CREATE TABLE `tipo_vehiculo` (
+CREATE TABLE IF NOT EXISTS `tipo_vehiculo` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `descripcion` VARCHAR(100) NOT NULL
 );
 
 
-CREATE TABLE `usuario_roles` (
+CREATE TABLE IF NOT EXISTS `usuario_roles` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_usuario` INT NOT NULL,
   `id_rol` INT NOT NULL,
@@ -49,7 +49,7 @@ CREATE TABLE `usuario_roles` (
   FOREIGN KEY (`id_rol`) REFERENCES `roles`(`id`) ON DELETE CASCADE
 );
 
-CREATE TABLE `documentos` (
+CREATE TABLE IF NOT EXISTS `documentos` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_categoria` INT NOT NULL,
   `titulo` VARCHAR(200) NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE `documentos` (
   FOREIGN KEY (`ci_funcionario`) REFERENCES `usuarios`(`ci`)
 );
 
-CREATE TABLE `respuestas_encuesta` (
+CREATE TABLE IF NOT EXISTS `respuestas_encuesta` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_encuesta` INT NOT NULL,
   `calificacion` INT NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE `respuestas_encuesta` (
   FOREIGN KEY (`id_encuesta`) REFERENCES `encuestas`(`id`) ON DELETE CASCADE
 );
 
-CREATE TABLE `vehiculos` (
+CREATE TABLE IF NOT EXISTS `vehiculos` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `estado` ENUM('DISPONIBLE', 'NO-DISPONIBLE'),
   `matricula` VARCHAR(20) UNIQUE NOT NULL,
@@ -78,7 +78,7 @@ CREATE TABLE `vehiculos` (
   FOREIGN KEY (`id_tipo_vehiculo`) REFERENCES `tipo_vehiculo`(`id`)
 );
 
-CREATE TABLE `logs_auditoria` (
+CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_usuario` INT,
   `accion` ENUM('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT') NOT NULL,
@@ -91,7 +91,7 @@ CREATE TABLE `logs_auditoria` (
 );
 
 
-CREATE TABLE `solicitud_traslados` (
+CREATE TABLE IF NOT EXISTS `solicitud_traslados` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_ubicacion_origen` INT NOT NULL,
   `id_ubicacion_destino` INT NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE `solicitud_traslados` (
   FOREIGN KEY (`ci_administrativo`) REFERENCES `usuarios`(`ci`)
 );
 
-CREATE TABLE `reporte_reemplazo` (
+CREATE TABLE IF NOT EXISTS `reporte_reemplazo` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_solicitud` INT NOT NULL,
   `razon` VARCHAR(255) NOT NULL,

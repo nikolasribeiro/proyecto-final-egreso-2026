@@ -5,10 +5,12 @@ namespace Nucleo;
 use PDO;
 use PDOException;
 
-class Conexion {
+class Conexion
+{
     private static ?PDO $instancia = null;
 
-    public static function obtenerInstancia(): PDO {
+    public static function obtenerInstancia(): PDO
+    {
         if (self::$instancia === null) {
             // Obtenemos los valores leyendo dinámicamente el entorno de Docker / .env
             $host = $_ENV['DB_HOST'] ?? 'db';
