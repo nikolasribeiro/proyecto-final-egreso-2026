@@ -7,77 +7,44 @@ use Nucleo\RutaProtegida;
 use Nucleo\Constantes\Roles;
 use Nucleo\Constantes\Usuarios;
 use Nucleo\Constantes\PlantillasEncuestas;
+use Modelos\ModeloDocumento;
 use Modelos\ModeloTraslado;
 
 class ControladorDashboard extends RutaProtegida
 {
     private string $nombre_usuario;
     private string $rol;
+    private ModeloDocumento $modelo_documento;
     private ModeloTraslado $modelo_traslado;
-
-    /**
-     * Mock de documentos. Incluye el campo `categoria` (slug + nombre legible)
-     * que se usa para agrupar y para construir la URL del QR.
-     */
-    private const DOCUMENTOS = [
-        [
-            'id' => 'TRF-2024-0891',
-            'nombre' => 'Protocolo de Emergencias 2024',
-            'tipo' => 'PDF',
-            'tamano' => '2.4 MB',
-            'fecha_subida' => 'Hace 2 dias',
-            'ruta' => '/uploads/protocolo_emergencia.pdf',
-            'categoria' => ['slug' => 'cardiologia', 'nombre' => 'Cardiología'],
-        ],
-        [
-            'id' => 'TRF-2024-0892',
-            'nombre' => 'Guia de Traslado 2024',
-            'tipo' => 'PDF',
-            'tamano' => '1.5 MB',
-            'fecha_subida' => 'Hace 3 dias',
-            'ruta' => '/uploads/guia_traslado.pdf',
-            'categoria' => ['slug' => 'cardiologia', 'nombre' => 'Cardiología'],
-        ],
-        [
-            'id' => 'TRF-2024-0893',
-            'nombre' => 'Plan de Salud 2024',
-            'tipo' => 'PDF',
-            'tamano' => '1.8 MB',
-            'fecha_subida' => 'Hace 5 dias',
-            'ruta' => '/uploads/plan_salud.pdf',
-            'categoria' => ['slug' => 'administracion', 'nombre' => 'Administración'],
-        ],
-        [
-            'id' => 'TRF-2024-0894',
-            'nombre' => 'Protocolo de Bioseguridad',
-            'tipo' => 'PDF',
-            'tamano' => '1.1 MB',
-            'fecha_subida' => 'Hace 1 semana',
-            'ruta' => '/uploads/protocolo_bioseguridad.pdf',
-            'categoria' => ['slug' => 'administracion', 'nombre' => 'Administración'],
-        ],
-    ];
 
     public function __construct()
     {
         parent::__construct();
 
         $usuario = Sesion::obtener('user');
+        $this->modelo_documento = new ModeloDocumento();
         $this->modelo_traslado = new ModeloTraslado();
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];
     }
 
     /**
-     * Muestra el modulo documentos
+     * Muestra el modulo documentos con categorías y documentos persistidos.
      */
     public function documentos(): void
     {
+        $flash = Sesion::obtener('flash_documentos');
+        Sesion::eliminar('flash_documentos');
+
         vista('modulos/documentos/inicio', [
-            'titulo_pagina' => "Gestion de Documentos",
+            'titulo_pagina' => 'Gestion de Documentos',
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
-            'documentos' => self::DOCUMENTOS
+            'documentos' => $this->modelo_documento->obtenerTodos(),
+            'categorias' => $this->modelo_documento->obtenerCategorias(),
+            'flash' => $flash,
+            'csrf_token' => Sesion::generarTokenCsrf(),
+            'puede_crear_documentos' => Roles::permiso($this->rol, 'documentos', 'crear'),
         ], 'admin');
     }
 
@@ -87,19 +54,9 @@ class ControladorDashboard extends RutaProtegida
      */
     public function documentosCategoria(string $slug): void
     {
-        $documentos = array_values(array_filter(
-            self::DOCUMENTOS,
-            fn($d) => $d['categoria']['slug'] === $slug
-        ));
-
-        // Buscar el nombre legible de la categoría
-        $nombreCategoria = 'Categoría desconocida';
-        foreach (self::DOCUMENTOS as $doc) {
-            if ($doc['categoria']['slug'] === $slug) {
-                $nombreCategoria = $doc['categoria']['nombre'];
-                break;
-            }
-        }
+        $documentos = $this->modelo_documento->obtenerPorCategoria($slug);
+        $nombreCategoria = $this->modelo_documento->obtenerNombreCategoriaPorSlug($slug)
+            ?? 'Categoría desconocida';
 
         vista('modulos/documentos/categoria', [
             'titulo_pagina' => "Categoría: $nombreCategoria",
@@ -112,7 +69,215 @@ class ControladorDashboard extends RutaProtegida
     }
 
     /**
-     * Muestra el modulo traslados
+     * Guarda un documento cargado desde el modal.
+     */
+    public function subirDocumento(): void
+    {
+        if (!Roles::permiso($this->rol, 'documentos', 'crear')) {
+            abortar(403);
+        }
+
+        $errores = [];
+        $usuario = Sesion::obtener('user', []);
+        $token = $_POST['csrf_token'] ?? '';
+        $titulo = trim((string) ($_POST['titulo'] ?? ''));
+        $idCategoria = filter_var($_POST['id_categoria'] ?? null, FILTER_VALIDATE_INT);
+        $archivo = $_FILES['archivo'] ?? null;
+
+        if (!Sesion::validarTokenCsrf($token)) {
+            $errores[] = 'La sesión del formulario expiró. Recargá la página e intentá nuevamente.';
+        }
+
+        if ($titulo === '' || mb_strlen($titulo) > 200) {
+            $errores[] = 'El título es obligatorio y no puede superar los 200 caracteres.';
+        }
+
+        if (!$idCategoria || !$this->modelo_documento->obtenerCategoriaPorId((int) $idCategoria)) {
+            $errores[] = 'Seleccioná una categoría válida.';
+        }
+
+        if (!is_array($archivo) || !isset($archivo['error'], $archivo['tmp_name'])) {
+            $errores[] = 'Seleccioná un archivo para cargar.';
+        } elseif ($archivo['error'] !== UPLOAD_ERR_OK) {
+            $errores[] = $this->mensajeErrorCarga((int) $archivo['error']);
+        } else {
+            $errores = array_merge($errores, $this->validarArchivo($archivo));
+        }
+
+        $ciFuncionario = $this->obtenerCiFuncionario($usuario);
+        if ($ciFuncionario === null) {
+            $errores[] = 'No se pudo identificar al usuario que realiza la carga.';
+        }
+
+        if (!empty($errores)) {
+            Sesion::guardar('flash_documentos', [
+                'tipo' => 'error',
+                'mensaje' => implode(' ', $errores),
+            ]);
+            redirigir('/dashboard/documentos');
+        }
+
+        $extension = strtolower(pathinfo((string) $archivo['name'], PATHINFO_EXTENSION));
+        $nombreArchivo = bin2hex(random_bytes(16)) . '.' . $extension;
+        $directorioUploads = dirname(__DIR__) . '/uploads';
+        $rutaFisica = $directorioUploads . '/' . $nombreArchivo;
+        $rutaPublica = '/uploads/' . $nombreArchivo;
+
+        if (!is_dir($directorioUploads) && !mkdir($directorioUploads, 0750, true) && !is_dir($directorioUploads)) {
+            $this->guardarErrorDocumento('No se pudo preparar el almacenamiento de archivos.');
+        }
+
+        if (!move_uploaded_file($archivo['tmp_name'], $rutaFisica)) {
+            $this->guardarErrorDocumento('No se pudo guardar el archivo cargado.');
+        }
+
+        try {
+            $this->modelo_documento->crear([
+                'id_categoria' => (int) $idCategoria,
+                'titulo' => $titulo,
+                'ruta_archivo' => $rutaPublica,
+                'ci_funcionario' => $ciFuncionario,
+            ]);
+        } catch (\Throwable $e) {
+            if (is_file($rutaFisica)) {
+                unlink($rutaFisica);
+            }
+            error_log('Error al registrar documento: ' . $e->getMessage());
+            $this->guardarErrorDocumento('No se pudo registrar el documento en la base de datos.');
+        }
+
+        Sesion::guardar('flash_documentos', [
+            'tipo' => 'success',
+            'mensaje' => 'Documento cargado correctamente.',
+        ]);
+        redirigir('/dashboard/documentos');
+    }
+
+    /**
+     * Crea una categoría desde el botón + del modal.
+     */
+    public function apiCrearCategoria(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (!Roles::permiso($this->rol, 'documentos', 'crear')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No tenés permisos para crear categorías.']);
+            return;
+        }
+
+        $datos = json_decode(file_get_contents('php://input'), true);
+        $datos = is_array($datos) ? $datos : $_POST;
+        $token = (string) ($datos['csrf_token'] ?? '');
+        $nombre = trim((string) ($datos['nombre_categoria'] ?? ''));
+
+        if (!Sesion::validarTokenCsrf($token)) {
+            http_response_code(419);
+            echo json_encode(['success' => false, 'message' => 'La sesión expiró. Recargá la página e intentá nuevamente.']);
+            return;
+        }
+
+        if ($nombre === '' || mb_strlen($nombre) > 100) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'La categoría debe tener entre 1 y 100 caracteres.']);
+            return;
+        }
+
+        try {
+            $categoria = $this->modelo_documento->crearCategoria($nombre);
+        } catch (\Throwable $e) {
+            error_log('Error al crear categoría: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'No se pudo guardar la categoría.']);
+            return;
+        }
+
+        if ($categoria === null) {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'Ya existe una categoría con ese nombre.']);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'data' => $categoria]);
+    }
+
+    private function validarArchivo(array $archivo): array
+    {
+        $errores = [];
+        $maximoBytes = 10 * 1024 * 1024;
+        $extensionesPermitidas = ['pdf', 'doc', 'docx', 'odt'];
+        $mimesPermitidos = [
+            'pdf' => ['application/pdf'],
+            'doc' => ['application/msword', 'application/octet-stream'],
+            'docx' => [
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/zip',
+                'application/octet-stream',
+            ],
+            'odt' => ['application/vnd.oasis.opendocument.text', 'application/zip', 'application/octet-stream'],
+        ];
+
+        $extension = strtolower(pathinfo((string) ($archivo['name'] ?? ''), PATHINFO_EXTENSION));
+        if (!in_array($extension, $extensionesPermitidas, true)) {
+            $errores[] = 'El archivo debe ser PDF, DOC, DOCX u ODT.';
+        }
+
+        if ((int) ($archivo['size'] ?? 0) > $maximoBytes) {
+            $errores[] = 'El archivo no puede superar los 10 MB.';
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, (string) $archivo['tmp_name']) : false;
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        if (!$mime || !isset($mimesPermitidos[$extension]) || !in_array($mime, $mimesPermitidos[$extension], true)) {
+            $errores[] = 'El tipo de archivo no es válido.';
+        }
+
+        return $errores;
+    }
+
+    private function mensajeErrorCarga(int $codigo): string
+    {
+        return match ($codigo) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'El archivo supera el tamaño máximo permitido.',
+            UPLOAD_ERR_PARTIAL => 'La carga del archivo quedó incompleta.',
+            UPLOAD_ERR_NO_FILE => 'Seleccioná un archivo para cargar.',
+            default => 'Ocurrió un error al cargar el archivo.',
+        };
+    }
+
+    private function obtenerCiFuncionario(array $usuario): ?int
+    {
+        $ci = filter_var($usuario['ci'] ?? null, FILTER_VALIDATE_INT);
+        if ($ci) {
+            return (int) $ci;
+        }
+
+        $ciasPorUsuario = [
+            'admin' => 11111111,
+            'medico' => 22222222,
+            'enfermero' => 44444444,
+            'soporte' => 11111111,
+        ];
+
+        $username = (string) ($usuario['username'] ?? '');
+        return isset($ciasPorUsuario[$username]) ? $ciasPorUsuario[$username] : null;
+    }
+
+    private function guardarErrorDocumento(string $mensaje): never
+    {
+        Sesion::guardar('flash_documentos', [
+            'tipo' => 'error',
+            'mensaje' => $mensaje,
+        ]);
+        redirigir('/dashboard/documentos');
+    }
+
+    /**
+     * Muestra el módulo de traslados.
      */
     public function trasladosInicio(): void
     {

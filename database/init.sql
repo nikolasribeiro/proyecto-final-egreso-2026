@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS `roles` (
 
 CREATE TABLE IF NOT EXISTS `categorias_documentos` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
-  `nombre_categoria` VARCHAR(100) NOT NULL
+  `nombre_categoria` VARCHAR(100) NOT NULL,
+  UNIQUE KEY `uq_categorias_documentos_nombre` (`nombre_categoria`)
 );
 
 CREATE TABLE IF NOT EXISTS `encuestas` (

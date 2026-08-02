@@ -60,6 +60,8 @@ $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
+$enrutador->post('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'subirDocumento']);
+$enrutador->post('/dashboard/documentos/categorias', [\Controladores\ControladorDashboard::class, 'apiCrearCategoria']);
 $enrutador->get('/dashboard/documentos/categoria/{slug}', [\Controladores\ControladorDashboard::class, 'documentosCategoria']);
 $enrutador->get('/dashboard/traslados', [\Controladores\ControladorDashboard::class, 'trasladosInicio']);
 $enrutador->get('/dashboard/traslados/nuevo', [\Controladores\ControladorDashboard::class, 'nuevoTraslado']);
