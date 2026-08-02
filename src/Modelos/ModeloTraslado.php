@@ -5,14 +5,17 @@ namespace Modelos;
 use Nucleo\Conexion;
 use PDO;
 
-class ModeloTraslado {
+class ModeloTraslado
+{
     private PDO $db;
 
-    public function __construct() {
+    public function __construct()
+    {
         $this->db = Conexion::obtenerInstancia();
     }
 
-    public function obtenerTodosActivos(): array {
+    public function obtenerTodosActivos(): array
+    {
         $sql = "SELECT st.*, 
                        u1.nombre_lugar AS origen, 
                        u2.nombre_lugar AS destino,
@@ -27,10 +30,11 @@ class ModeloTraslado {
                 JOIN tipo_vehiculo tv ON v.id_tipo_vehiculo = tv.id
                 JOIN usuarios u_chofer ON st.ci_chofer = u_chofer.ci
                 ORDER BY st.fecha_hora_salida DESC";
-        return $this->db->query($sql)->fetchAll();  
+        return $this->db->query($sql)->fetchAll();
     }
 
-    public function obtenerPorId(int $id): ?array {
+    public function obtenerPorId(int $id): ?array
+    {
         $sql = "SELECT st.*, 
                        u1.nombre_lugar AS origen, 
                        u2.nombre_lugar AS destino,
@@ -54,7 +58,8 @@ class ModeloTraslado {
         return $res ?: null;
     }
 
-    public function crearSolicitud(array $datos): bool {
+    public function crearSolicitud(array $datos): bool
+    {
         $sql = "INSERT INTO solicitud_traslados (
                     id_ubicacion_origen, id_ubicacion_destino, fecha_hora_salida, 
                     fecha_hora_llegada_estimada, id_estado, id_vehiculo, 
@@ -78,7 +83,8 @@ class ModeloTraslado {
         ]);
     }
 
-    public function obtenerChoferesDisponibles(): array {
+    public function obtenerChoferesDisponibles(): array
+    {
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido 
                 FROM usuarios u 
                 JOIN usuario_roles ur ON u.id = ur.id_usuario 
@@ -86,7 +92,8 @@ class ModeloTraslado {
         return $this->db->query($sql)->fetchAll();
     }
 
-    public function obtenerEnfermeros(): array {
+    public function obtenerEnfermeros(): array
+    {
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido 
                 FROM usuarios u 
                 JOIN usuario_roles ur ON u.id = ur.id_usuario 
@@ -94,7 +101,8 @@ class ModeloTraslado {
         return $this->db->query($sql)->fetchAll();
     }
 
-    public function obtenerVehiculosDisponibles(): array {
+    public function obtenerVehiculosDisponibles(): array
+    {
         $sql = "SELECT v.id, v.matricula, tv.descripcion AS tipo_vehiculo 
                 FROM vehiculos v 
                 JOIN tipo_vehiculo tv ON v.id_tipo_vehiculo = tv.id 
@@ -102,9 +110,9 @@ class ModeloTraslado {
         return $this->db->query($sql)->fetchAll();
     }
 
-    public function obtenerUbicaciones(): array {
+    public function obtenerUbicaciones(): array
+    {
         $sql = "SELECT id, nombre_lugar, direccion FROM ubicaciones";
         return $this->db->query($sql)->fetchAll();
     }
-
 }

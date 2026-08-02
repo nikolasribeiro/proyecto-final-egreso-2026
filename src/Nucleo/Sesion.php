@@ -29,6 +29,7 @@ class Sesion
         self::comprobarRegeneracion();
     }
 
+
     private static function comprobarRegeneracion(): void
     {
         $intervalo = 60 * 15;

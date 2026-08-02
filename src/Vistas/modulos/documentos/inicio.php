@@ -1,83 +1,102 @@
- <section id="documents" class="section active">
-     <div class="section-header">
-         <div>
-             <h2 class="section-title">Gestion de Documentos</h2>
-             <p class="section-description">
-                 Administre y genere codigos QR para sus documentos
-             </p>
-         </div>
-         <button
-             class="btn btn-primary"
-             onclick="openModal('upload-modal')">
-             <svg
-                 class="icon"
-                 fill="none"
-                 stroke="currentColor"
-                 viewBox="0 0 24 24">
-                 <path
-                     stroke-linecap="round"
-                     stroke-linejoin="round"
-                     stroke-width="2"
-                     d="M12 4v16m8-8H4" />
-             </svg>
-             Cargar Nuevo Documento
-         </button>
-     </div>
+<?php
 
-     <div class="table-container">
-         <div class="table-responsive">
-             <table class="documents-table">
-                 <thead>
-                     <tr>
-                         <th>Documento</th>
-                         <th>Tamano</th>
-                         <th>Fecha de Subida</th>
-                         <th>Acciones</th>
-                     </tr>
-                 </thead>
-                 <tbody>
-                    <?php if (empty($documentos)): ?>
-                        <tr>
-                            <td colspan="4" style="text-align: center; padding: 2rem;">No hay documentos médicos registrados en el sistema.</td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($documentos as $doc): ?>
-                            <tr>
-                                <td>
-                                    <div class="document-cell">
-                                        <div class="document-icon">
-                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                        </div>
-                                        <div>
-                                            <div class="document-name"><?= htmlspecialchars($doc['titulo']) ?></div>
-                                            <div class="document-type"><?= htmlspecialchars($doc['nombre_categoria']) ?></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td data-label="Funcionario">
-                                    <span class="document-size"><?= htmlspecialchars($doc['funcionario']) ?></span>
-                                </td>
-                                <td data-label="Fecha">
-                                    <span class="document-date"><?= date('d/m/Y', strtotime($doc['created_at'])) ?></span>
-                                </td>
-                                <td data-label="Acciones">
-                                    <button class="btn btn-secondary btn-small" onclick="openQRModal('<?= htmlspecialchars($doc['titulo'], ENT_QUOTES) ?>')">
-                                        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
-                                        Generar QR
-                                    </button>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                 </tbody>
-             </table>
-         </div>
-     </div>
- </section>
- <?php 
-    // Inyectamos el componente del Modal QR
-    $rutaQR = __DIR__ . '/../../../Componentes/modulos/documentos/qr-modal.php';
-    if (file_exists($rutaQR)) {
-        include $rutaQR; 
+/**
+ * @var array $documentos
+ */
+$documentos = $documentos ?? [];
+
+// Calcular categorías únicas para el filtro
+$categoriasUnicas = [];
+foreach ($documentos as $doc) {
+    $slug = $doc['categoria']['slug'] ?? 'general';
+    $nombre = $doc['categoria']['nombre'] ?? 'General';
+    $categoriasUnicas[$slug] = $nombre;
+}
+?>
+
+<section id="documents" class="section active">
+    <div class="section-header">
+        <div>
+            <h2 class="section-title">Gestion de Documentos</h2>
+            <p class="section-description">
+                Administre y genere codigos QR para acceder a documentos por categoría
+            </p>
+        </div>
+        <button
+            class="btn btn-primary"
+            onclick="openModal('upload-modal')">
+            <svg
+                class="icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 4v16m8-8H4" />
+            </svg>
+            Cargar Nuevo Documento
+        </button>
+    </div>
+
+    <div class="docs-filtros">
+        <label class="form-label" for="filtro-categoria">Filtrar por categoría</label>
+        <select id="filtro-categoria" class="form-select" onchange="filtrarDocumentos(this.value)">
+            <option value="all">Todas las categorías</option>
+            <?php foreach ($categoriasUnicas as $slug => $nombre): ?>
+                <option value="<?= e($slug) ?>"><?= e($nombre) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <div class="table-container">
+        <div class="table-responsive">
+            <table class="documents-table">
+                <thead>
+                    <tr>
+                        <th>Documento</th>
+                        <th>Categoria</th>
+                        <th>Tamano</th>
+                        <th>Fecha de Subida</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($documentos as $doc) : ?>
+                        <?php componente('modulos/documentos/tabla/fila', [
+                            'idDocumento' => $doc['id'],
+                            'nombreDocumento' => $doc['nombre'],
+                            'tipoDocumento' => $doc['tipo'],
+                            'tamanoDocumento' => $doc['tamano'],
+                            'fechaSubidaDocumento' => $doc['fecha_subida'],
+                            'rutaDocumento' => $doc['ruta'],
+                            'categoriaDocumento' => $doc['categoria'] ?? ['slug' => 'general', 'nombre' => 'General'],
+                        ]) ?>
+                    <?php endforeach; ?>
+
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<script>
+    /**
+     * Filtro client-side por categoría. El atributo data-categoria
+     * de cada <tr> se setea en fila.php.
+     */
+    function filtrarDocumentos(slug) {
+        const filas = document.querySelectorAll('.documents-table tbody tr');
+        filas.forEach((fila) => {
+            if (slug === 'all' || fila.dataset.categoria === slug) {
+                fila.style.display = '';
+            } else {
+                fila.style.display = 'none';
+            }
+        });
     }
- ?>
+</script>
+
+<!-- Upload Document Modal -->
+<?php componente('modulos/documentos/subida-documentos-modal') ?>
