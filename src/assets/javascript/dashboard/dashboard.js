@@ -97,13 +97,15 @@
     if (modal) {
       modal.classList.remove("active");
       document.body.style.overflow = "";
+      if (modalId === "upload-modal" && typeof window.resetUploadModal === "function") {
+        window.resetUploadModal();
+      }
     }
   }
 
   function closeModalOnOverlay(event) {
     if (event.target.classList.contains("modal-overlay")) {
-      event.target.classList.remove("active");
-      document.body.style.overflow = "";
+      closeModal(event.target.id);
     }
   }
 
@@ -192,7 +194,7 @@
     if (e.key === "Escape") {
       // Cerrar todos los modales abiertos
       document.querySelectorAll(".modal-overlay.active").forEach((modal) => {
-        modal.classList.remove("active");
+        closeModal(modal.id);
       });
       document.body.style.overflow = "";
 

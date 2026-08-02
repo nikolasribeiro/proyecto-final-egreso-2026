@@ -2,11 +2,22 @@
 
 /**
  * @var array $documentos
+ * @var array $categorias
+ * @var array|null $flash
+ * @var string $csrf_token
+ * @var bool $puede_crear_documentos
  */
 $documentos = $documentos ?? [];
+$categorias = $categorias ?? [];
+$flash = $flash ?? null;
+$csrfToken = $csrf_token ?? '';
+$puedeCrearDocumentos = $puede_crear_documentos ?? false;
 
-// Calcular categorías únicas para el filtro
+// Mantener el filtro útil incluso si una instalación todavía no tiene categorías.
 $categoriasUnicas = [];
+foreach ($categorias as $categoria) {
+    $categoriasUnicas[$categoria['slug']] = $categoria['nombre_categoria'];
+}
 foreach ($documentos as $doc) {
     $slug = $doc['categoria']['slug'] ?? 'general';
     $nombre = $doc['categoria']['nombre'] ?? 'General';
@@ -22,23 +33,32 @@ foreach ($documentos as $doc) {
                 Administre y genere codigos QR para acceder a documentos por categoría
             </p>
         </div>
-        <button
-            class="btn btn-primary"
-            onclick="openModal('upload-modal')">
-            <svg
-                class="icon"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24">
-                <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 4v16m8-8H4" />
-            </svg>
-            Cargar Nuevo Documento
-        </button>
+        <?php if ($puedeCrearDocumentos): ?>
+            <button
+                class="btn btn-primary"
+                type="button"
+                onclick="openModal('upload-modal')">
+                <svg
+                    class="icon"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 4v16m8-8H4" />
+                </svg>
+                Cargar Nuevo Documento
+            </button>
+        <?php endif; ?>
     </div>
+
+    <?php if ($flash): ?>
+        <div class="alert alert-<?= e($flash['tipo'] ?? 'info') ?>" role="alert">
+            <span class="alert-text"><?= e($flash['mensaje'] ?? '') ?></span>
+        </div>
+    <?php endif; ?>
 
     <div class="docs-filtros">
         <label class="form-label" for="filtro-categoria">Filtrar por categoría</label>
@@ -74,7 +94,6 @@ foreach ($documentos as $doc) {
                             'categoriaDocumento' => $doc['categoria'] ?? ['slug' => 'general', 'nombre' => 'General'],
                         ]) ?>
                     <?php endforeach; ?>
-
                 </tbody>
             </table>
         </div>
@@ -99,4 +118,11 @@ foreach ($documentos as $doc) {
 </script>
 
 <!-- Upload Document Modal -->
-<?php componente('modulos/documentos/subida-documentos-modal') ?>
+<?php componente('modulos/documentos/subida-documentos-modal', [
+    'categorias' => $categorias,
+    'csrf_token' => $csrfToken,
+    'puede_crear_documentos' => $puedeCrearDocumentos,
+]) ?>
+<!-- La lógica se carga desde la plantilla administrativa para que el modal
+     también funcione al abrirse después de una navegación del dashboard. -->
+<script src="/assets/javascript/dashboard/subida-documentos.js"></script>

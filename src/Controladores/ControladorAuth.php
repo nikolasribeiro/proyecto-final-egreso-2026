@@ -85,10 +85,20 @@ class ControladorAuth
 
         if (isset($usuariosValidos[$username]) && $usuariosValidos[$username] === $password) {
             // Login exitoso
+            $ciasPorUsuario = [
+                'admin' => 11111111,
+                'medico' => 22222222,
+                'enfermero' => 44444444,
+                'soporte' => 11111111,
+            ];
+
+            // Login de prueba: asociamos la sesión con el funcionario semilla
+            // para que las operaciones que requieren una CI puedan persistir.
             Sesion::guardar('user', [
                 'username'  => $username,
                 'nombre'    => ucfirst($username),
                 'rol'       => $mapaRoles[$username] ?? 'usuario',
+                'ci'        => $ciasPorUsuario[$username] ?? null,
                 'login_at'  => date('Y-m-d H:i:s'),
             ]);
 
