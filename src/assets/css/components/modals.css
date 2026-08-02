@@ -1,0 +1,125 @@
+/* ==========================================================================
+   COMPONENTS - Modals
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: var(--z-modal);
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  max-width: 400px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  animation: modalSlideIn var(--transition-slow);
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--border-gray);
+}
+
+.modal-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--light-gray);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--secondary-gray);
+  transition: all var(--transition-normal);
+}
+
+.modal-close:hover {
+  background: var(--border-gray);
+  color: var(--black);
+}
+
+.modal-body {
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.modal-footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-gray);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+/* ========== QR Modal ========== */
+.qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.qr-code {
+  padding: var(--space-4);
+  background: var(--white);
+  border: 2px solid var(--border-gray);
+  border-radius: var(--radius-md);
+}
+
+.qr-code img {
+  display: block;
+}
+
+.qr-document-name {
+  font-weight: 600;
+  color: var(--black);
+}
+
+/* ========== Confirm Modal ========== */
+.modal-confirm-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--space-4);
+  background: var(--warning-yellow-light);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--warning-yellow);
+}
+
+.modal-confirm-text {
+  color: var(--secondary-gray);
+  margin-top: var(--space-2);
+}
