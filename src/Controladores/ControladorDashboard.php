@@ -184,16 +184,24 @@ class ControladorDashboard extends RutaProtegida
 
         vista('modulos/traslados/detalle/inicio', [
             'titulo_pagina' => 'Detalle del Traslado #' . $id,
-            'nombre' => $this->nombre_usuario,
-            'rol'    => $this->rol,
+            'nombre'        => $this->nombre_usuario,
+            'rol'           => $this->rol,
+            'csrf'          => Sesion::generarTokenCsrf(),
             'traslado_id'   => (int)$traslado['id'],
             'traslado_data' => [
-                'numero'    => 'TRF-' . $traslado['id'],
-                'paciente'  => $traslado['ci_paciente_externo'] ?? 'Traslado ' . $traslado['id'],
-                'origen'    => $traslado['origen'] ?? '-',
-                'conductor' => $traslado['chofer_nombre'] ?? '-',
-                'vehiculo'  => trim(($traslado['matricula'] ?? '') . ' — ' . ($traslado['tipo_vehiculo'] ?? '')),
-                'tipo'      => $traslado['tipo'] ?? 'paciente_alta',
+                'numero'           => 'TRF-' . $traslado['id'],
+                'tipo'             => $traslado['tipo'] ?? 'paciente_alta',
+                'paciente'         => $traslado['ci_paciente_externo'] ?? 'Traslado ' . $traslado['id'],
+                'origen'           => $traslado['origen'] ?? '-',
+                'conductor'        => $traslado['chofer_nombre'] ?? '-',
+                'enfermero'        => $traslado['enfermero_nombre'] ?? null,
+                'vehiculo'         => trim(($traslado['matricula'] ?? '') . ' — ' . ($traslado['tipo_vehiculo'] ?? '')),
+                'estado'           => $traslado['estado_nombre'] ?? 'PENDIENTE',
+                'prioridad'        => $traslado['prioridad'] ?? 'verde',
+                'destinos'         => $traslado['destinos'] ?? [],
+                'paso_actual'      => $traslado['paso_actual'] ?? 1,
+                'fecha_salida'     => $traslado['fecha_hora_salida'] ?? null,
+                'volver_al_origen' => !empty($traslado['volver_al_origen']),
             ],
         ], 'admin');
     }
@@ -280,6 +288,26 @@ class ControladorDashboard extends RutaProtegida
             $id,
             (int)$data['destino_orden'],
             (string)$data['timestamp']
+        );
+
+        echo json_encode($resultado);
+    }
+
+    public function apiRegistrarSalida(int $id): void
+    {
+        header('Content-Type: application/json');
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        if (!isset($data['destino_orden'])) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        $resultado = $this->modelo_traslado->registrarSalida(
+            $id,
+            (int)$data['destino_orden']
         );
 
         echo json_encode($resultado);

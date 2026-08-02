@@ -217,7 +217,19 @@ class ModeloTraslado
             }
 
             $this->db->commit();
-            $this->registrarAuditoria('CREAR', 'solicitud_traslados', $sid, $d);
+            $this->registrarAuditoria(
+                'CREAR',
+                'solicitud_traslados',
+                $sid,
+                [
+                    'tipo' => $d['tipo'] ?? null,
+                    'prioridad' => $prioridad,
+                    'destinos' => array_column($destinos, 'id'),
+                    'volver_origen' => !empty($d['volver_origen']),
+                    'vehiculo_id' => (int)$d['id_vehiculo'],
+                    'ci_chofer' => (int)$d['ci_chofer'],
+                ],
+            );
             return $sid;
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {
@@ -293,6 +305,49 @@ class ModeloTraslado
             return ['success' => false, 'message' => 'Destino ya arribado o inexistente'];
         }
         $this->avanzarEstadoPadre($idSolicitud);
+        $this->registrarAuditoria(
+            'ACTUALIZAR',
+            'destinos_traslado',
+            $idSolicitud,
+            ['accion' => 'arribo', 'destino_orden' => $ordenDestino, 'timestamp' => $timestamp],
+        );
+        return ['success' => true];
+    }
+
+    /**
+     * Registra la salida hacia un destino. Marca el destino como EN_TRANSITO
+     * y, si la solicitud estaba PENDIENTE, la promueve a EN_TRANSITO.
+     */
+    public function registrarSalida(int $idSolicitud, int $ordenDestino): array
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE destinos_traslado
+             SET estado_destino = 'EN_TRANSITO'
+             WHERE id_solicitud = :s AND orden = :o AND estado_destino = 'PENDIENTE'"
+        );
+        $stmt->execute(['s' => $idSolicitud, 'o' => $ordenDestino]);
+        if ($stmt->rowCount() === 0) {
+            return ['success' => false, 'message' => 'Destino no está pendiente'];
+        }
+        // Promover la solicitud a EN_TRANSITO si estaba PENDIENTE
+        $estadoEnTransito = $this->idEstado('EN_TRANSITO');
+        $estadoPendiente  = $this->idEstado('PENDIENTE');
+        $u = $this->db->prepare(
+            "UPDATE solicitud_traslados
+             SET id_estado = :transito
+             WHERE id = :id AND id_estado = :pendiente"
+        );
+        $u->execute([
+            'transito'  => $estadoEnTransito,
+            'id'        => $idSolicitud,
+            'pendiente' => $estadoPendiente,
+        ]);
+        $this->registrarAuditoria(
+            'ACTUALIZAR',
+            'destinos_traslado',
+            $idSolicitud,
+            ['accion' => 'salida', 'destino_orden' => $ordenDestino],
+        );
         return ['success' => true];
     }
 
@@ -315,7 +370,18 @@ class ModeloTraslado
             't' => $tipo,
             'm' => $mensaje,
         ]);
-        return ['success' => true, 'id' => (int)$this->db->lastInsertId()];
+        $reporteId = (int)$this->db->lastInsertId();
+        $this->registrarAuditoria(
+            'CREAR',
+            'reportes_destino',
+            $reporteId,
+            [
+                'id_solicitud' => $idSolicitud,
+                'destino_orden' => $ordenDestino,
+                'tipo_problema' => $tipo,
+            ],
+        );
+        return ['success' => true, 'id' => $reporteId];
     }
 
     public function cancelar(int $idSolicitud, int $ordenDestino, string $tipo, string $mensaje): array
@@ -341,10 +407,17 @@ class ModeloTraslado
             }
             $this->crearReporte($idSolicitud, $ordenDestino, $tipo, $mensaje);
             $this->db->commit();
-            $this->registrarAuditoria('ACTUALIZAR', 'solicitud_traslados', $idSolicitud, [
-                'accion' => 'cancelar',
-                'motivo' => $tipo,
-            ]);
+            $this->registrarAuditoria(
+                'ACTUALIZAR',
+                'solicitud_traslados',
+                $idSolicitud,
+                [
+                    'accion' => 'cancelar',
+                    'motivo_tipo' => $tipo,
+                    'motivo_mensaje' => $mensaje,
+                    'destino_orden' => $ordenDestino,
+                ],
+            );
             return ['success' => true];
         } catch (Throwable $e) {
             if ($this->db->inTransaction()) {

@@ -80,6 +80,7 @@ $enrutador->post('/dashboard/usuarios/{username}/reactivar', [\Controladores\Con
 // Rutas API para traslados
 $enrutador->get('/api/traslados/{id}', [\Controladores\ControladorDashboard::class, 'apiObtenerTraslado']);
 $enrutador->post('/api/traslados', [\Controladores\ControladorDashboard::class, 'apiCrearTraslado']);
+$enrutador->post('/api/traslados/{id}/salida', [\Controladores\ControladorDashboard::class, 'apiRegistrarSalida']);
 $enrutador->post('/api/traslados/{id}/arribo', [\Controladores\ControladorDashboard::class, 'apiRegistrarArribo']);
 $enrutador->post('/api/traslados/{id}/reportes', [\Controladores\ControladorDashboard::class, 'apiCrearReporte']);
 $enrutador->post('/api/traslados/{id}/cancelar', [\Controladores\ControladorDashboard::class, 'apiCancelarTraslado']);
