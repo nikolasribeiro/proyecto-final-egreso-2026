@@ -1,4 +1,8 @@
 <?php
+// Lo utilizo para identificar errores * Pereyra*
+//ini_set('display_errors', 1);
+//error_reporting(E_ALL);
+
 ini_set('display_errors', '0');
 
 // Evita Clickjacking
@@ -53,6 +57,7 @@ $enrutador = new \Nucleo\Enrutador();
 // Ruta para la Página de Inicio (Raíz)
 $enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
 
+
 // Rutas de Autenticación
 $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
 $enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);
@@ -76,6 +81,9 @@ $enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::cla
 $enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);
 $enrutador->post('/dashboard/usuarios/{username}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
 $enrutador->post('/dashboard/usuarios/{username}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
+
+// Auditoría de logs
+$enrutador->get('/dashboard/auditoria', [\Controladores\ControladorAuditoria::class, 'inicio']);
 
 // Rutas API para traslados
 $enrutador->get('/api/traslados/{id}', [\Controladores\ControladorDashboard::class, 'apiObtenerTraslado']);
