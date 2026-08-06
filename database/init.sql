@@ -160,3 +160,13 @@ CREATE TABLE IF NOT EXISTS `reportes_destino` (
   `fecha_reporte` DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (`id_destino`) REFERENCES `destinos_traslado`(`id`) ON DELETE CASCADE
 );
+
+-- Agregar la columna slug a la tabla
+ALTER TABLE categorias_documentos 
+ADD COLUMN slug VARCHAR(80) UNIQUE;
+
+-- Poblar los slugs existentes transformando el nombre de la categoría
+-- (Convierte a minúsculas y reemplaza espacios por guiones)
+UPDATE categorias_documentos 
+SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-')) 
+WHERE slug IS NULL;
