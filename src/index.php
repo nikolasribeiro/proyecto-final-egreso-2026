@@ -1,9 +1,9 @@
 <?php
 // Lo utilizo para identificar errores * Pereyra*
-//ini_set('display_errors', 1);
-//error_reporting(E_ALL);
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
 
-ini_set('display_errors', '0');
+//ini_set('display_errors', '0');
 
 // Evita Clickjacking
 header("X-Frame-Options: DENY");
@@ -57,6 +57,11 @@ $enrutador = new \Nucleo\Enrutador();
 // Ruta para la Página de Inicio (Raíz)
 $enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
 
+// ==========================================
+// RUTAS PÚBLICAS (ACCESO POR QR - ISSUE # 110)
+// ==========================================
+$enrutador->get('/d/{slug}', [\Controladores\ControladorDocumentosPublico::class, 'categoriaPorSlug']);
+$enrutador->get('/d/doc/{id}', [\Controladores\ControladorDocumentosPublico::class, 'verPorId']);
 
 // Rutas de Autenticación
 $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);

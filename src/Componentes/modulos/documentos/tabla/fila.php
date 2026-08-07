@@ -10,7 +10,8 @@
  * @var array   $categoriaDocumento
  */
 $categoriaDocumento = $categoriaDocumento ?? ['slug' => 'general', 'nombre' => 'General'];
-$qrData = '/dashboard/documentos/categoria/' . $categoriaDocumento['slug'];
+$qrData = '/d/' . $categoriaDocumento['slug']; //linea de prueba para generar el qr de la categoria
+//$qrData = '/dashboard/documentos/categoria/' . $categoriaDocumento['slug'];
 ?>
 <tr data-categoria="<?= e($categoriaDocumento['slug']) ?>">
     <td>
