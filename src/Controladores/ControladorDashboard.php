@@ -15,49 +15,6 @@ class ControladorDashboard extends RutaProtegida
     private string $rol;
     private ModeloTraslado $modelo_traslado;
 
-    /**
-     * Mock de documentos. Incluye el campo `categoria` (slug + nombre legible)
-     * que se usa para agrupar y para construir la URL del QR.
-     */
-    private const DOCUMENTOS = [
-        [
-            'id' => 'TRF-2024-0891',
-            'nombre' => 'Protocolo de Emergencias 2024',
-            'tipo' => 'PDF',
-            'tamano' => '2.4 MB',
-            'fecha_subida' => 'Hace 2 dias',
-            'ruta' => '/uploads/protocolo_emergencia.pdf',
-            'categoria' => ['slug' => 'cardiologia', 'nombre' => 'Cardiología'],
-        ],
-        [
-            'id' => 'TRF-2024-0892',
-            'nombre' => 'Guia de Traslado 2024',
-            'tipo' => 'PDF',
-            'tamano' => '1.5 MB',
-            'fecha_subida' => 'Hace 3 dias',
-            'ruta' => '/uploads/guia_traslado.pdf',
-            'categoria' => ['slug' => 'cardiologia', 'nombre' => 'Cardiología'],
-        ],
-        [
-            'id' => 'TRF-2024-0893',
-            'nombre' => 'Plan de Salud 2024',
-            'tipo' => 'PDF',
-            'tamano' => '1.8 MB',
-            'fecha_subida' => 'Hace 5 dias',
-            'ruta' => '/uploads/plan_salud.pdf',
-            'categoria' => ['slug' => 'administracion', 'nombre' => 'Administración'],
-        ],
-        [
-            'id' => 'TRF-2024-0894',
-            'nombre' => 'Protocolo de Bioseguridad',
-            'tipo' => 'PDF',
-            'tamano' => '1.1 MB',
-            'fecha_subida' => 'Hace 1 semana',
-            'ruta' => '/uploads/protocolo_bioseguridad.pdf',
-            'categoria' => ['slug' => 'administracion', 'nombre' => 'Administración'],
-        ],
-    ];
-
     public function __construct()
     {
         parent::__construct();
@@ -73,11 +30,19 @@ class ControladorDashboard extends RutaProtegida
      */
     public function documentos(): void
     {
+        $modeloDoc = new \Modelos\ModeloDocumento();
+        
+        // Capturamos el mensaje flash si es que acabamos de crear un documento
+        $flash = Sesion::obtener('flash_documento');
+        Sesion::eliminar('flash_documento');
+
         vista('modulos/documentos/inicio', [
             'titulo_pagina' => "Gestion de Documentos",
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
-            'documentos' => self::DOCUMENTOS
+            'documentos' => $modeloDoc->obtenerTodos(),
+            'categorias' => $modeloDoc->obtenerCategorias(),
+            'flash' => $flash // Pasamos el mensaje a la vista
         ], 'admin');
     }
 
@@ -87,18 +52,13 @@ class ControladorDashboard extends RutaProtegida
      */
     public function documentosCategoria(string $slug): void
     {
-        $documentos = array_values(array_filter(
-            self::DOCUMENTOS,
-            fn($d) => $d['categoria']['slug'] === $slug
-        ));
+        $modeloDoc = new \Modelos\ModeloDocumento();
+        $documentos = $modeloDoc->obtenerPorSlugCategoria($slug);
 
-        // Buscar el nombre legible de la categoría
+        // Buscar el nombre legible de la categoría (lo sacamos del primer documento si existe)
         $nombreCategoria = 'Categoría desconocida';
-        foreach (self::DOCUMENTOS as $doc) {
-            if ($doc['categoria']['slug'] === $slug) {
-                $nombreCategoria = $doc['categoria']['nombre'];
-                break;
-            }
+        if (!empty($documentos)) {
+            $nombreCategoria = $documentos[0]['nombre_categoria'] ?? 'Categoría desconocida';
         }
 
         vista('modulos/documentos/categoria', [
@@ -109,6 +69,73 @@ class ControladorDashboard extends RutaProtegida
             'nombreCategoria' => $nombreCategoria,
             'documentos' => $documentos,
         ], 'admin');
+    }
+/**
+     * Procesa la creación de un nuevo documento (Issue # 108).
+     */
+    public function crearDocumento(): void
+    {
+        // 1. Verificar permisos (Control de acceso)
+        if (!Roles::permiso($this->rol, 'documentos', 'crear')) {
+            abortar(403);
+        }
+
+        // 2. Validar seguridad (CSRF)
+        $csrf = $_POST['_csrf'] ?? '';
+        if (!Sesion::validarTokenCsrf($csrf)) {
+            Sesion::guardar('flash_documento', [
+                'tipo' => 'error',
+                'mensaje' => 'Error de seguridad. Por favor, intenta de nuevo.'
+            ]);
+            redirigir('/dashboard/documentos');
+            return;
+        }
+
+        // 3. Capturar los datos enviados por el formulario
+        $titulo = trim($_POST['titulo'] ?? '');
+        $idCategoria = $_POST['id_categoria'] ?? null;
+        
+        // (El Issue # 116 se encargará de subir el archivo real. Por ahora dejamos una ruta temporal)
+        $rutaArchivo = 'assets/uploads/temporal.pdf';
+
+        // 4. Capturar la CI del funcionario desde la sesión
+        $usuario = Sesion::obtener('user');
+        $ciFuncionario = $usuario['ci'] ?? null;
+
+        // Validar que los datos obligatorios no estén vacíos
+        if (empty($titulo) || empty($idCategoria) || empty($ciFuncionario)) {
+            Sesion::guardar('flash_documento', [
+                'tipo' => 'error',
+                'mensaje' => 'Faltan completar campos obligatorios.'
+            ]);
+            redirigir('/dashboard/documentos');
+            return;
+        }
+
+        // 5. Instanciar el modelo y guardar en la BD
+        $modeloDoc = new \Modelos\ModeloDocumento();
+        $exito = $modeloDoc->crear([
+            'id_categoria'     => (int)$idCategoria,
+            'titulo'           => $titulo,
+            'ruta_archivo'     => $rutaArchivo,
+            'documento_activo' => 1,
+            'ci_funcionario'   => $ciFuncionario
+        ]);
+
+        // 6. Feedback visual para el usuario (Flash) y redirección
+        if ($exito) {
+            Sesion::guardar('flash_documento', [
+                'tipo' => 'success',
+                'mensaje' => '¡El documento fue registrado exitosamente!'
+            ]);
+        } else {
+            Sesion::guardar('flash_documento', [
+                'tipo' => 'error',
+                'mensaje' => 'Ocurrió un error al intentar guardar en la base de datos.'
+            ]);
+        }
+
+        redirigir('/dashboard/documentos');
     }
 
     /**
