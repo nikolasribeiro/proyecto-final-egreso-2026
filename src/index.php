@@ -93,6 +93,9 @@ $enrutador->post('/api/traslados/{id}/arribo', [\Controladores\ControladorDashbo
 $enrutador->post('/api/traslados/{id}/reportes', [\Controladores\ControladorDashboard::class, 'apiCrearReporte']);
 $enrutador->post('/api/traslados/{id}/cancelar', [\Controladores\ControladorDashboard::class, 'apiCancelarTraslado']);
 
+// Ubicaciones (destinos)
+$enrutador->post('/api/ubicaciones', [\Controladores\ControladorDashboard::class, 'apiCrearUbicacion']);
+
 
 // Ruta para la Página de Clientes (o Pacientes)
 // $enrutador->get('/clientes', [\Controladores\ControladorCliente::class, 'inicio']);

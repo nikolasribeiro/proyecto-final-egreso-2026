@@ -53,9 +53,11 @@
                 <input type="text" id="search-destino" placeholder="Buscar destino..." class="form-input">
             </div>
             <div class="destinos-suggestions" id="destinos-suggestions">
-                <?php foreach (($ubicaciones ?? []) as $destino):
-                    // Excluir el origen (Hospital de Clínicas) de la lista
-                    if ((int)$destino['id'] === 1) continue;
+                <?php
+                $origenId = (int)($origen_id ?? 1);
+                foreach (($ubicaciones ?? []) as $destino):
+                    // Excluir el origen de la lista de destinos
+                    if ((int)$destino['id'] === $origenId) continue;
                 ?>
                     <button type="button" class="destino-suggestion" data-id="<?= (int)$destino['id'] ?>" data-nombre="<?= e($destino['nombre_lugar']) ?>">
                         <div class="suggestion-icon">
@@ -70,6 +72,14 @@
                     </button>
                 <?php endforeach; ?>
             </div>
+
+            <p class="destinos-empty" id="destinos-empty" hidden>
+                No se encontraron destinos con ese nombre.
+            </p>
+
+            <?php componente("modulos/traslados/stepper/solicitud/nuevo-destino-form", [
+                'id_prefijo' => 'nuevo-destino',
+            ]) ?>
         </div>
     </div>
 </div>
