@@ -263,33 +263,6 @@ class ControladorDashboard extends RutaProtegida
     // ==========================================
 
     /**
-     * Verifica que el rol del usuario tenga el permiso indicado por la matriz
-     * `Roles::permiso()`. Si no lo tiene, responde 403 JSON y corta la ejecución.
-     *
-     * Esta función es la primera línea de defensa para los endpoints /api/traslados/*:
-     * mantiene la UI (que oculta botones vía `Roles::permiso`) consistente con la API,
-     * evitando que un cliente JS pueda saltarse los gates del frontend.
-     *
-     * @param string $recurso Recurso a proteger (ej. 'traslados').
-     * @param string $accion  Acción requerida (ej. 'crear', 'editar', 'eliminar', 'ver').
-     */
-    private function requerirPermiso(string $recurso, string $accion): void
-    {
-        if (Roles::permiso($this->rol, $recurso, $accion)) {
-            return;
-        }
-
-        http_response_code(403);
-        header('Content-Type: application/json; charset=utf-8');
-        echo json_encode([
-            'success' => false,
-            'error'   => 'forbidden',
-            'message' => "No tiene permiso para {$accion} {$recurso}.",
-        ]);
-        exit;
-    }
-
-    /**
      * Lee el body JSON y valida CSRF.
      * Devuelve el array de datos si todo OK, o null si CSRF inválido
      * (en cuyo caso ya se envió la respuesta 419).
@@ -312,8 +285,6 @@ class ControladorDashboard extends RutaProtegida
     public function apiCrearTraslado(): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'crear');
-
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
 
@@ -338,10 +309,48 @@ class ControladorDashboard extends RutaProtegida
         }
     }
 
+    /**
+     * Crea una ubicación (destino) nueva desde el modal del paso 4 del wizard.
+     */
+    public function apiCrearUbicacion(): void
+    {
+        header('Content-Type: application/json');
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        if (!Roles::permiso($this->rol, 'traslados', 'crear')) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'No tenés permisos para crear destinos']);
+            return;
+        }
+
+        $nombre    = trim((string)($data['nombre'] ?? ''));
+        $direccion = trim((string)($data['direccion'] ?? ''));
+
+        if ($nombre === '' || $direccion === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Datos incompletos']);
+            return;
+        }
+
+        if (mb_strlen($nombre) > 150 || mb_strlen($direccion) > 255) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Nombre o dirección demasiado largos']);
+            return;
+        }
+
+        try {
+            $ubicacion = $this->modelo_traslado->crearUbicacion($nombre, $direccion);
+            echo json_encode(['success' => true, 'ubicacion' => $ubicacion]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
     public function apiObtenerTraslado(int $id): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'ver');
 
         $traslado = $this->modelo_traslado->obtenerPorId($id);
 
@@ -357,8 +366,6 @@ class ControladorDashboard extends RutaProtegida
     public function apiRegistrarArribo(int $id): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'editar');
-
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
 
@@ -380,8 +387,6 @@ class ControladorDashboard extends RutaProtegida
     public function apiRegistrarSalida(int $id): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'editar');
-
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
 
@@ -402,8 +407,6 @@ class ControladorDashboard extends RutaProtegida
     public function apiCrearReporte(int $id): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'editar');
-
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
 
@@ -426,8 +429,6 @@ class ControladorDashboard extends RutaProtegida
     public function apiCancelarTraslado(int $id): void
     {
         header('Content-Type: application/json');
-        $this->requerirPermiso('traslados', 'eliminar');
-
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
 

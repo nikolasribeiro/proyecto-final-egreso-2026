@@ -520,6 +520,57 @@
   padding: 0.5rem;
 }
 
+/* Estado vacío + creación de destino nuevo dentro del modal */
+.destinos-empty {
+  padding: 0.5rem 1.5rem 0;
+  font-size: 0.875rem;
+  color: var(--secondary-gray);
+  text-align: center;
+}
+
+.modal-nuevo-destino {
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--border-gray);
+}
+
+.modal-nuevo-destino .btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.form-nuevo-destino {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-nuevo-destino .form-input {
+  margin-bottom: 0.5rem;
+}
+
+.form-nuevo-destino .form-error {
+  color: var(--danger-red, #dc2626);
+  font-size: 0.8125rem;
+  margin: 0.25rem 0;
+}
+
+.form-nuevo-destino-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+/* `display:flex` gana sobre el default de [hidden], hay que reforzarlo */
+.form-nuevo-destino[hidden],
+.destinos-empty[hidden],
+.modal-nuevo-destino .btn-block[hidden] {
+  display: none;
+}
+
 .destino-suggestion {
   width: 100%;
   display: flex;
