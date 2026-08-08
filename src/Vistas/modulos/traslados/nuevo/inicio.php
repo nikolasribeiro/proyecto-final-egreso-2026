@@ -30,6 +30,7 @@
         <!-- ========== STEP 4: DESTINOS ========== -->
         <?php componente("modulos/traslados/stepper/solicitud/step4-destinos", [
             'ubicaciones' => $ubicaciones ?? [],
+            'origen_id'   => 1,
         ]) ?>
 
         <!-- ========== STEP 5: PERSONAL ========== -->

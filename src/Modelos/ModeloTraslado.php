@@ -354,6 +354,62 @@ class ModeloTraslado
         return $this->db->query($sql)->fetchAll();
     }
 
+    /**
+     * Busca una ubicación por nombre (case-insensitive, ignorando espacios).
+     */
+    public function buscarUbicacionPorNombre(string $nombre): ?array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT id, nombre_lugar, direccion
+             FROM ubicaciones
+             WHERE LOWER(TRIM(nombre_lugar)) = LOWER(TRIM(:n))
+             LIMIT 1"
+        );
+        $stmt->execute(['n' => $nombre]);
+        $fila = $stmt->fetch();
+        return $fila ?: null;
+    }
+
+    /**
+     * Crea una ubicación nueva. Si ya existe una con el mismo nombre,
+     * devuelve la existente en lugar de duplicarla.
+     */
+    public function crearUbicacion(string $nombre, string $direccion): array
+    {
+        $nombre    = trim($nombre);
+        $direccion = trim($direccion);
+
+        $existente = $this->buscarUbicacionPorNombre($nombre);
+        if ($existente !== null) {
+            return [
+                'id'           => (int)$existente['id'],
+                'nombre_lugar' => $existente['nombre_lugar'],
+                'direccion'    => $existente['direccion'],
+                'existia'      => true,
+            ];
+        }
+
+        $stmt = $this->db->prepare(
+            "INSERT INTO ubicaciones (nombre_lugar, direccion) VALUES (:n, :d)"
+        );
+        $stmt->execute(['n' => $nombre, 'd' => $direccion]);
+        $id = (int)$this->db->lastInsertId();
+
+        $this->registrarAuditoria(
+            'CREAR',
+            'ubicaciones',
+            $id,
+            ['nombre_lugar' => $nombre, 'direccion' => $direccion],
+        );
+
+        return [
+            'id'           => $id,
+            'nombre_lugar' => $nombre,
+            'direccion'    => $direccion,
+            'existia'      => false,
+        ];
+    }
+
     public function registrarArribo(int $idSolicitud, int $ordenDestino, string $timestamp): array
     {
         // El cliente envía el timestamp en ISO 8601 (`YYYY-MM-DDTHH:MM:SS.sssZ`)

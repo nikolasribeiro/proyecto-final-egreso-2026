@@ -29,6 +29,8 @@ document.addEventListener("DOMContentLoaded", function () {
     searchDestino: document.getElementById("search-destino"),
     destinosList: document.getElementById("destinos-list"),
     destinosSuggestions: document.getElementById("destinos-suggestions"),
+    destinosEmpty: document.getElementById("destinos-empty"),
+    nuevoDestino: document.querySelector("[data-nuevo-destino]"),
     volverOrigen: document.getElementById("volver-origen"),
     vehiculosGrid: document.getElementById("vehiculos-grid"),
     resumenTipo: document.getElementById("resumen-tipo"),
@@ -350,6 +352,19 @@ document.addEventListener("DOMContentLoaded", function () {
     elementos.closeModalBtn.addEventListener("click", cerrarModalDestino);
     elementos.searchDestino.addEventListener("input", filtrarDestinos);
 
+    // Crear destino nuevo desde el modal (componente nuevo-destino-form).
+    // Delegación sobre la raíz del componente: no depende de ids concretos,
+    // así el componente se puede montar con otro prefijo sin tocar este JS.
+    if (elementos.nuevoDestino) {
+      elementos.nuevoDestino.addEventListener("click", function (e) {
+        const accion = e.target.closest("[data-rol]");
+        if (!accion || !this.contains(accion)) return;
+        if (accion.dataset.rol === "toggle") mostrarFormNuevoDestino();
+        else if (accion.dataset.rol === "cancelar") ocultarFormNuevoDestino();
+        else if (accion.dataset.rol === "guardar") crearDestino();
+      });
+    }
+
     // Checkbox volver al origen
     elementos.volverOrigen.addEventListener("change", function () {
       estado.volverOrigen = this.checked;
@@ -379,15 +394,13 @@ document.addEventListener("DOMContentLoaded", function () {
    * Vincular eventos de destinos
    */
   function bindDestinos() {
-    elementos.destinosSuggestions
-      .querySelectorAll(".destino-suggestion")
-      .forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const id = this.dataset.id;
-          const nombre = this.dataset.nombre;
-          agregarDestino(id, nombre);
-        });
-      });
+    // Delegación: cubre también las sugerencias inyectadas dinámicamente
+    // al crear un destino nuevo desde el modal.
+    elementos.destinosSuggestions.addEventListener("click", function (e) {
+      const btn = e.target.closest(".destino-suggestion");
+      if (!btn || !this.contains(btn)) return;
+      agregarDestino(btn.dataset.id, btn.dataset.nombre);
+    });
   }
 
   /**
@@ -730,6 +743,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function abrirModalDestino() {
     elementos.modalDestino.classList.add("active");
     elementos.searchDestino.value = "";
+    ocultarFormNuevoDestino();
     filtrarDestinos();
     elementos.searchDestino.focus();
   }
@@ -739,6 +753,117 @@ document.addEventListener("DOMContentLoaded", function () {
    */
   function cerrarModalDestino() {
     elementos.modalDestino.classList.remove("active");
+    ocultarFormNuevoDestino();
+  }
+
+  /**
+   * Resuelve un nodo interno del componente nuevo-destino-form por su data-rol.
+   */
+  function nd(rol) {
+    return elementos.nuevoDestino
+      ? elementos.nuevoDestino.querySelector(`[data-rol="${rol}"]`)
+      : null;
+  }
+
+  /**
+   * Mostrar / ocultar el formulario de creación de destino
+   */
+  function mostrarFormNuevoDestino() {
+    if (!elementos.nuevoDestino) return;
+    nd("form").hidden = false;
+    nd("toggle").hidden = true;
+    // Prellenar con lo que el usuario venía buscando
+    const nombre = nd("nombre");
+    if (!nombre.value) nombre.value = elementos.searchDestino.value.trim();
+    nombre.focus();
+    nd("form").scrollIntoView({ block: "nearest" });
+  }
+
+  function ocultarFormNuevoDestino() {
+    if (!elementos.nuevoDestino) return;
+    nd("form").hidden = true;
+    nd("toggle").hidden = false;
+    nd("nombre").value = "";
+    nd("direccion").value = "";
+    mostrarErrorNuevoDestino("");
+    nd("guardar").disabled = false;
+  }
+
+  function mostrarErrorNuevoDestino(mensaje) {
+    const error = nd("error");
+    if (!error) return;
+    error.textContent = mensaje;
+    error.hidden = !mensaje;
+  }
+
+  /**
+   * Crear una ubicación nueva en la base y agregarla como destino.
+   */
+  async function crearDestino() {
+    const nombre = nd("nombre").value.trim();
+    const direccion = nd("direccion").value.trim();
+    const btnGuardar = nd("guardar");
+
+    if (!nombre || !direccion) {
+      mostrarErrorNuevoDestino("Completá el nombre y la dirección.");
+      return;
+    }
+
+    mostrarErrorNuevoDestino("");
+    btnGuardar.disabled = true;
+
+    try {
+      const csrf = elementos.csrfToken ? elementos.csrfToken.value : "";
+      const respuesta = await fetch("/api/ubicaciones", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf,
+        },
+        body: JSON.stringify({ nombre, direccion, _csrf: csrf }),
+      });
+      const resultado = await respuesta.json();
+
+      if (!respuesta.ok || !resultado.success) {
+        mostrarErrorNuevoDestino(
+          resultado.message || "No se pudo crear el destino.",
+        );
+        btnGuardar.disabled = false;
+        return;
+      }
+
+      const ubicacion = resultado.ubicacion;
+      const id = String(ubicacion.id);
+
+      // Inyectar la sugerencia para que quede disponible en el modal
+      if (!elementos.destinosSuggestions.querySelector(`[data-id="${id}"]`)) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "destino-suggestion";
+        btn.dataset.id = id;
+        btn.dataset.nombre = ubicacion.nombre_lugar;
+        btn.innerHTML = `
+          <div class="suggestion-icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+          <div class="suggestion-info">
+            <span class="suggestion-nombre"></span>
+            <span class="suggestion-direccion"></span>
+          </div>`;
+        btn.querySelector(".suggestion-nombre").textContent =
+          ubicacion.nombre_lugar;
+        btn.querySelector(".suggestion-direccion").textContent =
+          ubicacion.direccion || "";
+        elementos.destinosSuggestions.appendChild(btn);
+      }
+
+      agregarDestino(id, ubicacion.nombre_lugar);
+    } catch (error) {
+      mostrarErrorNuevoDestino("Error de conexión. Intentá de nuevo.");
+      btnGuardar.disabled = false;
+    }
   }
 
   /**
@@ -750,22 +875,32 @@ document.addEventListener("DOMContentLoaded", function () {
       ".destino-suggestion",
     );
 
+    let visibles = 0;
     suggestions.forEach((suggestion) => {
       const nombre = suggestion.dataset.nombre.toLowerCase();
       if (nombre.includes(busqueda)) {
         suggestion.style.display = "flex";
+        visibles++;
       } else {
         suggestion.style.display = "none";
       }
     });
+
+    if (elementos.destinosEmpty) {
+      elementos.destinosEmpty.textContent = busqueda
+        ? "No se encontraron destinos con ese nombre."
+        : "No hay destinos cargados todavía.";
+      elementos.destinosEmpty.hidden = visibles > 0;
+    }
   }
 
   /**
    * Agregar un destino a la lista
    */
   function agregarDestino(id, nombre) {
+    id = String(id);
     // Verificar si ya existe
-    if (estado.destinos.some((d) => d.id === id)) {
+    if (estado.destinos.some((d) => String(d.id) === id)) {
       alert("Este destino ya fue agregado.");
       return;
     }
@@ -824,7 +959,7 @@ document.addEventListener("DOMContentLoaded", function () {
    * Eliminar un destino de la lista
    */
   function eliminarDestino(id) {
-    estado.destinos = estado.destinos.filter((d) => d.id !== id);
+    estado.destinos = estado.destinos.filter((d) => String(d.id) !== String(id));
     guardarEstado();
     renderizarDestinos();
     actualizarBotonPaso4();
