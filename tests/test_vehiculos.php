@@ -231,11 +231,12 @@ try {
     assertTrue($vBaja['activo'] === false, "desactivar() marca activo=FALSE");
     assertTrue($vBaja['estado'] === 'NO-DISPONIBLE', "desactivar() fuerza estado=NO-DISPONIBLE");
 
-    // Reactivar no cambia estado
+    // Reactivar vuelve también el estado a DISPONIBLE (simetría con
+    // desactivar: la baja toca ambos flags, la reactivación también).
     $modelo->reactivar($nuevoId);
     $vReac = $modelo->buscarPorId($nuevoId);
     assertTrue($vReac['activo'] === true, "reactivar() marca activo=TRUE");
-    assertTrue($vReac['estado'] === 'NO-DISPONIBLE', "reactivar() NO toca estado (sigue NO-DISPONIBLE)");
+    assertTrue($vReac['estado'] === 'DISPONIBLE', "reactivar() también vuelve estado a DISPONIBLE");
 
     // Idempotencia
     $modelo->desactivar($nuevoId); // ya estaba
