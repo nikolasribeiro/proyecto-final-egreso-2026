@@ -197,6 +197,29 @@ class ModeloTraslado
             }
             $primerDestino = (int)$destinos[0]['id'];
 
+            // Validación FK de usuarios antes del INSERT para devolver
+            // mensajes amigables en vez del SQLSTATE genérico.
+            $ciAdmin = (int)($d['ci_administrativo'] ?? 0);
+            if ($ciAdmin <= 0) {
+                throw new \InvalidArgumentException('Falta el CI del administrativo que crea la solicitud.');
+            }
+            // Auto-seed defensivo: si el admin logueado (mock CI 11111111)
+            // no existe en `usuarios`, lo creamos sobre la marcha con
+            // password hash del seed dev. Idempotente.
+            $this->asegurarUsuario($ciAdmin, 'administrador');
+
+            $ciChofer = (int)($d['ci_chofer'] ?? 0);
+            if ($ciChofer <= 0) {
+                throw new \InvalidArgumentException('Falta el CI del chofer asignado.');
+            }
+            $this->asegurarUsuario($ciChofer, 'chofer');
+
+            // ci_enfermero es opcional (nullable en la BD).
+            $ciEnfermero = !empty($d['ci_enfermero']) ? (int)$d['ci_enfermero'] : null;
+            if ($ciEnfermero !== null) {
+                $this->asegurarUsuario($ciEnfermero, 'enfermero');
+            }
+
             // Validación: el camión SOLO está disponible para equipamiento
             $stmtTipoVeh = $this->db->prepare(
                 "SELECT tv.descripcion
@@ -247,9 +270,9 @@ class ModeloTraslado
                 // auto-seed defensivo en `idEstado()`).
                 'estado'    => $this->idEstado('PENDIENTE'),
                 'vehiculo'  => (int)$d['id_vehiculo'],
-                'chofer'    => (int)$d['ci_chofer'],
-                'enfermero' => !empty($d['ci_enfermero']) ? (int)$d['ci_enfermero'] : null,
-                'admin'     => (int)($d['ci_administrativo'] ?? 11111111),
+                'chofer'    => $ciChofer,
+                'enfermero' => $ciEnfermero,
+                'admin'     => $ciAdmin,
                 'paciente'  => $d['ci_paciente_externo'] ?? null,
                 'tipo'      => $d['tipo'],
                 'critico'   => !empty($d['estadoCritico']) ? 1 : 0,
@@ -836,6 +859,74 @@ class ModeloTraslado
                 'motivo'           => $motivo,
             ],
         );
+    }
+
+    /**
+     * Verifica que un usuario exista por CI. Si NO existe, lo crea con
+     * los datos del seed dev (nombre genérico, password hasheada con
+     * un default seguro) y le asigna el rol indicado. Idempotente.
+     *
+     * Usado por `crearSolicitud()` como auto-seed defensivo: el mock
+     * de `ControladorAuth` loguea siempre con CI 11111111 (admin), y
+     * si el seed no corrió, la FK de `solicitud_traslados.ci_administrativo`
+     * explota. Sembrar el usuario en el momento del INSERT evita tener
+     * que correr el seed completo o un script de setup previo.
+     *
+     * Roles válidos (UI key): administrador, medico, enfermero, chofer,
+     * soporte_tecnico.
+     */
+    private function asegurarUsuario(int $ci, string $rolUi): void
+    {
+        $stmt = $this->db->prepare('SELECT 1 FROM usuarios WHERE ci = :ci LIMIT 1');
+        $stmt->execute(['ci' => $ci]);
+        if ($stmt->fetchColumn()) {
+            return; // Ya existe — no tocar.
+        }
+
+        // Mapear rol UI → enum BD (mismo que ModeloUsuario::ROL_UI_A_DB).
+        $enumBd = [
+            'administrador'   => 'ADMINISTRATIVO',
+            'medico'          => 'MEDICO',
+            'enfermero'       => 'ENFERMERO',
+            'chofer'          => 'CHOFER',
+            'soporte_tecnico' => 'SOPORTE_TECNICO',
+        ][$rolUi] ?? null;
+        if ($enumBd === null) {
+            throw new \InvalidArgumentException("Rol UI desconocido para auto-seed: {$rolUi}");
+        }
+
+        // Password default del seed dev. Hasheada con bcrypt.
+        $passHash = password_hash('changeme', PASSWORD_BCRYPT);
+
+        $this->db->prepare(
+            "INSERT INTO usuarios (ci, nombre, apellido, email, contrasena, activo)
+             VALUES (:ci, :n, :a, :e, :p, TRUE)"
+        )->execute([
+            'ci' => $ci,
+            'n'  => 'Auto',
+            'a'  => 'Seed',
+            'e'  => "autoseed_{$ci}@hospital.local",
+            'p'  => $passHash,
+        ]);
+        $userId = (int)$this->db->lastInsertId();
+
+        // Asignar el rol pedido (INSERT IGNORE por si la pivot ya tiene fila).
+        $rolIdStmt = $this->db->prepare(
+            "SELECT id FROM roles WHERE tipo_rol = :t LIMIT 1"
+        );
+        $rolIdStmt->execute(['t' => $enumBd]);
+        $rolId = (int)$rolIdStmt->fetchColumn();
+        if ($rolId > 0) {
+            $this->db->prepare(
+                "INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES (:u, :r)"
+            )->execute(['u' => $userId, 'r' => $rolId]);
+        }
+
+        $this->registrarAuditoria('AUTO_SEED_USUARIO', 'usuarios', $userId, [
+            'ci'     => $ci,
+            'rol_ui' => $rolUi,
+            'motivo' => 'fk_solicitud_traslados',
+        ]);
     }
 
     private function registrarAuditoria(string $accion, string $tabla, int $registroId, array $detalles): void
