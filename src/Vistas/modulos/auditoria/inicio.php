@@ -20,31 +20,47 @@
                             
                             <!-- COLUMNA DETALLES ACTUALIZADA -->
                             <td>
-                                <?php
-                                // Decodificamos el JSON
-                                $detallesArray = json_decode($log['detalles'], true);
+                               <?php
+                                 $detallesArray = json_decode($log['detalles'], true);
 
-                                // Verificamos si es un array válido y tiene datos
-                                if (is_array($detallesArray) && !empty($detallesArray)) {
-                                    echo "<ul style='margin: 0; padding-left: 20px; list-style-type: square; font-size: 0.9em; color: #555;'>";
-                                    
-                                    foreach ($detallesArray as $clave => $valor) {
-                                        // Limpiamos la clave (ej: "destino_orden" -> "Destino orden")
-                                        $claveLegible = ucfirst(str_replace('_', ' ', $clave));
-                                        
-                                        // Curamos el valor
-                                        $valorLegible = is_array($valor) ? htmlspecialchars(implode(', ', $valor)) : htmlspecialchars((string)$valor);
-                                        
-                                        echo "<li><strong>{$claveLegible}:</strong> {$valorLegible}</li>";
-                                    }
-                                    
-                                    echo "</ul>";
-                                } else {
-                                    // Si no hay detalles o el JSON es inválido
-                                    echo "<span style='color: #999; font-style: italic;'>Sin detalles</span>";
-                                }
-                                ?>
-                            </td>
+                                    if (is_array($detallesArray) && !empty($detallesArray)) {
+                                     echo "<ul style='margin: 0; padding-left: 20px; list-style-type: square; font-size: 0.9em; color: #555;'>";
+        
+                                      foreach ($detallesArray as $clave => $valor) {
+                                     $claveLegible = ucfirst(str_replace('_', ' ', $clave));
+                                     $valorLegible = '';
+            
+                                    if (is_array($valor)) {
+                // Detectar si es un registro de ACTUALIZAR (trae array de 2 posiciones: viejo y nuevo)
+                                 if ($log['accion'] === 'ACTUALIZAR' && count($valor) === 2 && isset($valor[0], $valor[1])) {
+                    
+                    // Si el valor interno también es array (ej. Roles), lo aplanamos
+                                 $viejo = is_array($valor[0]) ? implode(', ', $valor[0]) : (string)$valor[0];
+                                 $nuevo = is_array($valor[1]) ? implode(', ', $valor[1]) : (string)$valor[1];
+
+                                 if ($viejo === $nuevo) {
+                                 $valorLegible = htmlspecialchars($nuevo);
+                    } else {
+                         // Diseño visual para cambios: viejo tachado -> nuevo
+                         $valorLegible = "<del style='color:#a94442;'>".htmlspecialchars($viejo)."</del> <strong style='color:#3c763d;'>➔ ".htmlspecialchars($nuevo)."</strong>";
+                    }
+                } else {
+                    // Para listas normales (ej. Destinos en un CREAR)
+                    $flatArray = [];
+                    array_walk_recursive($valor, function($a) use (&$flatArray) { $flatArray[] = $a; });
+                    $valorLegible = htmlspecialchars(implode(', ', $flatArray));
+                }
+            } else {
+                $valorLegible = htmlspecialchars((string)$valor);
+            }
+            
+            echo "<li><strong>{$claveLegible}:</strong> {$valorLegible}</li>";
+        }
+        echo "</ul>";
+    } else {
+        echo "<span style='color: #999; font-style: italic;'>Sin detalles</span>";
+    }
+    ?>
                             <!-- FIN COLUMNA DETALLES -->
                             
                         </tr>
