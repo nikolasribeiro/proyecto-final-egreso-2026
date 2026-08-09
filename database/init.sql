@@ -5,14 +5,25 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `apellido` VARCHAR(100) NOT NULL,
   `email` VARCHAR(150) UNIQUE NOT NULL,
   `contrasena` VARCHAR(255) NOT NULL,
-  `activo` BOOLEAN DEFAULT TRUE
+  `activo` BOOLEAN DEFAULT TRUE,
+  `fecha_alta` DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS `roles` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `descripcion_rol` VARCHAR(100),
-  `tipo_rol` ENUM('ADMINISTRATIVO', 'MEDICO', 'CHOFER', 'ENFERMERO') NOT NULL
+  `tipo_rol` ENUM('ADMINISTRATIVO', 'MEDICO', 'CHOFER', 'ENFERMERO', 'SOPORTE_TECNICO') NOT NULL
 );
+
+-- Seed automático del catálogo de roles (idempotente: INSERT IGNORE).
+-- Garantiza que los 5 roles del sistema existan al levantar el proyecto
+-- desde cero, sin depender de la ejecución manual de /seed.
+INSERT IGNORE INTO `roles` (`descripcion_rol`, `tipo_rol`) VALUES
+  ('Administrador del sistema',  'ADMINISTRATIVO'),
+  ('Médico',                     'MEDICO'),
+  ('Chofer',                     'CHOFER'),
+  ('Enfermero',                  'ENFERMERO'),
+  ('Soporte Técnico',            'SOPORTE_TECNICO');
 
 CREATE TABLE IF NOT EXISTS `categorias_documentos` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -167,6 +178,23 @@ ADD COLUMN slug VARCHAR(80) UNIQUE;
 
 -- Poblar los slugs existentes transformando el nombre de la categoría
 -- (Convierte a minúsculas y reemplaza espacios por guiones)
-UPDATE categorias_documentos 
-SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-')) 
+UPDATE categorias_documentos
+SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-'))
 WHERE slug IS NULL;
+
+-- ============================================================
+-- Migración feat/127-gestion-usuarios
+-- Ampliación del catálogo de roles + columna fecha_alta en usuarios,
+-- requeridos por el CRUD de gestión de usuarios.
+-- ============================================================
+
+-- Soporte Técnico no existía en el enum original. Se agrega para soportar
+-- el rol del catálogo definido en `Nucleo\Constantes\Roles`.
+ALTER TABLE `roles`
+  MODIFY COLUMN `tipo_rol`
+  ENUM('ADMINISTRATIVO','MEDICO','CHOFER','ENFERMERO','SOPORTE_TECNICO') NOT NULL;
+
+-- Fecha de alta automática: la pide el issue para que la tabla muestre
+-- "Fecha de Alta" sin tener que inferirla por orden de id.
+ALTER TABLE `usuarios`
+  ADD COLUMN IF NOT EXISTS `fecha_alta` DATETIME DEFAULT CURRENT_TIMESTAMP AFTER `activo`;

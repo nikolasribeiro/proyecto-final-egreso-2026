@@ -307,20 +307,27 @@ class ModeloTraslado
 
     public function obtenerChoferesDisponibles(): array
     {
+        // Filtra por `tipo_rol = 'CHOFER'` (no por id_rol hardcodeado) para
+        // sobrevivir inserciones / cambios en la tabla `roles`. El listado
+        // operativo del wizard NO incluye soporte_tecnico: ese rol nunca se
+        // mapea a CHOFER ni a ENFERMERO.
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido
                 FROM usuarios u
                 JOIN usuario_roles ur ON u.id = ur.id_usuario
-                WHERE ur.id_rol = 3 AND u.activo = TRUE
+                JOIN roles r ON ur.id_rol = r.id
+                WHERE r.tipo_rol = 'CHOFER' AND u.activo = TRUE
                 ORDER BY u.nombre, u.apellido";
         return $this->db->query($sql)->fetchAll();
     }
 
     public function obtenerEnfermeros(): array
     {
+        // Mismo criterio: filtramos por tipo_rol del catálogo en vez de id_rol.
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido
                 FROM usuarios u
                 JOIN usuario_roles ur ON u.id = ur.id_usuario
-                WHERE ur.id_rol = 4 AND u.activo = TRUE
+                JOIN roles r ON ur.id_rol = r.id
+                WHERE r.tipo_rol = 'ENFERMERO' AND u.activo = TRUE
                 ORDER BY u.nombre, u.apellido";
         return $this->db->query($sql)->fetchAll();
     }

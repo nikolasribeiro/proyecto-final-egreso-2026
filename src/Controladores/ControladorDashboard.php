@@ -5,15 +5,16 @@ namespace Controladores;
 use Nucleo\Sesion;
 use Nucleo\RutaProtegida;
 use Nucleo\Constantes\Roles;
-use Nucleo\Constantes\Usuarios;
 use Nucleo\Constantes\PlantillasEncuestas;
 use Modelos\ModeloTraslado;
+use Modelos\ModeloUsuario;
 
 class ControladorDashboard extends RutaProtegida
 {
     private string $nombre_usuario;
     private string $rol;
     private ModeloTraslado $modelo_traslado;
+    private ModeloUsuario $modelo_usuario;
 
     public function __construct()
     {
@@ -21,6 +22,7 @@ class ControladorDashboard extends RutaProtegida
 
         $usuario = Sesion::obtener('user');
         $this->modelo_traslado = new ModeloTraslado();
+        $this->modelo_usuario = new ModeloUsuario();
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];
     }
@@ -561,17 +563,46 @@ class ControladorDashboard extends RutaProtegida
     }
 
     // ==========================================
-    // MÓDULO USUARIOS (baja lógica)
+    // MÓDULO USUARIOS (CRUD contra BD)
     // ==========================================
 
     /**
-     * Lista los usuarios del sistema con su estado (activo/inactivo).
+     * Lista los usuarios del sistema con filtros server-side.
+     *
+     * Query params reconocidos:
+     *   - estado  : 'activos' | 'inactivos' | 'todos' (default 'todos')
+     *   - rol     : UI key del catálogo (vacío = todos)
+     *   - q       : texto libre (CI / nombre / apellido / email)
+     *   - pagina  : número de página (default 1)
      */
     public function usuarios(): void
     {
         if (!Roles::permiso($this->rol, 'usuarios', 'ver')) {
             abortar(403);
         }
+
+        $estado = (string)($_GET['estado'] ?? 'todos');
+        if (!in_array($estado, ['todos', 'activos', 'inactivos'], true)) {
+            $estado = 'todos';
+        }
+
+        $rolFiltro = (string)($_GET['rol'] ?? '');
+        if (!array_key_exists($rolFiltro, Roles::labels())) {
+            $rolFiltro = '';
+        }
+
+        $q = (string)($_GET['q'] ?? '');
+        $pagina = (int)($_GET['pagina'] ?? 1);
+        if ($pagina < 1) {
+            $pagina = 1;
+        }
+        $porPagina = 25;
+
+        $usuarios = $this->modelo_usuario->listar($estado, $rolFiltro, $q, $pagina, $porPagina);
+        $total = $this->modelo_usuario->contar($estado, $rolFiltro, $q);
+        $totalPaginas = max(1, (int)ceil($total / $porPagina));
+        $stats_estado = $this->modelo_usuario->contarPorEstado();
+        $stats_roles = $this->modelo_usuario->contarPorRol();
 
         $flash = Sesion::obtener('flash_usuario');
         Sesion::eliminar('flash_usuario');
@@ -580,47 +611,234 @@ class ControladorDashboard extends RutaProtegida
             'titulo_pagina' => 'Gestión de Usuarios',
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
-            'usuarios' => Usuarios::todos(),
+            'usuarios' => $usuarios,
             'roles' => Roles::labels(),
+            'filtros' => [
+                'estado' => $estado,
+                'rol' => $rolFiltro,
+                'q' => $q,
+                'pagina' => $pagina,
+                'por_pagina' => $porPagina,
+                'total' => $total,
+                'total_paginas' => $totalPaginas,
+            ],
+            'stats_estado' => $stats_estado,
+            'stats_roles' => $stats_roles,
+            'puede_crear' => Roles::permiso($this->rol, 'usuarios', 'crear'),
+            'puede_editar' => Roles::permiso($this->rol, 'usuarios', 'editar'),
             'flash' => $flash,
         ], 'admin');
     }
 
     /**
-     * Da de baja a un usuario (soft delete: setea fecha_baja).
-     * NUNCA elimina al usuario del array.
+     * Muestra el formulario de alta de un usuario nuevo.
      */
-    public function usuarioBaja(string $username): void
+    public function usuarioNuevo(): void
+    {
+        if (!Roles::permiso($this->rol, 'usuarios', 'crear')) {
+            abortar(403);
+        }
+
+        $flash = Sesion::obtener('flash_usuario');
+        Sesion::eliminar('flash_usuario');
+
+        vista('modulos/usuarios/nuevo', [
+            'titulo_pagina' => 'Nuevo Usuario',
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'roles' => Roles::labels(),
+            'catalogo_roles' => $this->modelo_usuario->obtenerCatalogoRoles(),
+            'flash' => $flash,
+            'csrf' => Sesion::generarTokenCsrf(),
+        ], 'admin');
+    }
+
+    /**
+     * Procesa el alta de un usuario nuevo.
+     */
+    public function usuarioCrear(): void
+    {
+        if (!Roles::permiso($this->rol, 'usuarios', 'crear')) {
+            abortar(403);
+        }
+
+        if (!Sesion::validarTokenCsrf((string)($_POST['csrf_token'] ?? ''))) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => 'Token inválido.']);
+            redirigir('/dashboard/usuarios/nuevo');
+            return;
+        }
+
+        $rolesPost = $_POST['roles'] ?? [];
+        if (!is_array($rolesPost)) {
+            $rolesPost = [];
+        }
+        $rolesUi = array_values(array_filter(array_map('strval', $rolesPost), 'strlen'));
+
+        try {
+            $id = $this->modelo_usuario->crear([
+                'ci'         => (int)($_POST['ci'] ?? 0),
+                'nombre'     => (string)($_POST['nombre'] ?? ''),
+                'apellido'   => (string)($_POST['apellido'] ?? ''),
+                'email'      => (string)($_POST['email'] ?? ''),
+                'contrasena' => (string)($_POST['contrasena'] ?? ''),
+                'roles'      => $rolesUi,
+            ]);
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'success',
+                'mensaje' => "Usuario creado correctamente (id {$id}).",
+            ]);
+            redirigir('/dashboard/usuarios');
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => $e->getMessage()]);
+            redirigir('/dashboard/usuarios/nuevo');
+        } catch (\Throwable $e) {
+            error_log('usuarioCrear: ' . $e->getMessage());
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al crear el usuario.',
+            ]);
+            redirigir('/dashboard/usuarios/nuevo');
+        }
+    }
+
+    /**
+     * Muestra el formulario de edición de un usuario.
+     * El parámetro de URL es el id (PK de la tabla).
+     */
+    public function usuarioEditar(int $id): void
     {
         if (!Roles::permiso($this->rol, 'usuarios', 'editar')) {
             abortar(403);
         }
 
-        $resultado = Usuarios::darBaja($username);
+        $usuario = $this->modelo_usuario->buscarPorId($id);
+        if (!$usuario) {
+            abortar(404);
+        }
 
-        Sesion::guardar('flash_usuario', [
-            'tipo' => $resultado['success'] ? 'success' : 'error',
-            'mensaje' => $resultado['message'],
-        ]);
+        $flash = Sesion::obtener('flash_usuario');
+        Sesion::eliminar('flash_usuario');
+
+        vista('modulos/usuarios/editar', [
+            'titulo_pagina' => 'Editar Usuario',
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'usuario' => $usuario,
+            'roles' => Roles::labels(),
+            'catalogo_roles' => $this->modelo_usuario->obtenerCatalogoRoles(),
+            'flash' => $flash,
+            'csrf' => Sesion::generarTokenCsrf(),
+        ], 'admin');
+    }
+
+    /**
+     * Procesa la edición de un usuario (nombre / apellido / email / roles).
+     * CI es inmutable: si viene en el POST se ignora silenciosamente.
+     */
+    public function usuarioActualizar(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'usuarios', 'editar')) {
+            abortar(403);
+        }
+
+        if (!Sesion::validarTokenCsrf((string)($_POST['csrf_token'] ?? ''))) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => 'Token inválido.']);
+            redirigir('/dashboard/usuarios/' . $id . '/editar');
+            return;
+        }
+
+        $rolesPost = $_POST['roles'] ?? [];
+        if (!is_array($rolesPost)) {
+            $rolesPost = [];
+        }
+        $rolesUi = array_values(array_filter(array_map('strval', $rolesPost), 'strlen'));
+
+        try {
+            $payload = [
+                'nombre'   => (string)($_POST['nombre'] ?? ''),
+                'apellido' => (string)($_POST['apellido'] ?? ''),
+                'email'    => (string)($_POST['email'] ?? ''),
+                'roles'    => $rolesUi,
+            ];
+            // La contraseña es opcional en edición; si viene vacía no se toca.
+            $contrasena = (string)($_POST['contrasena'] ?? '');
+            if ($contrasena !== '') {
+                $payload['contrasena'] = $contrasena;
+            }
+
+            $this->modelo_usuario->actualizar($id, $payload);
+
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'success',
+                'mensaje' => "Usuario actualizado correctamente.",
+            ]);
+            redirigir('/dashboard/usuarios');
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => $e->getMessage()]);
+            redirigir('/dashboard/usuarios/' . $id . '/editar');
+        } catch (\Throwable $e) {
+            error_log('usuarioActualizar: ' . $e->getMessage());
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al actualizar el usuario.',
+            ]);
+            redirigir('/dashboard/usuarios/' . $id . '/editar');
+        }
+    }
+
+    /**
+     * Da de baja a un usuario (soft delete: activo = FALSE).
+     * El parámetro es el id del usuario (PK de la tabla).
+     */
+    public function usuarioBaja(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'usuarios', 'editar')) {
+            abortar(403);
+        }
+
+        try {
+            $this->modelo_usuario->desactivar($id);
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'success',
+                'mensaje' => 'Usuario dado de baja correctamente.',
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            error_log('usuarioBaja: ' . $e->getMessage());
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al dar de baja.',
+            ]);
+        }
 
         redirigir('/dashboard/usuarios');
     }
 
     /**
-     * Reactiva un usuario (limpia fecha_baja → null).
+     * Reactiva un usuario (activo = TRUE).
      */
-    public function usuarioReactivar(string $username): void
+    public function usuarioReactivar(int $id): void
     {
         if (!Roles::permiso($this->rol, 'usuarios', 'editar')) {
             abortar(403);
         }
 
-        $resultado = Usuarios::reactivar($username);
-
-        Sesion::guardar('flash_usuario', [
-            'tipo' => $resultado['success'] ? 'success' : 'error',
-            'mensaje' => $resultado['message'],
-        ]);
+        try {
+            $this->modelo_usuario->reactivar($id);
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'success',
+                'mensaje' => 'Usuario reactivado correctamente.',
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_usuario', ['tipo' => 'error', 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            error_log('usuarioReactivar: ' . $e->getMessage());
+            Sesion::guardar('flash_usuario', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al reactivar.',
+            ]);
+        }
 
         redirigir('/dashboard/usuarios');
     }

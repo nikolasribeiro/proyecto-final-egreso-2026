@@ -43,6 +43,13 @@ final class Roles
                 'usuarios'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
             ],
+            'chofer' => [
+                'traslados'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => false],
+                'documentos' => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'encuestas'  => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'usuarios'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+            ],
             'soporte_tecnico' => [
                 'traslados'  => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'documentos' => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
@@ -61,9 +68,10 @@ final class Roles
     public static function labels(): array
     {
         return [
-            'administrador'  => 'Administrador',
-            'medico'         => 'Médico',
-            'enfermero'      => 'Enfermero',
+            'administrador'   => 'Administrador',
+            'medico'          => 'Médico',
+            'enfermero'       => 'Enfermero',
+            'chofer'          => 'Chofer',
             'soporte_tecnico' => 'Soporte Técnico',
         ];
     }
