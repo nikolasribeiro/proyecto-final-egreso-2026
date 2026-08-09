@@ -20,7 +20,7 @@
                 $es_camion = $tipoClase === 'camion';
                 $data_tipo_restringido = $es_camion ? 'data-restringido="true"' : '';
             ?>
-                <label class="vehiculo-card disponible" data-tipo="<?= e($tipoClase) ?>" <?= $data_tipo_restringido ?>>
+                <label class="vehiculo-card disponible" data-tipo="<?= e($tipoClase) ?>" <?= $data_tipo_restringido ?> data-tipo-vehiculo="<?= e($tipoClase) ?>">
                     <input type="radio" name="vehiculo" value="<?= (int)$vehiculo['id'] ?>">
                     <div class="vehiculo-content">
                         <div class="vehiculo-icon <?= e($tipoClase) ?>">

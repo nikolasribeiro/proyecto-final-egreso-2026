@@ -231,7 +231,7 @@ class ModeloTraslado
                     ) VALUES (
                         :origen, :primer,
                         :salida, :estimada,
-                        1, :vehiculo,
+                        :estado, :vehiculo,
                         :chofer, :enfermero, :admin, :paciente,
                         :tipo, :critico, :camilla, :diag,
                         :jerarquia, :volver, :prioridad
@@ -242,6 +242,10 @@ class ModeloTraslado
                 'primer'    => $primerDestino,
                 'salida'    => $fechaSalida,
                 'estimada'  => $fechaEstimada,
+                // Resolvemos el id del estado PENDIENTE dinámicamente
+                // (el init.sql + seed garantizan que exista; además hay
+                // auto-seed defensivo en `idEstado()`).
+                'estado'    => $this->idEstado('PENDIENTE'),
                 'vehiculo'  => (int)$d['id_vehiculo'],
                 'chofer'    => (int)$d['ci_chofer'],
                 'enfermero' => !empty($d['ci_enfermero']) ? (int)$d['ci_enfermero'] : null,
@@ -350,12 +354,18 @@ class ModeloTraslado
 
     /**
      * Vehículos disponibles (no ocupados en traslados activos).
-     * Devuelve TODOS los disponibles, incluyendo el camión. La capa de UI
-     * (JS) se encarga de ocultar el camión cuando el tipo de traslado no
-     * es "equipamiento". El servidor valida la compatibilidad en
-     * crearSolicitud().
+     *
+     * Filtro opcional por tipo de traslado:
+     *   - 'equipamiento': muestra SOLO camiones (regla de negocio:
+     *     el camión está reservado para traslados de equipamiento).
+     *   - cualquier otro valor (paciente_alta, biologico, null):
+     *     muestra todos MENOS camiones.
+     *
+     * La capa de UI (JS) re-aplica el filtro visualmente cuando el
+     * usuario cambia el tipo en el step 1 sin recargar la página. El
+     * servidor también valida la compatibilidad en `crearSolicitud()`.
      */
-    public function obtenerVehiculosDisponibles(): array
+    public function obtenerVehiculosDisponibles(?string $tipo = null): array
     {
         $sql = "SELECT v.id, v.matricula, tv.descripcion AS tipo_vehiculo
                 FROM vehiculos v
@@ -367,15 +377,44 @@ class ModeloTraslado
                       JOIN estado_traslados et ON st.id_estado = et.id
                       WHERE st.id_vehiculo = v.id
                         AND et.estado IN ('PENDIENTE', 'EN_TRANSITO')
-                  )
-                ORDER BY tv.id, v.matricula";
+                  )";
+
+        // Regla: el camión SOLO se ofrece para equipamiento.
+        if ($tipo !== 'equipamiento') {
+            $sql .= " AND tv.descripcion NOT LIKE '%Camión%'";
+        }
+
+        $sql .= " ORDER BY tv.id, v.matricula";
         return $this->db->query($sql)->fetchAll();
     }
 
     public function obtenerUbicaciones(): array
     {
         $sql = "SELECT id, nombre_lugar, direccion FROM ubicaciones ORDER BY nombre_lugar";
-        return $this->db->query($sql)->fetchAll();
+        $filas = $this->db->query($sql)->fetchAll();
+
+        // Auto-seed defensivo: si la tabla está vacía (BD sin seed),
+        // sembrar las 10 ubicaciones reales del Hospital de Clínicas.
+        // Idempotente (INSERT IGNORE). Desbloquea el wizard de traslados
+        // sin depender de que el seed original haya corrido.
+        if (empty($filas)) {
+            $this->db->exec(
+                "INSERT IGNORE INTO ubicaciones (nombre_lugar, direccion) VALUES
+                 ('Hospital de Clínicas - Base Ambulancias', 'Av. Italia s/n, Piso 1'),
+                 ('Instituto Nacional de Cardiología', 'Av. Italia 2870'),
+                 ('Hospital Maciel', '25 de Mayo 174'),
+                 ('Hospital Británico', 'Av. Italia s/n'),
+                 ('ASSE - Centro Hospitalario Pereira Rossell', '18 de Julio 1892'),
+                 ('Médica Uruguaya', 'Constituyente 1824'),
+                 ('Sanatorio Americano', 'Guido 1900'),
+                 ('Hospital Pasteur', 'Monte Caseros 2629'),
+                 ('Hospital Militar', 'Av. 8 de Octubre 3060'),
+                 ('Centro de Salud Ciudad Vieja', 'Juncal 1395')"
+            );
+            $filas = $this->db->query($sql)->fetchAll();
+        }
+
+        return $filas;
     }
 
     /**
@@ -617,7 +656,27 @@ class ModeloTraslado
     {
         $s = $this->db->prepare("SELECT id FROM estado_traslados WHERE estado = :n");
         $s->execute(['n' => $nombre]);
-        return (int)$s->fetch()['id'];
+        $fila = $s->fetch();
+
+        if ($fila) {
+            return (int)$fila['id'];
+        }
+
+        // Auto-seed defensivo: si la tabla está vacía o no tiene el
+        // estado pedido, sembrar los 4 estados básicos. Idempotente
+        // (INSERT IGNORE). Después volver a buscar.
+        $this->db->exec(
+            "INSERT IGNORE INTO estado_traslados (estado) VALUES
+             ('PENDIENTE'), ('EN_TRANSITO'), ('FINALIZADO'), ('CANCELADO')"
+        );
+        $s->execute(['n' => $nombre]);
+        $fila = $s->fetch();
+        if (!$fila) {
+            throw new \RuntimeException(
+                "Estado de traslado '{$nombre}' no existe en estado_traslados y no pudo sembrarse."
+            );
+        }
+        return (int)$fila['id'];
     }
 
     private function avanzarEstadoPadre(int $idSolicitud): void

@@ -711,30 +711,41 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Mostrar/ocultar vehículos según el tipo de traslado.
-   * Camión SOLO visible cuando el tipo es "equipamiento".
+   * Filtra visualmente los vehículos del step 6 según el tipo de
+   * traslado elegido en el step 1:
+   *   - equipamiento: SOLO camiones.
+   *   - cualquier otro (paciente_alta / biologico / null): ambulancia,
+   *     auto y otros — NUNCA camiones.
+   *
+   * Si el vehículo seleccionado queda oculto, se limpia `estado.vehiculo`
+   * y se deshabilita el botón "Continuar" del step 6.
    */
   function aplicarRestriccionesVehiculos() {
     if (!elementos.vehiculosGrid) return;
 
     const esEquipamiento = estado.tipoTraslado === "equipamiento";
+    let cambioSeleccion = false;
 
     elementos.vehiculosGrid
       .querySelectorAll(".vehiculo-card")
       .forEach((card) => {
         const esCamion = card.dataset.restringido === "true";
         const input = card.querySelector('input[type="radio"]');
-        if (esCamion && !esEquipamiento) {
-          card.style.display = "none";
-          if (input && estado.vehiculo === input.value) {
-            estado.vehiculo = null;
-            guardarEstado();
-            actualizarBotonPaso6();
-          }
-        } else {
-          card.style.display = "";
+        // Mostrar SOLO si: (es equipamiento Y es camión) O (no es equipamiento Y no es camión)
+        const visible = esEquipamiento ? esCamion : !esCamion;
+        card.style.display = visible ? "" : "none";
+
+        if (!visible && input && estado.vehiculo === input.value) {
+          estado.vehiculo = null;
+          if (input) input.checked = false;
+          cambioSeleccion = true;
         }
       });
+
+    if (cambioSeleccion) {
+      guardarEstado();
+      actualizarBotonPaso6();
+    }
   }
 
   /**
