@@ -13,11 +13,40 @@
                         <tr style="border-bottom: 1px solid #ddd;">
                             <td><?= htmlspecialchars($log['id']) ?></td>
                             <td><?= htmlspecialchars($log['fecha_hora']) ?></td>
-                            <td><?= htmlspecialchars($log['nombre_usuario'] ?? 'ID: ' . $log['id_usuario']) ?></td>
+                            <td><?= htmlspecialchars($log['nombre_usuario'] ?? 'ID: ' . ($log['id_usuario'] ?? 'Desconocido')) ?></td>
                             <td><strong><?= htmlspecialchars($log['accion']) ?></strong></td>
                             <td><?= htmlspecialchars($log['tabla_afectada']) ?></td>
                             <td><?= htmlspecialchars($log['ip_origen']) ?></td>
-                            <td><pre style="background: #f4f4f4; padding: 5px; font-size: 12px;"><?= htmlspecialchars($log['detalles']) ?></pre></td>
+                            
+                            <!-- COLUMNA DETALLES ACTUALIZADA -->
+                            <td>
+                                <?php
+                                // Decodificamos el JSON
+                                $detallesArray = json_decode($log['detalles'], true);
+
+                                // Verificamos si es un array válido y tiene datos
+                                if (is_array($detallesArray) && !empty($detallesArray)) {
+                                    echo "<ul style='margin: 0; padding-left: 20px; list-style-type: square; font-size: 0.9em; color: #555;'>";
+                                    
+                                    foreach ($detallesArray as $clave => $valor) {
+                                        // Limpiamos la clave (ej: "destino_orden" -> "Destino orden")
+                                        $claveLegible = ucfirst(str_replace('_', ' ', $clave));
+                                        
+                                        // Curamos el valor
+                                        $valorLegible = is_array($valor) ? htmlspecialchars(implode(', ', $valor)) : htmlspecialchars((string)$valor);
+                                        
+                                        echo "<li><strong>{$claveLegible}:</strong> {$valorLegible}</li>";
+                                    }
+                                    
+                                    echo "</ul>";
+                                } else {
+                                    // Si no hay detalles o el JSON es inválido
+                                    echo "<span style='color: #999; font-style: italic;'>Sin detalles</span>";
+                                }
+                                ?>
+                            </td>
+                            <!-- FIN COLUMNA DETALLES -->
+                            
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
