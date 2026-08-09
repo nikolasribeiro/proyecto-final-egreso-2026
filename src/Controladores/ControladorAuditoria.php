@@ -2,7 +2,6 @@
 namespace Controladores;
 
 use Modelos\ModeloAuditoria;
-use Nucleo\Vista;
 
 class ControladorAuditoria {
     public function inicio() {
@@ -10,9 +9,9 @@ class ControladorAuditoria {
             $modelo = new ModeloAuditoria();
             $logs = $modelo->obtenerLogs();
 
-            Vista::mostrar('modulos/auditoria/inicio', [
+            vista('modulos/auditoria/inicio', [
                 'logs' => $logs
-            ]);
+            ], "admin");
             
         } catch (\Throwable $e) {
             // Esto atrapará cualquier error fatal y lo imprimirá en pantalla
