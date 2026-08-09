@@ -26,24 +26,35 @@ class ControladorSeed {
         try {
             $db = Conexion::obtenerInstancia();
 
-            // Verificación previa: Evita duplicar datos si las tablas ya tienen registros
+            // 1. Roles — se siembran SIEMPRE que la tabla esté vacía,
+            //    independientemente de si hay usuarios o no. El catálogo de
+            //    roles es requisito para que el módulo de usuarios funcione
+            //    (los checkboxes de roles se hidratan desde acá).
+            $stmt = $db->query("SELECT COUNT(*) AS total FROM roles");
+            $rolesSembrados = 0;
+            if ($stmt->fetch()['total'] === 0) {
+                $db->exec("INSERT INTO roles (descripcion_rol, tipo_rol) VALUES
+                    ('Administrador del sistema', 'ADMINISTRATIVO'),
+                    ('Médico',                    'MEDICO'),
+                    ('Chofer',                    'CHOFER'),
+                    ('Enfermero',                 'ENFERMERO'),
+                    ('Soporte Técnico',           'SOPORTE_TECNICO')");
+                $rolesSembrados = 5;
+            }
+
+            // Verificación previa para usuarios: Evita duplicar datos si las tablas ya tienen registros
             $stmt = $db->query("SELECT COUNT(*) AS total FROM usuarios");
             if ($stmt->fetch()['total'] > 0) {
                 echo json_encode([
                     'exito' => true,
-                    'mensaje' => 'La base de datos ya contiene información. Se omitió la siembra de datos para preservar la integridad.'
+                    'mensaje' => $rolesSembrados > 0
+                        ? "Se sembraron {$rolesSembrados} roles del catálogo. La base de datos ya contiene usuarios; se omitió el resto del seed para preservar la integridad."
+                        : 'La base de datos ya contiene información. Se omitió la siembra de datos para preservar la integridad.'
                 ]);
                 return;
             }
 
             $db->beginTransaction();
-
-            // 1. Roles
-            $db->exec("INSERT INTO roles (descripcion_rol, tipo_rol) VALUES
-                ('Administrador DTI', 'ADMINISTRATIVO'),
-                ('Médico Especialista', 'MEDICO'),
-                ('Chofer de Ambulancia', 'CHOFER'),
-                ('Enfermero de Traslado', 'ENFERMERO')");
 
             // 2. Usuarios Iniciales (Contraseñas con HASH seguro) - DATOS FICTICIOS
             $passHash = password_hash('12345678', PASSWORD_BCRYPT);
@@ -51,10 +62,11 @@ class ControladorSeed {
                 (11111111, 'Administrador', 'Prueba', 'admin@hospital.com', '{$passHash}', TRUE),
                 (22222222, 'Medico', 'Prueba', 'medico@hospital.com', '{$passHash}', TRUE),
                 (33333333, 'Chofer', 'Prueba', 'chofer@hospital.com', '{$passHash}', TRUE),
-                (44444444, 'Enfermero', 'Prueba', 'enfermero@hospital.com', '{$passHash}', TRUE)");
+                (44444444, 'Enfermero', 'Prueba', 'enfermero@hospital.com', '{$passHash}', TRUE),
+                (55555555, 'Soporte', 'Prueba', 'soporte@hospital.com', '{$passHash}', TRUE)");
 
             // Asignar Roles
-            $db->exec("INSERT INTO usuario_roles (id_usuario, id_rol) VALUES (1, 1), (2, 2), (3, 3), (4, 4)");
+            $db->exec("INSERT INTO usuario_roles (id_usuario, id_rol) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5)");
 
             // 3. Categorías de Documentos Médicos (Casos reales del Hospital de Clínicas)
             $db->exec("INSERT INTO categorias_documentos (nombre_categoria) VALUES

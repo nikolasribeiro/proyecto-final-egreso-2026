@@ -78,10 +78,14 @@ $enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::c
 // Permisos (matriz)
 $enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
 
-// Usuarios (baja lógica)
+// Usuarios (CRUD contra BD)
 $enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);
-$enrutador->post('/dashboard/usuarios/{username}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
-$enrutador->post('/dashboard/usuarios/{username}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
+$enrutador->get('/dashboard/usuarios/nuevo', [\Controladores\ControladorDashboard::class, 'usuarioNuevo']);
+$enrutador->post('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarioCrear']);
+$enrutador->get('/dashboard/usuarios/{id}/editar', [\Controladores\ControladorDashboard::class, 'usuarioEditar']);
+$enrutador->post('/dashboard/usuarios/{id}', [\Controladores\ControladorDashboard::class, 'usuarioActualizar']);
+$enrutador->post('/dashboard/usuarios/{id}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
+$enrutador->post('/dashboard/usuarios/{id}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
 
 // Auditoría de logs
 $enrutador->get('/dashboard/auditoria', [\Controladores\ControladorAuditoria::class, 'inicio']);
