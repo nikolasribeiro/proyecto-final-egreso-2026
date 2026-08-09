@@ -17,6 +17,9 @@ final class Roles
     /**
      * Devuelve la matriz completa de permisos.
      *
+     * TODO(#130): los permisos por rol sobre cada recurso deben pasar a la
+     * matriz interactiva en BD. Hasta entonces, ajustar acá implica commit.
+     *
      * @return array<string, array<string, array<string, bool>>>
      */
     public static function matriz(): array
@@ -28,6 +31,7 @@ final class Roles
                 'encuestas'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
                 'usuarios'   => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
                 'permisos'   => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'vehiculos'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
             ],
             'medico' => [
                 'traslados'  => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
@@ -35,6 +39,7 @@ final class Roles
                 'encuestas'  => ['ver' => true, 'crear' => true,  'editar' => false, 'eliminar' => false],
                 'usuarios'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'vehiculos'  => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
             ],
             'enfermero' => [
                 'traslados'  => ['ver' => true, 'crear' => true,  'editar' => false, 'eliminar' => false],
@@ -42,6 +47,7 @@ final class Roles
                 'encuestas'  => ['ver' => true, 'crear' => true,  'editar' => false, 'eliminar' => false],
                 'usuarios'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'vehiculos'  => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
             ],
             'chofer' => [
                 'traslados'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => false],
@@ -49,6 +55,7 @@ final class Roles
                 'encuestas'  => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'usuarios'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'vehiculos'  => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
             ],
             'soporte_tecnico' => [
                 'traslados'  => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
@@ -56,6 +63,7 @@ final class Roles
                 'encuestas'  => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'usuarios'   => ['ver' => true, 'crear' => false, 'editar' => true,  'eliminar' => true],
                 'permisos'   => ['ver' => false, 'crear' => false, 'editar' => false, 'eliminar' => false],
+                'vehiculos'  => ['ver' => true,  'crear' => false, 'editar' => false, 'eliminar' => false],
             ],
         ];
     }
@@ -104,6 +112,7 @@ final class Roles
             'encuestas'  => 'Encuestas',
             'usuarios'   => 'Usuarios',
             'permisos'   => 'Permisos',
+            'vehiculos'  => 'Vehículos',
         ];
     }
 

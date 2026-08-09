@@ -8,6 +8,7 @@ use Nucleo\Constantes\Roles;
 use Nucleo\Constantes\PlantillasEncuestas;
 use Modelos\ModeloTraslado;
 use Modelos\ModeloUsuario;
+use Modelos\ModeloVehiculo;
 
 class ControladorDashboard extends RutaProtegida
 {
@@ -15,6 +16,7 @@ class ControladorDashboard extends RutaProtegida
     private string $rol;
     private ModeloTraslado $modelo_traslado;
     private ModeloUsuario $modelo_usuario;
+    private ModeloVehiculo $modelo_vehiculo;
 
     public function __construct()
     {
@@ -23,6 +25,7 @@ class ControladorDashboard extends RutaProtegida
         $usuario = Sesion::obtener('user');
         $this->modelo_traslado = new ModeloTraslado();
         $this->modelo_usuario = new ModeloUsuario();
+        $this->modelo_vehiculo = new ModeloVehiculo();
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];
     }
@@ -841,5 +844,270 @@ class ControladorDashboard extends RutaProtegida
         }
 
         redirigir('/dashboard/usuarios');
+    }
+
+    // ==========================================
+    // MÓDULO VEHÍCULOS (CRUD + liberación auto)
+    // Issue #131 — Espejo de la gestión de usuarios.
+    // ==========================================
+
+    /**
+     * Listado de vehículos con filtros, paginación y resumen por estado.
+     */
+    public function vehiculos(): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'ver')) {
+            abortar(403);
+        }
+
+        $estado = (string)($_GET['estado'] ?? 'todos');
+        if (!in_array($estado, ['todos', 'disponibles', 'no_disponibles'], true)) {
+            $estado = 'todos';
+        }
+
+        $activo = (string)($_GET['activo'] ?? 'todos');
+        if (!in_array($activo, ['todos', 'activos', 'inactivos'], true)) {
+            $activo = 'todos';
+        }
+
+        $tipo = (int)($_GET['tipo'] ?? 0);
+        $q = (string)($_GET['q'] ?? '');
+        $pagina = (int)($_GET['pagina'] ?? 1);
+        if ($pagina < 1) {
+            $pagina = 1;
+        }
+        $porPagina = 25;
+
+        $vehiculos = $this->modelo_vehiculo->listar($estado, $tipo, $activo, $q, $pagina, $porPagina);
+        $total = $this->modelo_vehiculo->contar($estado, $tipo, $activo, $q);
+        $totalPaginas = max(1, (int)ceil($total / $porPagina));
+        $stats_estado = $this->modelo_vehiculo->contarPorEstado();
+        $tipos = $this->modelo_vehiculo->obtenerTiposVehiculo();
+
+        $flash = Sesion::obtener('flash_vehiculo');
+        Sesion::eliminar('flash_vehiculo');
+
+        vista('modulos/vehiculos/inicio', [
+            'titulo_pagina' => 'Gestión de Vehículos',
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'vehiculos' => $vehiculos,
+            'tipos' => $tipos,
+            'filtros' => [
+                'estado' => $estado,
+                'activo' => $activo,
+                'tipo' => $tipo,
+                'q' => $q,
+                'pagina' => $pagina,
+                'por_pagina' => $porPagina,
+                'total' => $total,
+                'total_paginas' => $totalPaginas,
+            ],
+            'stats_estado' => $stats_estado,
+            'puede_crear' => Roles::permiso($this->rol, 'vehiculos', 'crear'),
+            'puede_editar' => Roles::permiso($this->rol, 'vehiculos', 'editar'),
+            'puede_eliminar' => Roles::permiso($this->rol, 'vehiculos', 'eliminar'),
+            'flash' => $flash,
+        ], 'admin');
+    }
+
+    /**
+     * Muestra el formulario de alta de un vehículo.
+     */
+    public function vehiculoNuevo(): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'crear')) {
+            abortar(403);
+        }
+
+        $flash = Sesion::obtener('flash_vehiculo');
+        Sesion::eliminar('flash_vehiculo');
+
+        vista('modulos/vehiculos/nuevo', [
+            'titulo_pagina' => 'Nuevo Vehículo',
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'tipos' => $this->modelo_vehiculo->obtenerTiposVehiculo(),
+            'csrf' => Sesion::generarTokenCsrf(),
+            'flash' => $flash,
+        ], 'admin');
+    }
+
+    /**
+     * POST: crea un vehículo nuevo.
+     */
+    public function vehiculoCrear(): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'crear')) {
+            abortar(403);
+        }
+
+        if (!Sesion::validarTokenCsrf((string)($_POST['csrf_token'] ?? ''))) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Token inválido.',
+            ]);
+            redirigir('/dashboard/vehiculos/nuevo');
+            return;
+        }
+
+        $matricula = (string)($_POST['matricula'] ?? '');
+        $idTipo = (int)($_POST['id_tipo_vehiculo'] ?? 0);
+
+        try {
+            $nuevoId = $this->modelo_vehiculo->crear($matricula, $idTipo);
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'success',
+                'mensaje' => "Vehículo creado correctamente (matrícula {$matricula}, id {$nuevoId}).",
+            ]);
+            redirigir('/dashboard/vehiculos');
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => $e->getMessage(),
+            ]);
+            redirigir('/dashboard/vehiculos/nuevo');
+        } catch (\Throwable $e) {
+            error_log('vehiculoCrear: ' . $e->getMessage());
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al crear el vehículo.',
+            ]);
+            redirigir('/dashboard/vehiculos/nuevo');
+        }
+    }
+
+    /**
+     * Muestra el formulario de edición de un vehículo existente.
+     */
+    public function vehiculoEditar(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'editar')) {
+            abortar(403);
+        }
+
+        $vehiculo = $this->modelo_vehiculo->buscarPorId($id);
+        if (!$vehiculo) {
+            abortar(404);
+        }
+
+        $flash = Sesion::obtener('flash_vehiculo');
+        Sesion::eliminar('flash_vehiculo');
+
+        vista('modulos/vehiculos/editar', [
+            'titulo_pagina' => 'Editar Vehículo #' . $id,
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'vehiculo' => $vehiculo,
+            'tipos' => $this->modelo_vehiculo->obtenerTiposVehiculo(),
+            'csrf' => Sesion::generarTokenCsrf(),
+            'flash' => $flash,
+        ], 'admin');
+    }
+
+    /**
+     * POST: actualiza matricula y tipo de un vehículo.
+     */
+    public function vehiculoActualizar(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'editar')) {
+            abortar(403);
+        }
+
+        if (!Sesion::validarTokenCsrf((string)($_POST['csrf_token'] ?? ''))) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Token inválido.',
+            ]);
+            redirigir("/dashboard/vehiculos/{$id}/editar");
+            return;
+        }
+
+        $matricula = (string)($_POST['matricula'] ?? '');
+        $idTipo = (int)($_POST['id_tipo_vehiculo'] ?? 0);
+
+        try {
+            $this->modelo_vehiculo->actualizar($id, $matricula, $idTipo);
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'success',
+                'mensaje' => 'Vehículo actualizado correctamente.',
+            ]);
+            redirigir('/dashboard/vehiculos');
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => $e->getMessage(),
+            ]);
+            redirigir("/dashboard/vehiculos/{$id}/editar");
+        } catch (\Throwable $e) {
+            error_log('vehiculoActualizar: ' . $e->getMessage());
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al actualizar el vehículo.',
+            ]);
+            redirigir("/dashboard/vehiculos/{$id}/editar");
+        }
+    }
+
+    /**
+     * POST: soft delete del vehículo (`activo = FALSE`).
+     */
+    public function vehiculoBaja(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'eliminar')) {
+            abortar(403);
+        }
+
+        try {
+            $this->modelo_vehiculo->desactivar($id);
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'success',
+                'mensaje' => 'Vehículo dado de baja correctamente.',
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => $e->getMessage(),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('vehiculoBaja: ' . $e->getMessage());
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al dar de baja el vehículo.',
+            ]);
+        }
+
+        redirigir('/dashboard/vehiculos');
+    }
+
+    /**
+     * POST: reactiva un vehículo (`activo = TRUE`). NO cambia `estado`.
+     */
+    public function vehiculoReactivar(int $id): void
+    {
+        if (!Roles::permiso($this->rol, 'vehiculos', 'editar')) {
+            abortar(403);
+        }
+
+        try {
+            $this->modelo_vehiculo->reactivar($id);
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'success',
+                'mensaje' => 'Vehículo reactivado correctamente.',
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => $e->getMessage(),
+            ]);
+        } catch (\Throwable $e) {
+            error_log('vehiculoReactivar: ' . $e->getMessage());
+            Sesion::guardar('flash_vehiculo', [
+                'tipo' => 'error',
+                'mensaje' => 'Error interno al reactivar.',
+            ]);
+        }
+
+        redirigir('/dashboard/vehiculos');
     }
 }

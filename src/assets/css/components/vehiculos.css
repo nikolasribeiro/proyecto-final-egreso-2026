@@ -1,0 +1,371 @@
+/* ==========================================================================
+   COMPONENTS - Vehículos (Issue #131)
+   Espejo 1:1 de usuarios.css. Mantener ambos archivos en sync cuando se
+   ajusten estilos de tabla/toolbar/form.
+   ========================================================================== */
+
+.vehiculos-page {
+  /* No-op por ahora; sirve como hook para overrides locales si hace falta. */
+}
+
+/* ========== Stat cards (variantes sobre .stat-card de usuarios.css) ========== */
+.stat-card-disponibles {
+  --stat-accent: var(--success-green);
+  --stat-accent-background: var(--success-green-light);
+}
+
+.stat-card-no-disponibles {
+  --stat-accent: var(--danger-red);
+  --stat-accent-background: var(--danger-red-light);
+}
+
+/* ========== Filter toolbar (espejo .usuarios-toolbar) ========== */
+.vehiculos-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.vehiculos-filtros-form {
+  width: 100%;
+}
+
+.vehiculos-toolbar .form-group {
+  margin-bottom: 0;
+}
+
+.vehiculos-toolbar-field {
+  flex: 0 1 190px;
+  min-width: 170px;
+}
+
+.vehiculos-toolbar-search {
+  flex: 1 1 340px;
+  min-width: 260px;
+}
+
+.vehiculos-toolbar .form-label {
+  margin-bottom: var(--space-2);
+  color: var(--secondary-gray);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vehiculos-search-control {
+  position: relative;
+}
+
+.vehiculos-search-icon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-4);
+  width: 20px;
+  height: 20px;
+  color: var(--secondary-gray);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.vehiculos-toolbar .form-input,
+.vehiculos-toolbar .form-select {
+  min-height: 48px;
+  border-width: 1px;
+}
+
+.vehiculos-search-input {
+  padding-left: calc(var(--space-4) + 28px);
+}
+
+.vehiculos-filter-select {
+  width: 100%;
+  cursor: pointer;
+}
+
+.vehiculos-toolbar .form-input:focus,
+.vehiculos-toolbar .form-select:focus,
+.vehiculos-form-card .form-input:focus,
+.vehiculos-form-card .form-select:focus {
+  box-shadow: 0 0 0 3px var(--primary-blue-light);
+}
+
+.vehiculos-toolbar-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+  min-height: 48px;
+}
+
+.vehiculos-toolbar-actions .btn {
+  min-height: 48px;
+}
+
+/* ========== Tabla (espejo .usuarios-table) ========== */
+.vehiculos-table-container {
+  margin-bottom: var(--space-4);
+}
+
+.vehiculos-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.vehiculos-table th,
+.vehiculos-table td {
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-gray);
+}
+
+.vehiculos-table thead th {
+  background: var(--light-gray);
+  color: var(--secondary-gray);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.vehiculos-table tbody tr {
+  transition: background-color var(--transition-fast);
+}
+
+.vehiculos-table tbody tr.vehiculos-row:hover {
+  background: var(--primary-blue-light);
+}
+
+.vehiculos-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vehiculos-col-matricula {
+  width: 140px;
+}
+
+.vehiculos-col-tipo {
+  min-width: 220px;
+}
+
+.vehiculos-col-estado,
+.vehiculos-col-activo {
+  width: 160px;
+}
+
+.vehiculos-col-acciones {
+  min-width: 220px;
+  width: auto;
+  white-space: nowrap;
+  text-align: right !important;
+}
+
+.vehiculo-matricula {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  color: var(--black);
+  background: var(--light-gray);
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.vehiculo-tipo {
+  color: var(--black);
+  font-weight: 500;
+}
+
+/* Reutiliza .transfer-status + .status-dot + .status-completed/-inactive
+   definidos en estilos de traslados. */
+
+.vehiculos-status {
+  white-space: nowrap;
+}
+
+.vehiculo-acciones {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.vehiculo-accion-form {
+  display: inline-flex;
+  margin: 0;
+}
+
+.vehiculo-acciones .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.vehiculo-sin-acciones {
+  color: var(--secondary-gray);
+}
+
+/* ========== Empty state (reuso .empty-state de main.css) ========== */
+.vehiculos-empty-row td {
+  padding: 0;
+  border-bottom: none;
+}
+
+.vehiculos-empty-cell {
+  background: var(--white);
+  padding: var(--space-6);
+}
+
+/* ========== Paginación (espejo .usuarios-paginacion) ========== */
+.vehiculos-paginacion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: var(--radius-md);
+}
+
+.vehiculos-paginacion-info {
+  color: var(--secondary-gray);
+  font-size: var(--font-size-sm);
+}
+
+.vehiculos-paginacion-controles {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.vehiculos-paginacion-controles .is-active {
+  background: var(--primary-blue);
+  color: var(--white);
+  border-color: var(--primary-blue);
+}
+
+/* ========== Form (espejo .usuarios-form-card) ========== */
+.vehiculos-form-card {
+  background: var(--white);
+  border: 1px solid var(--border-gray);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-sm);
+  max-width: 720px;
+}
+
+.vehiculos-form-card .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.vehiculos-form-card .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vehiculos-form-card .form-input,
+.vehiculos-form-card .form-select {
+  min-height: 48px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-gray);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  background: var(--white);
+  color: var(--black);
+  transition: border-color var(--transition-fast);
+}
+
+.vehiculos-form-card .form-input:focus,
+.vehiculos-form-card .form-select:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+}
+
+.vehiculos-form-card .form-hint {
+  color: var(--secondary-gray);
+  font-size: var(--font-size-xs);
+}
+
+.vehiculos-form-card .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-gray);
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 720px) {
+  .vehiculos-table thead {
+    display: none;
+  }
+
+  .vehiculos-table tbody tr {
+    display: block;
+    margin-bottom: var(--space-4);
+    border: 1px solid var(--border-gray);
+    border-radius: var(--radius-md);
+    background: var(--white);
+  }
+
+  .vehiculos-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    border-bottom: 1px solid var(--border-gray);
+  }
+
+  .vehiculos-table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .vehiculos-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--secondary-gray);
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+  }
+
+  .vehiculo-acciones {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .vehiculos-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .vehiculos-toolbar-field {
+    min-width: 0;
+  }
+}

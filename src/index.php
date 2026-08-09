@@ -87,6 +87,15 @@ $enrutador->post('/dashboard/usuarios/{id}', [\Controladores\ControladorDashboar
 $enrutador->post('/dashboard/usuarios/{id}/baja', [\Controladores\ControladorDashboard::class, 'usuarioBaja']);
 $enrutador->post('/dashboard/usuarios/{id}/reactivar', [\Controladores\ControladorDashboard::class, 'usuarioReactivar']);
 
+// Vehículos (CRUD + liberación automática, issue #131)
+$enrutador->get('/dashboard/vehiculos', [\Controladores\ControladorDashboard::class, 'vehiculos']);
+$enrutador->get('/dashboard/vehiculos/nuevo', [\Controladores\ControladorDashboard::class, 'vehiculoNuevo']);
+$enrutador->post('/dashboard/vehiculos', [\Controladores\ControladorDashboard::class, 'vehiculoCrear']);
+$enrutador->get('/dashboard/vehiculos/{id}/editar', [\Controladores\ControladorDashboard::class, 'vehiculoEditar']);
+$enrutador->post('/dashboard/vehiculos/{id}', [\Controladores\ControladorDashboard::class, 'vehiculoActualizar']);
+$enrutador->post('/dashboard/vehiculos/{id}/baja', [\Controladores\ControladorDashboard::class, 'vehiculoBaja']);
+$enrutador->post('/dashboard/vehiculos/{id}/reactivar', [\Controladores\ControladorDashboard::class, 'vehiculoReactivar']);
+
 // Auditoría de logs
 $enrutador->get('/dashboard/auditoria', [\Controladores\ControladorAuditoria::class, 'inicio']);
 
