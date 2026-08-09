@@ -197,6 +197,29 @@ class ModeloTraslado
             }
             $primerDestino = (int)$destinos[0]['id'];
 
+            // Validación FK de usuarios antes del INSERT para devolver
+            // mensajes amigables en vez del SQLSTATE genérico.
+            $ciAdmin = (int)($d['ci_administrativo'] ?? 0);
+            if ($ciAdmin <= 0) {
+                throw new \InvalidArgumentException('Falta el CI del administrativo que crea la solicitud.');
+            }
+            // Auto-seed defensivo: si el admin logueado (mock CI 11111111)
+            // no existe en `usuarios`, lo creamos sobre la marcha con
+            // password hash del seed dev. Idempotente.
+            $this->asegurarUsuario($ciAdmin, 'administrador');
+
+            $ciChofer = (int)($d['ci_chofer'] ?? 0);
+            if ($ciChofer <= 0) {
+                throw new \InvalidArgumentException('Falta el CI del chofer asignado.');
+            }
+            $this->asegurarUsuario($ciChofer, 'chofer');
+
+            // ci_enfermero es opcional (nullable en la BD).
+            $ciEnfermero = !empty($d['ci_enfermero']) ? (int)$d['ci_enfermero'] : null;
+            if ($ciEnfermero !== null) {
+                $this->asegurarUsuario($ciEnfermero, 'enfermero');
+            }
+
             // Validación: el camión SOLO está disponible para equipamiento
             $stmtTipoVeh = $this->db->prepare(
                 "SELECT tv.descripcion
@@ -231,7 +254,7 @@ class ModeloTraslado
                     ) VALUES (
                         :origen, :primer,
                         :salida, :estimada,
-                        1, :vehiculo,
+                        :estado, :vehiculo,
                         :chofer, :enfermero, :admin, :paciente,
                         :tipo, :critico, :camilla, :diag,
                         :jerarquia, :volver, :prioridad
@@ -242,10 +265,14 @@ class ModeloTraslado
                 'primer'    => $primerDestino,
                 'salida'    => $fechaSalida,
                 'estimada'  => $fechaEstimada,
+                // Resolvemos el id del estado PENDIENTE dinámicamente
+                // (el init.sql + seed garantizan que exista; además hay
+                // auto-seed defensivo en `idEstado()`).
+                'estado'    => $this->idEstado('PENDIENTE'),
                 'vehiculo'  => (int)$d['id_vehiculo'],
-                'chofer'    => (int)$d['ci_chofer'],
-                'enfermero' => !empty($d['ci_enfermero']) ? (int)$d['ci_enfermero'] : null,
-                'admin'     => (int)($d['ci_administrativo'] ?? 11111111),
+                'chofer'    => $ciChofer,
+                'enfermero' => $ciEnfermero,
+                'admin'     => $ciAdmin,
                 'paciente'  => $d['ci_paciente_externo'] ?? null,
                 'tipo'      => $d['tipo'],
                 'critico'   => !empty($d['estadoCritico']) ? 1 : 0,
@@ -350,12 +377,22 @@ class ModeloTraslado
 
     /**
      * Vehículos disponibles (no ocupados en traslados activos).
-     * Devuelve TODOS los disponibles, incluyendo el camión. La capa de UI
-     * (JS) se encarga de ocultar el camión cuando el tipo de traslado no
-     * es "equipamiento". El servidor valida la compatibilidad en
-     * crearSolicitud().
+     *
+     * Filtro opcional por tipo de traslado:
+     *   - null: sin filtro (devuelve todos los disponibles). El JS
+     *     aplica el filtro visualmente cuando el usuario elige tipo.
+     *   - 'equipamiento': SOLO camiones.
+     *   - cualquier otro valor explícito (paciente_alta, biologico):
+     *     todos MENOS camiones.
+     *
+     * Importante: con `tipo = null` NO se aplica ningún filtro SQL,
+     * porque el frontend usa estos datos para pintar la grilla completa
+     * y luego ocultar visualmente los camiones cuando el tipo NO es
+     * equipamiento (y al revés). Filtrar en SQL con `null` rompía la
+     * grilla: si el usuario elegía equipamiento y los camiones estaban
+     * ocupados, veía 0 vehículos en vez del fallback SAME.
      */
-    public function obtenerVehiculosDisponibles(): array
+    public function obtenerVehiculosDisponibles(?string $tipo = null): array
     {
         $sql = "SELECT v.id, v.matricula, tv.descripcion AS tipo_vehiculo
                 FROM vehiculos v
@@ -367,15 +404,47 @@ class ModeloTraslado
                       JOIN estado_traslados et ON st.id_estado = et.id
                       WHERE st.id_vehiculo = v.id
                         AND et.estado IN ('PENDIENTE', 'EN_TRANSITO')
-                  )
-                ORDER BY tv.id, v.matricula";
+                  )";
+
+        // Solo aplicar filtro SQL si el llamador pasa un tipo EXPLÍCITO.
+        if ($tipo === 'equipamiento') {
+            $sql .= " AND tv.descripcion LIKE '%Camión%'";
+        } elseif ($tipo !== null) {
+            $sql .= " AND tv.descripcion NOT LIKE '%Camión%'";
+        }
+        // $tipo === null → sin filtro extra (el JS decide visualmente).
+
+        $sql .= " ORDER BY tv.id, v.matricula";
         return $this->db->query($sql)->fetchAll();
     }
 
     public function obtenerUbicaciones(): array
     {
         $sql = "SELECT id, nombre_lugar, direccion FROM ubicaciones ORDER BY nombre_lugar";
-        return $this->db->query($sql)->fetchAll();
+        $filas = $this->db->query($sql)->fetchAll();
+
+        // Auto-seed defensivo: si la tabla está vacía (BD sin seed),
+        // sembrar las 10 ubicaciones reales del Hospital de Clínicas.
+        // Idempotente (INSERT IGNORE). Desbloquea el wizard de traslados
+        // sin depender de que el seed original haya corrido.
+        if (empty($filas)) {
+            $this->db->exec(
+                "INSERT IGNORE INTO ubicaciones (nombre_lugar, direccion) VALUES
+                 ('Hospital de Clínicas - Base Ambulancias', 'Av. Italia s/n, Piso 1'),
+                 ('Instituto Nacional de Cardiología', 'Av. Italia 2870'),
+                 ('Hospital Maciel', '25 de Mayo 174'),
+                 ('Hospital Británico', 'Av. Italia s/n'),
+                 ('ASSE - Centro Hospitalario Pereira Rossell', '18 de Julio 1892'),
+                 ('Médica Uruguaya', 'Constituyente 1824'),
+                 ('Sanatorio Americano', 'Guido 1900'),
+                 ('Hospital Pasteur', 'Monte Caseros 2629'),
+                 ('Hospital Militar', 'Av. 8 de Octubre 3060'),
+                 ('Centro de Salud Ciudad Vieja', 'Juncal 1395')"
+            );
+            $filas = $this->db->query($sql)->fetchAll();
+        }
+
+        return $filas;
     }
 
     /**
@@ -617,7 +686,27 @@ class ModeloTraslado
     {
         $s = $this->db->prepare("SELECT id FROM estado_traslados WHERE estado = :n");
         $s->execute(['n' => $nombre]);
-        return (int)$s->fetch()['id'];
+        $fila = $s->fetch();
+
+        if ($fila) {
+            return (int)$fila['id'];
+        }
+
+        // Auto-seed defensivo: si la tabla está vacía o no tiene el
+        // estado pedido, sembrar los 4 estados básicos. Idempotente
+        // (INSERT IGNORE). Después volver a buscar.
+        $this->db->exec(
+            "INSERT IGNORE INTO estado_traslados (estado) VALUES
+             ('PENDIENTE'), ('EN_TRANSITO'), ('FINALIZADO'), ('CANCELADO')"
+        );
+        $s->execute(['n' => $nombre]);
+        $fila = $s->fetch();
+        if (!$fila) {
+            throw new \RuntimeException(
+                "Estado de traslado '{$nombre}' no existe en estado_traslados y no pudo sembrarse."
+            );
+        }
+        return (int)$fila['id'];
     }
 
     private function avanzarEstadoPadre(int $idSolicitud): void
@@ -770,6 +859,74 @@ class ModeloTraslado
                 'motivo'           => $motivo,
             ],
         );
+    }
+
+    /**
+     * Verifica que un usuario exista por CI. Si NO existe, lo crea con
+     * los datos del seed dev (nombre genérico, password hasheada con
+     * un default seguro) y le asigna el rol indicado. Idempotente.
+     *
+     * Usado por `crearSolicitud()` como auto-seed defensivo: el mock
+     * de `ControladorAuth` loguea siempre con CI 11111111 (admin), y
+     * si el seed no corrió, la FK de `solicitud_traslados.ci_administrativo`
+     * explota. Sembrar el usuario en el momento del INSERT evita tener
+     * que correr el seed completo o un script de setup previo.
+     *
+     * Roles válidos (UI key): administrador, medico, enfermero, chofer,
+     * soporte_tecnico.
+     */
+    private function asegurarUsuario(int $ci, string $rolUi): void
+    {
+        $stmt = $this->db->prepare('SELECT 1 FROM usuarios WHERE ci = :ci LIMIT 1');
+        $stmt->execute(['ci' => $ci]);
+        if ($stmt->fetchColumn()) {
+            return; // Ya existe — no tocar.
+        }
+
+        // Mapear rol UI → enum BD (mismo que ModeloUsuario::ROL_UI_A_DB).
+        $enumBd = [
+            'administrador'   => 'ADMINISTRATIVO',
+            'medico'          => 'MEDICO',
+            'enfermero'       => 'ENFERMERO',
+            'chofer'          => 'CHOFER',
+            'soporte_tecnico' => 'SOPORTE_TECNICO',
+        ][$rolUi] ?? null;
+        if ($enumBd === null) {
+            throw new \InvalidArgumentException("Rol UI desconocido para auto-seed: {$rolUi}");
+        }
+
+        // Password default del seed dev. Hasheada con bcrypt.
+        $passHash = password_hash('changeme', PASSWORD_BCRYPT);
+
+        $this->db->prepare(
+            "INSERT INTO usuarios (ci, nombre, apellido, email, contrasena, activo)
+             VALUES (:ci, :n, :a, :e, :p, TRUE)"
+        )->execute([
+            'ci' => $ci,
+            'n'  => 'Auto',
+            'a'  => 'Seed',
+            'e'  => "autoseed_{$ci}@hospital.local",
+            'p'  => $passHash,
+        ]);
+        $userId = (int)$this->db->lastInsertId();
+
+        // Asignar el rol pedido (INSERT IGNORE por si la pivot ya tiene fila).
+        $rolIdStmt = $this->db->prepare(
+            "SELECT id FROM roles WHERE tipo_rol = :t LIMIT 1"
+        );
+        $rolIdStmt->execute(['t' => $enumBd]);
+        $rolId = (int)$rolIdStmt->fetchColumn();
+        if ($rolId > 0) {
+            $this->db->prepare(
+                "INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES (:u, :r)"
+            )->execute(['u' => $userId, 'r' => $rolId]);
+        }
+
+        $this->registrarAuditoria('AUTO_SEED_USUARIO', 'usuarios', $userId, [
+            'ci'     => $ci,
+            'rol_ui' => $rolUi,
+            'motivo' => 'fk_solicitud_traslados',
+        ]);
     }
 
     private function registrarAuditoria(string $accion, string $tabla, int $registroId, array $detalles): void

@@ -328,16 +328,22 @@ class ModeloVehiculo
     }
 
     /**
-     * Reactiva un vehículo (`activo = TRUE`). NO toca `estado` — queda
-     * como estaba (DISPONIBLE o NO-DISPONIBLE). El admin decide manualmente
-     * si lo devuelve a servicio.
+     * Reactiva un vehículo: vuelve `activo = TRUE` Y `estado = 'DISPONIBLE'`.
+     *
+     * La baja es simétrica: `desactivar()` marca ambos flags como
+     * inactivos, así que `reactivar()` también toca ambos para devolver
+     * el vehículo al servicio de forma consistente. Esto evita el bug
+     * donde el vehículo quedaba `activo = TRUE` pero `estado =
+     * 'NO-DISPONIBLE'`, haciéndolo invisible para el wizard de traslados.
+     *
+     * Idempotente.
      */
     public function reactivar(int $id): void
     {
         $stmt = $this->db->prepare(
-            'UPDATE vehiculos
-             SET activo = TRUE
-             WHERE id = :id AND activo = FALSE'
+            "UPDATE vehiculos
+             SET activo = TRUE, estado = 'DISPONIBLE'
+             WHERE id = :id AND activo = FALSE"
         );
         $stmt->execute(['id' => $id]);
         if ($stmt->rowCount() === 0) {
@@ -349,6 +355,8 @@ class ModeloVehiculo
         }
         $this->registrarAuditoria('ACTUALIZAR', 'vehiculos', $id, [
             'motivo' => 'reactivar_admin',
+            'estado_anterior' => 'NO-DISPONIBLE',
+            'estado_nuevo'    => 'DISPONIBLE',
         ]);
     }
 

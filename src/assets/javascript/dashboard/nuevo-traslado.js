@@ -286,6 +286,36 @@ document.addEventListener("DOMContentLoaded", function () {
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(7)));
     elementos.btnConfirmar.addEventListener("click", confirmarTraslado);
 
+    // Stepper clickeable: cada .stepper-item es un <button> con
+    // data-step="N". Solo permite saltar a pasos ya completados o
+    // al actual. Los futuros quedan deshabilitados visualmente.
+    elementos.pasos.forEach((item) => {
+      item.addEventListener("click", function (e) {
+        e.preventDefault();
+        const numPaso = parseInt(this.dataset.step, 10);
+        if (!numPaso || numPaso === estado.pasoActual) return;
+        // Permitir solo si el paso es accesible (completado o active).
+        const esAccesible =
+          this.classList.contains("completed") ||
+          this.classList.contains("active");
+        if (!esAccesible) return;
+        irAPaso(numPaso);
+      });
+    });
+
+    // Botón "Reiniciar solicitud": vuelve al paso 1 y limpia todo el
+    // estado. Pide confirmación para evitar pérdidas accidentales.
+    const btnReiniciar = document.getElementById("btn-reiniciar-solicitud");
+    if (btnReiniciar) {
+      btnReiniciar.addEventListener("click", function () {
+        const ok = window.confirm(
+          "¿Reiniciar la solicitud? Se perderán todos los datos que hayas seleccionado hasta ahora.",
+        );
+        if (!ok) return;
+        reiniciarSolicitud();
+      });
+    }
+
     // Conductor y Enfermero
     if (elementos.conductorSelect) {
       elementos.conductorSelect.addEventListener("change", function () {
@@ -581,6 +611,55 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
+   * Reinicia la solicitud al estado inicial: vuelve al paso 1 y limpia
+   * todos los datos del wizard (tipo, datos clínicos, origen, destinos,
+   * personal, vehículo). NO toca nada persistido en la BD.
+   */
+  function reiniciarSolicitud() {
+    // Reset completo del estado a defaults del init (línea 92+).
+    Object.assign(estado, {
+      pasoActual: 1,
+      tipoTraslado: null,
+      estadoCritico: false,
+      requiereCamilla: false,
+      tipoDiagnostico: "",
+      origen: null,
+      destinos: [],
+      volverOrigen: false,
+      conductor: null,
+      enfermero: null,
+      jerarquia: "",
+      vehiculo: null,
+    });
+
+    // Reset visual del DOM: desmarcar radios, vaciar selects, limpiar
+    // lista de destinos renderizados y texto de inputs.
+    document
+      .querySelectorAll('input[name="tipo_traslado"]')
+      .forEach((r) => (r.checked = false));
+    document
+      .querySelectorAll('input[name="vehiculo"]')
+      .forEach((r) => (r.checked = false));
+    if (elementos.estadoCritico) elementos.estadoCritico.checked = false;
+    if (elementos.requiereCamilla) elementos.requiereCamilla.checked = false;
+    if (elementos.tipoDiagnostico) elementos.tipoDiagnostico.value = "";
+    if (elementos.conductorSelect) elementos.conductorSelect.value = "";
+    if (elementos.enfermeroSelect) elementos.enfermeroSelect.value = "";
+    if (elementos.jerarquiaSelect) elementos.jerarquiaSelect.value = "";
+    if (elementos.volverOrigen) elementos.volverOrigen.checked = false;
+    if (elementos.origenSelect) elementos.origenSelect.value = "";
+
+    // Limpiar lista visual de destinos del step 4.
+    if (elementos.destinosList) {
+      elementos.destinosList.innerHTML = "";
+    }
+
+    guardarEstado();
+    actualizarUI();
+    irAPaso(1);
+  }
+
+  /**
    * Actualizar la UI según el paso actual
    */
   function actualizarUI() {
@@ -711,30 +790,41 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Mostrar/ocultar vehículos según el tipo de traslado.
-   * Camión SOLO visible cuando el tipo es "equipamiento".
+   * Filtra visualmente los vehículos del step 6 según el tipo de
+   * traslado elegido en el step 1:
+   *   - equipamiento: SOLO camiones.
+   *   - cualquier otro (paciente_alta / biologico / null): ambulancia,
+   *     auto y otros — NUNCA camiones.
+   *
+   * Si el vehículo seleccionado queda oculto, se limpia `estado.vehiculo`
+   * y se deshabilita el botón "Continuar" del step 6.
    */
   function aplicarRestriccionesVehiculos() {
     if (!elementos.vehiculosGrid) return;
 
     const esEquipamiento = estado.tipoTraslado === "equipamiento";
+    let cambioSeleccion = false;
 
     elementos.vehiculosGrid
       .querySelectorAll(".vehiculo-card")
       .forEach((card) => {
         const esCamion = card.dataset.restringido === "true";
         const input = card.querySelector('input[type="radio"]');
-        if (esCamion && !esEquipamiento) {
-          card.style.display = "none";
-          if (input && estado.vehiculo === input.value) {
-            estado.vehiculo = null;
-            guardarEstado();
-            actualizarBotonPaso6();
-          }
-        } else {
-          card.style.display = "";
+        // Mostrar SOLO si: (es equipamiento Y es camión) O (no es equipamiento Y no es camión)
+        const visible = esEquipamiento ? esCamion : !esCamion;
+        card.style.display = visible ? "" : "none";
+
+        if (!visible && input && estado.vehiculo === input.value) {
+          estado.vehiculo = null;
+          if (input) input.checked = false;
+          cambioSeleccion = true;
         }
       });
+
+    if (cambioSeleccion) {
+      guardarEstado();
+      actualizarBotonPaso6();
+    }
   }
 
   /**
