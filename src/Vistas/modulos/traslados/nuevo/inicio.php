@@ -11,7 +11,19 @@
     <?php componente('modulos/traslados/stepper/solicitud/steps') ?>
 
     <div class="card wizard-card">
-        <h2 class="transfer-title">Nueva Solicitud de Traslado</h2>
+        <div class="wizard-header">
+            <h2 class="transfer-title">Nueva Solicitud de Traslado</h2>
+            <button
+                type="button"
+                id="btn-reiniciar-solicitud"
+                class="btn btn-outline btn-small"
+                title="Volver al paso 1 y limpiar toda la selección">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Reiniciar solicitud
+            </button>
+        </div>
 
         <!-- CSRF global para POST final (también inyectado en step7) -->
         <input type="hidden" id="csrf-token" value="<?= e($csrf ?? '') ?>">
