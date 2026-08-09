@@ -356,14 +356,18 @@ class ModeloTraslado
      * Vehículos disponibles (no ocupados en traslados activos).
      *
      * Filtro opcional por tipo de traslado:
-     *   - 'equipamiento': muestra SOLO camiones (regla de negocio:
-     *     el camión está reservado para traslados de equipamiento).
-     *   - cualquier otro valor (paciente_alta, biologico, null):
-     *     muestra todos MENOS camiones.
+     *   - null: sin filtro (devuelve todos los disponibles). El JS
+     *     aplica el filtro visualmente cuando el usuario elige tipo.
+     *   - 'equipamiento': SOLO camiones.
+     *   - cualquier otro valor explícito (paciente_alta, biologico):
+     *     todos MENOS camiones.
      *
-     * La capa de UI (JS) re-aplica el filtro visualmente cuando el
-     * usuario cambia el tipo en el step 1 sin recargar la página. El
-     * servidor también valida la compatibilidad en `crearSolicitud()`.
+     * Importante: con `tipo = null` NO se aplica ningún filtro SQL,
+     * porque el frontend usa estos datos para pintar la grilla completa
+     * y luego ocultar visualmente los camiones cuando el tipo NO es
+     * equipamiento (y al revés). Filtrar en SQL con `null` rompía la
+     * grilla: si el usuario elegía equipamiento y los camiones estaban
+     * ocupados, veía 0 vehículos en vez del fallback SAME.
      */
     public function obtenerVehiculosDisponibles(?string $tipo = null): array
     {
@@ -379,10 +383,13 @@ class ModeloTraslado
                         AND et.estado IN ('PENDIENTE', 'EN_TRANSITO')
                   )";
 
-        // Regla: el camión SOLO se ofrece para equipamiento.
-        if ($tipo !== 'equipamiento') {
+        // Solo aplicar filtro SQL si el llamador pasa un tipo EXPLÍCITO.
+        if ($tipo === 'equipamiento') {
+            $sql .= " AND tv.descripcion LIKE '%Camión%'";
+        } elseif ($tipo !== null) {
             $sql .= " AND tv.descripcion NOT LIKE '%Camión%'";
         }
+        // $tipo === null → sin filtro extra (el JS decide visualmente).
 
         $sql .= " ORDER BY tv.id, v.matricula";
         return $this->db->query($sql)->fetchAll();
