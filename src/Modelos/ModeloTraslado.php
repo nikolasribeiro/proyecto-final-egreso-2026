@@ -258,6 +258,10 @@ class ModeloTraslado
 
             $sid = (int)$this->db->lastInsertId();
 
+            // Hookpoint #131: ocupar el vehículo (NO-DISPONIBLE) dentro
+            // de la misma transacción de creación del traslado.
+            $this->ocuparVehiculo((int)$d['id_vehiculo'], $sid);
+
             $dStmt = $this->db->prepare(
                 "INSERT INTO destinos_traslado
                  (id_solicitud, orden, id_ubicacion, fecha_llegada_estimada, estado_destino)
@@ -283,6 +287,18 @@ class ModeloTraslado
             }
 
             $this->db->commit();
+            // Auditoría de ocupación del vehículo (separada del CREAR del
+            // traslado para que sea fácil filtrar por origen del evento).
+            $this->registrarAuditoria(
+                'OCUPAR_VEHICULO',
+                'vehiculos',
+                (int)$d['id_vehiculo'],
+                [
+                    'traslado_id' => $sid,
+                    'estado_anterior' => 'DISPONIBLE',
+                    'estado_nuevo'    => 'NO-DISPONIBLE',
+                ],
+            );
             $this->registrarAuditoria(
                 'CREAR',
                 'solicitud_traslados',
@@ -345,6 +361,7 @@ class ModeloTraslado
                 FROM vehiculos v
                 JOIN tipo_vehiculo tv ON v.id_tipo_vehiculo = tv.id
                 WHERE v.estado = 'DISPONIBLE'
+                  AND v.activo = TRUE
                   AND NOT EXISTS (
                       SELECT 1 FROM solicitud_traslados st
                       JOIN estado_traslados et ON st.id_estado = et.id
@@ -571,6 +588,9 @@ class ModeloTraslado
                 $this->db->rollBack();
                 return ['success' => false, 'message' => 'No se puede cancelar un traslado finalizado'];
             }
+            // Hookpoint #131: liberar vehículo dentro de la misma tx
+            // que la cancelación (atómico con el cambio de estado).
+            $this->liberarVehiculoPorSolicitud($idSolicitud, $estadoCancelado, 'cancelar');
             $this->crearReporte($idSolicitud, $ordenDestino, $tipo, $mensaje);
             $this->db->commit();
             $this->registrarAuditoria(
@@ -620,6 +640,14 @@ class ModeloTraslado
              WHERE id = :id"
         );
         $u->execute(['e' => $estadoId, 'id' => $idSolicitud]);
+
+        // Hookpoint #131: si el padre pasó a FINALIZADO, liberar el
+        // vehículo. Se hace autocontenido (sin abrir tx nueva) porque
+        // este helper NO está dentro de una transacción; el filtro
+        // `obtenerVehiculosDisponibles()` ya compensa con `NOT EXISTS`.
+        if ($estadoId === $this->idEstado('FINALIZADO')) {
+            $this->liberarVehiculoPorSolicitud($idSolicitud, $estadoId, 'finalizar');
+        }
     }
 
     private function calcularPasoInfo(array $traslado, array $destinos): ?array
@@ -661,6 +689,87 @@ class ModeloTraslado
 
         // Todos los destinos arribados: traslado listo para finalizar.
         return null;
+    }
+
+    /**
+     * Hookpoint #131 — ocupa un vehículo (`NO-DISPONIBLE`) al crear un
+     * traslado. Se invoca dentro de la transacción de `crearSolicitud()`
+     * para que la indisponibilidad sea atómica con la creación del
+     * traslado. Si el vehículo no existe o ya estaba `NO-DISPONIBLE`,
+     * la query no aplica cambios pero NO lanza — el filtro del wizard
+     * compensa vía `NOT EXISTS` sobre traslados activos.
+     */
+    private function ocuparVehiculo(int $idVehiculo, int $idTraslado): void
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE vehiculos
+             SET estado = 'NO-DISPONIBLE'
+             WHERE id = :id AND activo = TRUE"
+        );
+        $stmt->execute(['id' => $idVehiculo]);
+        // No logueamos acá: el caller ya emite 'OCUPAR_VEHICULO' en
+        // logs_auditoria fuera de la tx, con el contexto del traslado.
+    }
+
+    /**
+     * Hookpoint #131 — libera el vehículo asociado a un traslado que
+     * acaba de pasar a un estado terminal (`FINALIZADO` o `CANCELADO`).
+     * Usa JOIN para resolver `id_vehiculo` sin un SELECT previo.
+     *
+     * Si el vehículo ya estaba `DISPONIBLE` (caso borde por
+     * inconsistencia previa), loguea `INCONSISTENCIA_VEHICULO` y
+     * continúa best-effort.
+     *
+     * @param int $idEstadoEsperado id en `estado_traslados` del estado
+     *                              terminal al que acaba de pasar el
+     *                              traslado (FINALIZADO o CANCELADO).
+     * @param string $motivo texto para `logs_auditoria.detalle` —
+     *                       típicamente 'finalizar' o 'cancelar'.
+     */
+    private function liberarVehiculoPorSolicitud(
+        int $idSolicitud,
+        int $idEstadoEsperado,
+        string $motivo
+    ): void {
+        $stmt = $this->db->prepare(
+            "UPDATE vehiculos v
+             JOIN solicitud_traslados s ON s.id_vehiculo = v.id
+             SET v.estado = 'DISPONIBLE'
+             WHERE s.id = :id AND s.id_estado = :estado AND v.activo = TRUE"
+        );
+        $stmt->execute([
+            'id'     => $idSolicitud,
+            'estado' => $idEstadoEsperado,
+        ]);
+
+        if ($stmt->rowCount() === 0) {
+            // No updateó nada: el vehículo ya estaba DISPONIBLE o la
+            // solicitud no quedó en el estado esperado. Logueamos la
+            // inconsistencia pero NO rompemos la transición.
+            $this->registrarAuditoria(
+                'INCONSISTENCIA_VEHICULO',
+                'vehiculos',
+                0,
+                [
+                    'traslado_id' => $idSolicitud,
+                    'motivo'      => 'liberar_sin_cambios',
+                    'contexto'    => $motivo,
+                ],
+            );
+            return;
+        }
+
+        $this->registrarAuditoria(
+            'LIBERAR_VEHICULO',
+            'vehiculos',
+            0,
+            [
+                'traslado_id'      => $idSolicitud,
+                'estado_anterior'  => 'NO-DISPONIBLE',
+                'estado_nuevo'     => 'DISPONIBLE',
+                'motivo'           => $motivo,
+            ],
+        );
     }
 
     private function registrarAuditoria(string $accion, string $tabla, int $registroId, array $detalles): void

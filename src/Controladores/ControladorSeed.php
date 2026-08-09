@@ -98,25 +98,28 @@ class ControladorSeed {
             $db->exec("INSERT INTO estado_traslados (estado) VALUES
                 ('PENDIENTE'), ('EN_TRANSITO'), ('FINALIZADO'), ('CANCELADO')");
 
-            // 7. Tipos de Vehículo
-            $db->exec("INSERT INTO tipo_vehiculo (descripcion) VALUES
-                ('Ambulancia de Apoyo Vital Avanzado'),
-                ('Ambulancia Básica'),
-                ('Auto Utilitario'),
-                ('Camión de carga')");
+            // 7. Tipos de Vehículo (idempotente con init.sql — INSERT IGNORE)
+            $db->exec("INSERT IGNORE INTO tipo_vehiculo (descripcion) VALUES
+                ('Ambulancia'),
+                ('Auto'),
+                ('Camión'),
+                ('Otro')");
 
             // 8. Vehículos (10, mezcla de tipos + algunos NO-DISPONIBLES)
-            $db->exec("INSERT INTO vehiculos (estado, matricula, id_tipo_vehiculo) VALUES
-                ('DISPONIBLE',     'SCH-1234', 1),
-                ('DISPONIBLE',     'SCH-5678', 2),
-                ('DISPONIBLE',     'SCH-9100', 2),
-                ('DISPONIBLE',     'SCH-1111', 3),
-                ('DISPONIBLE',     'SCH-2222', 3),
-                ('DISPONIBLE',     'SCH-3333', 1),
-                ('DISPONIBLE',     'CAM-0001', 4),
-                ('DISPONIBLE',     'CAM-0002', 4),
-                ('NO-DISPONIBLE',  'SCH-9999', 1),
-                ('NO-DISPONIBLE',  'SCH-8888', 2)");
+            // Mapeo de tipos: 1=Ambulancia, 2=Auto, 3=Camión, 4=Otro.
+            // Las matrículas usan prefijo por tipo para que sean legibles
+            // a simple vista en el wizard de traslados.
+            $db->exec("INSERT INTO vehiculos (estado, matricula, id_tipo_vehiculo, activo) VALUES
+                ('DISPONIBLE',     'SCH-1234', 1, TRUE),
+                ('DISPONIBLE',     'SCH-5678', 1, TRUE),
+                ('DISPONIBLE',     'SCH-9100', 1, TRUE),
+                ('DISPONIBLE',     'SCH-1111', 2, TRUE),
+                ('DISPONIBLE',     'SCH-2222', 2, TRUE),
+                ('DISPONIBLE',     'SCH-3333', 1, TRUE),
+                ('DISPONIBLE',     'CAM-0001', 3, TRUE),
+                ('DISPONIBLE',     'CAM-0002', 3, TRUE),
+                ('NO-DISPONIBLE',  'SCH-9999', 1, TRUE),
+                ('NO-DISPONIBLE',  'SCH-8888', 2, TRUE)");
 
             // 9. Usuarios extra (10) — 6 choferes + 4 enfermeros
             $db->exec("INSERT INTO usuarios (ci, nombre, apellido, email, contrasena, activo) VALUES

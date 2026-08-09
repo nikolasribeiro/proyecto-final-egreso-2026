@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS `tipo_vehiculo` (
   `descripcion` VARCHAR(100) NOT NULL
 );
 
+-- Seed del catálogo de tipos de vehículo (idempotente: INSERT IGNORE).
+-- Garantiza que los 4 tipos básicos existan siempre, sin importar si el
+-- seeder corrió o no. Issue #131.
+INSERT IGNORE INTO `tipo_vehiculo` (`descripcion`) VALUES
+  ('Ambulancia'),
+  ('Auto'),
+  ('Camión'),
+  ('Otro');
+
 
 CREATE TABLE IF NOT EXISTS `usuario_roles` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -86,6 +95,7 @@ CREATE TABLE IF NOT EXISTS `vehiculos` (
   `estado` ENUM('DISPONIBLE', 'NO-DISPONIBLE'),
   `matricula` VARCHAR(20) UNIQUE NOT NULL,
   `id_tipo_vehiculo` INT NOT NULL,
+  `activo` BOOLEAN DEFAULT TRUE,
   FOREIGN KEY (`id_tipo_vehiculo`) REFERENCES `tipo_vehiculo`(`id`)
 );
 
