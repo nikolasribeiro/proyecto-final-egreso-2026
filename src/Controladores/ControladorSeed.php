@@ -65,8 +65,26 @@ class ControladorSeed {
                 (44444444, 'Enfermero', 'Prueba', 'enfermero@hospital.com', '{$passHash}', TRUE),
                 (55555555, 'Soporte', 'Prueba', 'soporte@hospital.com', '{$passHash}', TRUE)");
 
-            // Asignar Roles
+            // 2.b Root — usuario bootstrap con privilegios máximos (issue #40).
+            //     Username implícito: root. Password inicial: 'root' (temporal,
+            //     debe cambiar en el primer login). CI 99999999 para evitar
+            //     colisión con los 5 usuarios demo.
+            //
+            //     ADVERTENCIA: no usar en producción sin regenerar la password
+            //     con un valor aleatorio.
+            $rootPassHash = password_hash('root', PASSWORD_BCRYPT);
+            $db->exec("INSERT INTO usuarios (ci, nombre, apellido, email, contrasena, activo, debe_cambiar_password) VALUES
+                (99999999, 'Root', 'Sistema', 'root@hospital.local', '{$rootPassHash}', TRUE, TRUE)");
+
+            // Asignar Roles (los 5 demo por id hardcoded + root por lookup
+            // del enum para que no se rompa si cambian los IDs de seed).
             $db->exec("INSERT INTO usuario_roles (id_usuario, id_rol) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5)");
+
+            // Root → rol ADMINISTRATIVO (id 1 según init.sql).
+            $rootId = (int)$db->query("SELECT id FROM usuarios WHERE ci = 99999999")->fetchColumn();
+            if ($rootId > 0) {
+                $db->exec("INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES ({$rootId}, 1)");
+            }
 
             // 3. Categorías de Documentos Médicos (Casos reales del Hospital de Clínicas)
             $db->exec("INSERT INTO categorias_documentos (nombre_categoria) VALUES

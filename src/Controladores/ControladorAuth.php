@@ -137,6 +137,14 @@ class ControladorAuth
 
         $this->registrarAuditoriaLogin($usuario);
 
+        // Si la cuenta fue marcada con debe_cambiar_password (caso típico:
+        // el usuario root recién creado con password 'root'), forzamos
+        // el cambio antes de dejarlo entrar al sistema (#40).
+        if (!empty($usuario['debe_cambiar_password'])) {
+            redirigir('/cambiar-password');
+            return;
+        }
+
         redirigir($this->rutaDashboard);
     }
 
@@ -169,6 +177,125 @@ class ControladorAuth
 
         Sesion::destruir();
         redirigir('/login?message=logout');
+    }
+
+    /**
+     * Muestra el formulario de cambio de contraseña obligatorio (#40).
+     * Lo usa ControladorAuth::autenticar() cuando el usuario tiene
+     * `debe_cambiar_password = TRUE` (caso típico: bootstrap del root).
+     */
+    public function cambiarPassword(): void
+    {
+        $user = Sesion::obtener('user');
+        if (!is_array($user) || empty($user['id'])) {
+            redirigir('/login');
+            return;
+        }
+
+        $errorMessage = Sesion::obtener('error_password');
+        Sesion::eliminar('error_password');
+
+        vista('auth/cambiar-password', [
+            'csrf_token'   => Sesion::generarTokenCsrf(),
+            'error_message' => $errorMessage,
+            'usuario'      => $user,
+        ]);
+    }
+
+    /**
+     * Procesa el cambio de contraseña obligatorio (#40).
+     *
+     * Validaciones:
+     *   - Sesión activa con usuario logueado.
+     *   - Password actual correcto (re-autenticación).
+     *   - Password nueva distinta de la actual.
+     *   - Password nueva ≥ 8 chars y confirmación matchea.
+     *
+     * Si todo OK: baja el flag `debe_cambiar_password`, hashea y persiste
+     * la nueva, regenera sesión, redirige al dashboard.
+     */
+    public function cambiarPasswordSubmit(): void
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirigir('/cambiar-password');
+            return;
+        }
+
+        $tokenEnviado = $_POST['csrf_token'] ?? '';
+        if (!Sesion::validarTokenCsrf($tokenEnviado)) {
+            Sesion::guardar('error_password', 'csrf');
+            redirigir('/cambiar-password?error=csrf');
+            return;
+        }
+
+        $user = Sesion::obtener('user');
+        if (!is_array($user) || empty($user['id'])) {
+            redirigir('/login');
+            return;
+        }
+
+        $passActual  = (string)($_POST['password_actual'] ?? '');
+        $passNueva   = (string)($_POST['password_nueva'] ?? '');
+        $passConfirma = (string)($_POST['password_confirma'] ?? '');
+
+        if ($passNueva === '' || strlen($passNueva) < 8) {
+            Sesion::guardar('error_password', 'La nueva contraseña debe tener al menos 8 caracteres.');
+            redirigir('/cambiar-password?error=weak');
+            return;
+        }
+        if ($passNueva !== $passConfirma) {
+            Sesion::guardar('error_password', 'La confirmación no coincide con la nueva contraseña.');
+            redirigir('/cambiar-password?error=mismatch');
+            return;
+        }
+        if ($passNueva === $passActual) {
+            Sesion::guardar('error_password', 'La nueva contraseña debe ser distinta de la actual.');
+            redirigir('/cambiar-password?error=same');
+            return;
+        }
+
+        try {
+            $db = Conexion::obtenerInstancia();
+            $stmt = $db->prepare('SELECT contrasena FROM usuarios WHERE id = :id LIMIT 1');
+            $stmt->execute(['id' => (int)$user['id']]);
+            $row = $stmt->fetch();
+            if (!$row || !password_verify($passActual, (string)$row['contrasena'])) {
+                Sesion::guardar('error_password', 'La contraseña actual no es correcta.');
+                redirigir('/cambiar-password?error=wrong_current');
+                return;
+            }
+
+            $nuevoHash = password_hash($passNueva, PASSWORD_BCRYPT);
+            $upd = $db->prepare(
+                'UPDATE usuarios
+                    SET contrasena = :h, debe_cambiar_password = FALSE
+                  WHERE id = :id'
+            );
+            $upd->execute(['h' => $nuevoHash, 'id' => (int)$user['id']]);
+
+            // Auditoría.
+            $aud = $db->prepare(
+                "INSERT INTO logs_auditoria
+                   (id_usuario, accion, tabla_afectada, registro_id, detalles, ip_origen, fecha_hora)
+                 VALUES (:u, 'ACTUALIZAR', 'usuarios', :uid,
+                         JSON_OBJECT('evento', 'cambio_password_obligatorio'),
+                         :ip, NOW())"
+            );
+            $aud->execute([
+                'u'   => (int)$user['id'],
+                'uid' => (int)$user['id'],
+                'ip'  => $_SERVER['REMOTE_ADDR'] ?? null,
+            ]);
+
+            // Refrescar la sesión para que el flag quede en false.
+            Sesion::guardar('user', array_merge($user, ['debe_cambiar_password' => false]));
+
+            redirigir($this->rutaDashboard);
+        } catch (\Throwable $e) {
+            error_log('cambiarPasswordSubmit: ' . $e->getMessage());
+            Sesion::guardar('error_password', 'Error interno al cambiar la contraseña.');
+            redirigir('/cambiar-password?error=internal');
+        }
     }
 
     /**

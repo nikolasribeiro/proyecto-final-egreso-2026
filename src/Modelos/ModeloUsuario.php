@@ -314,7 +314,7 @@ class ModeloUsuario
         // ctype_digit para discriminar; cualquier otra cosa cae a email.
         $columna = ctype_digit($identifier) ? 'ci' : 'email';
         $stmt = $this->db->prepare(
-            "SELECT id, ci, nombre, apellido, email, contrasena, activo, fecha_alta
+            "SELECT id, ci, nombre, apellido, email, contrasena, activo, fecha_alta, debe_cambiar_password
              FROM usuarios
              WHERE {$columna} = :id
              LIMIT 1"
@@ -348,10 +348,11 @@ class ModeloUsuario
         }
 
         unset($fila['contrasena']); // nunca exponer el hash al caller
-        $fila['id']     = (int)$fila['id'];
-        $fila['ci']     = (int)$fila['ci'];
-        $fila['activo'] = (bool)$fila['activo'];
-        $fila['roles']  = $this->obtenerRolesUiPorUsuario((int)$fila['id']);
+        $fila['id']                     = (int)$fila['id'];
+        $fila['ci']                     = (int)$fila['ci'];
+        $fila['activo']                 = (bool)$fila['activo'];
+        $fila['debe_cambiar_password']  = (bool)($fila['debe_cambiar_password'] ?? false);
+        $fila['roles']                  = $this->obtenerRolesUiPorUsuario((int)$fila['id']);
 
         return $fila;
     }

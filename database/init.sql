@@ -245,3 +245,19 @@ CREATE TABLE IF NOT EXISTS `permisos_rol` (
 ALTER TABLE `logs_auditoria`
   MODIFY COLUMN `accion`
   ENUM('CREAR','ACTUALIZAR','ELIMINAR','LOGIN','LOGOUT','LOGIN_FAIL','PERMISO_TOGGLE') NOT NULL;
+
+-- ============================================================
+-- Migración feat/usuario-root
+-- Crea el usuario root con permisos máximos y obliga cambio de
+-- contraseña al primer login.
+--
+-- ADVERTENCIA DE SEGURIDAD: este seed crea un usuario con username
+-- implícito 'root' y password 'root' hasheada. NO USAR EN PRODUCCIÓN
+-- sin regenerar la password con un valor aleatorio. Está pensado para
+-- el primer bootstrap del entorno de desarrollo y para uso interno
+-- del equipo (#40).
+-- ============================================================
+
+ALTER TABLE `usuarios`
+  ADD COLUMN IF NOT EXISTS `debe_cambiar_password` TINYINT(1) NOT NULL DEFAULT 0
+  AFTER `activo`;

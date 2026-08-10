@@ -68,6 +68,10 @@ $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
 $enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);
 $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 
+// Cambio de contraseña obligatorio (#40 — usuario root recién creado).
+$enrutador->get('/cambiar-password',  [\Controladores\ControladorAuth::class, 'cambiarPassword']);
+$enrutador->post('/cambiar-password', [\Controladores\ControladorAuth::class, 'cambiarPasswordSubmit']);
+
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
 $enrutador->get('/dashboard/documentos/categoria/{slug}', [\Controladores\ControladorDashboard::class, 'documentosCategoria']);
