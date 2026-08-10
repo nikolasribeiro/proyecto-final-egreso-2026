@@ -36,7 +36,7 @@ $errorMsg = $error_message ?? '';
                         id="auth-username"
                         name="username"
                         class="auth-input"
-                        placeholder="Ingresá tu usuario"
+                        placeholder="Tu CI o email"
                         autocomplete="username"
                         required
                         minlength="3">

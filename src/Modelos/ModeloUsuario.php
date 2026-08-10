@@ -280,6 +280,80 @@ class ModeloUsuario
     }
 
     /**
+     * Autentica un usuario contra la BD real.
+     *
+     * Reemplaza al mock que vivía en `ControladorAuth::autenticar()` con
+     * 4 usuarios hardcodeados (issue #114). Acepta como identificador la
+     * CI (string numérica) o el email — los dos campos únicos del modelo.
+     * Devuelve null tanto cuando el usuario no existe como cuando la
+     * contraseña no coincide: el caller debe devolver SIEMPRE el mismo
+     * mensaje genérico para no permitir enumeración de cuentas.
+     *
+     * Si las credenciales son válidas, el array de retorno trae:
+     *   - id, ci, nombre, apellido, email, activo, fecha_alta
+     *   - roles: array<int, string> con UI keys (administrador, etc.)
+     *
+     * Esta función NO toca la sesión. El caller decide cómo persistir
+     * los datos del usuario autenticado (ControladorAuth).
+     *
+     * Usuarios inactivos (`activo = FALSE`) son rechazados aunque la
+     * contraseña sea correcta: no se permite login de cuentas dadas de
+     * baja.
+     */
+    public function autenticar(string $identifier, string $password): ?array
+    {
+        $identifier = trim($identifier);
+        if ($identifier === '' || $password === '') {
+            return null;
+        }
+
+        // Lookup por email o por CI. La CI es numérica, así que usamos
+        // ctype_digit para discriminar; cualquier otra cosa cae a email.
+        $columna = ctype_digit($identifier) ? 'ci' : 'email';
+        $stmt = $this->db->prepare(
+            "SELECT id, ci, nombre, apellido, email, contrasena, activo, fecha_alta
+             FROM usuarios
+             WHERE {$columna} = :id
+             LIMIT 1"
+        );
+        $stmt->execute(['id' => ctype_digit($identifier) ? (int)$identifier : $identifier]);
+        $fila = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$fila) {
+            // Para evitar timing attacks en la verificación de password,
+            // hacemos un hash dummy cuando el usuario no existe.
+            password_verify($password, '$2y$10$' . str_repeat('a', 53));
+            return null;
+        }
+
+        if (!$fila['activo']) {
+            return null;
+        }
+
+        if (!password_verify($password, (string)$fila['contrasena'])) {
+            return null;
+        }
+
+        // Si el hash necesitase re-hash (algoritmo viejo o cost factor
+        // bajo), lo actualizamos en una segunda pasada. Esto es idempotente
+        // y barato: solo se ejecuta cuando password_verify lo sugiere.
+        if (password_needs_rehash((string)$fila['contrasena'], PASSWORD_BCRYPT)) {
+            $nuevo = password_hash($password, PASSWORD_BCRYPT);
+            $upd = $this->db->prepare(
+                'UPDATE usuarios SET contrasena = :h WHERE id = :id'
+            );
+            $upd->execute(['h' => $nuevo, 'id' => (int)$fila['id']]);
+        }
+
+        unset($fila['contrasena']); // nunca exponer el hash al caller
+        $fila['id']     = (int)$fila['id'];
+        $fila['ci']     = (int)$fila['ci'];
+        $fila['activo'] = (bool)$fila['activo'];
+        $fila['roles']  = $this->obtenerRolesUiPorUsuario((int)$fila['id']);
+
+        return $fila;
+    }
+
+    /**
      * Devuelve un usuario por id de tabla. Devuelve null si no existe.
      */
     public function buscarPorId(int $id): ?array
