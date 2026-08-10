@@ -125,4 +125,71 @@ final class Roles
         $matriz = self::matriz();
         return $matriz[$rol][$recurso][$accion] ?? false;
     }
+
+    /**
+     * Mapa canónico UI key (`administrador`, etc.) → enum SQL
+     * (`roles.tipo_rol`, ej. `ADMINISTRATIVO`).
+     *
+     * Es el único punto de traducción entre los dos mundos. Todos los
+     * modelos, seeders y queries DEBEN pasar por acá. No hardcodear el
+     * enum en string literal en ningún otro lado (issue #115).
+     *
+     * Si en el futuro el enum se renombra para coincidir 1:1 con las
+     * claves PHP (ej. `ADMINISTRATIVO` → `ADMINISTRADOR`), alcanza con
+     * tocar este mapa y la migración SQL — el resto del código sigue
+     * funcionando sin cambios.
+     *
+     * @var array<string, string>
+     */
+    public const MAPA_UI_A_ENUM = [
+        'administrador'   => 'ADMINISTRATIVO',
+        'medico'          => 'MEDICO',
+        'enfermero'       => 'ENFERMERO',
+        'chofer'          => 'CHOFER',
+        'soporte_tecnico' => 'SOPORTE_TECNICO',
+    ];
+
+    /**
+     * Mapa inverso (enum SQL → UI key). Usado para hidratar la sesión,
+     * badges y respuestas JSON que esperan la clave canónica de la UI.
+     *
+     * @var array<string, string>
+     */
+    public const MAPA_ENUM_A_UI = [
+        'ADMINISTRATIVO'  => 'administrador',
+        'MEDICO'          => 'medico',
+        'ENFERMERO'       => 'enfermero',
+        'CHOFER'          => 'chofer',
+        'SOPORTE_TECNICO' => 'soporte_tecnico',
+    ];
+
+    /**
+     * Traduce una UI key (ej. `administrador`) al enum SQL
+     * (`ADMINISTRATIVO`). Devuelve null si la key no existe en el
+     * catálogo — el caller debe tratarlo como input inválido.
+     */
+    public static function mapUiToEnum(string $uiKey): ?string
+    {
+        return self::MAPA_UI_A_ENUM[$uiKey] ?? null;
+    }
+
+    /**
+     * Traduce un enum SQL (ej. `ADMINISTRATIVO`) a la UI key
+     * (`administrador`). Devuelve null si el enum no está mapeado
+     * (útil para defenderse de filas legacy con valores viejos).
+     */
+    public static function mapEnumToUi(string $enum): ?string
+    {
+        return self::MAPA_ENUM_A_UI[$enum] ?? null;
+    }
+
+    /**
+     * Lista de UI keys válidas (las mismas que `labels()`).
+     *
+     * @return array<int, string>
+     */
+    public static function uiKeysValidas(): array
+    {
+        return array_keys(self::MAPA_UI_A_ENUM);
+    }
 }
