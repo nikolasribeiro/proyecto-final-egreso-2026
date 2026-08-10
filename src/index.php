@@ -78,6 +78,10 @@ $enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::c
 // Permisos (matriz)
 $enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
 
+// MÓDULO PERMISOS (API) — issue #130
+$enrutador->post('/api/permisos/toggle', [\Controladores\ControladorDashboard::class, 'apiPermisoToggle']);
+$enrutador->post('/api/permisos/batch',  [\Controladores\ControladorDashboard::class, 'apiPermisoBatch']);
+
 // Usuarios (CRUD contra BD)
 $enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);
 $enrutador->get('/dashboard/usuarios/nuevo', [\Controladores\ControladorDashboard::class, 'usuarioNuevo']);

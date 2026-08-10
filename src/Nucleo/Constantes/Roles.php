@@ -15,10 +15,73 @@ namespace Nucleo\Constantes;
 final class Roles
 {
     /**
-     * Devuelve la matriz completa de permisos.
+     * Cache lazy de permisos efectivos leídos desde BD (issue #130).
      *
-     * TODO(#130): los permisos por rol sobre cada recurso deben pasar a la
-     * matriz interactiva en BD. Hasta entonces, ajustar acá implica commit.
+     * Estructura: [ui_key][recurso][accion] => bool. Se llena en la
+     * primera llamada a `permiso()` y se conserva por proceso PHP. Las
+     * mutaciones (`ModeloPermiso::alternar`) llaman a
+     * `Roles::invalidarCachePermisos()` para forzar la recarga.
+     *
+     * Limitación conocida en PHP-FPM multi-worker: cada worker tiene su
+     * propio cache, así que un toggle puede tardar unos segundos en
+     * propagarse a todos los workers hasta que sus caches expiren. Para
+     * la v1 aceptamos esa ventana — se reemplaza por APCu o Redis en
+     * una iteración posterior si hace falta consistencia estricta.
+     *
+     * @var array<string, array<string, array<string, bool>>>|null
+     */
+    private static ?array $cachePermisosBd = null;
+
+    /**
+     * Marca el cache de BD como vencido. Llamado por
+     * `ModeloPermiso::alternar()` después de una mutación exitosa.
+     * Seguro de llamar en cualquier momento — el próximo acceso
+     * simplemente re-llenará el cache.
+     */
+    public static function invalidarCachePermisos(): void
+    {
+        self::$cachePermisosBd = null;
+    }
+
+    /**
+     * Carga el cache de permisos desde BD. Idempotente: si ya está
+     * cargado, no hace nada. Si la BD no responde o la tabla está
+     * vacía, deja el cache en [] (todos los permisos caen al fallback
+     * hardcoded).
+     */
+    private static function cargarCachePermisosBd(): void
+    {
+        if (self::$cachePermisosBd !== null) {
+            return;
+        }
+
+        self::$cachePermisosBd = [];
+        try {
+            $modelo = new \Modelos\ModeloPermiso();
+            $bd = $modelo->obtenerMatriz();      // [id_rol][recurso][accion] => bool
+            $roles = $modelo->obtenerRoles();    // [id_rol] => tipo_rol enum
+
+            foreach ($bd as $idRol => $recursos) {
+                $uiKey = self::mapEnumToUi((string)($roles[$idRol] ?? ''));
+                if ($uiKey !== null) {
+                    self::$cachePermisosBd[$uiKey] = $recursos;
+                }
+            }
+        } catch (\Throwable $e) {
+            // No rompemos la app si la BD no está disponible: caemos
+            // al fallback hardcoded. Logueamos para diagnóstico.
+            error_log('Roles::permiso: no se pudo cargar cache BD: ' . $e->getMessage());
+            self::$cachePermisosBd = [];
+        }
+    }
+
+    /**
+     * Devuelve la matriz completa de permisos hardcodeada.
+     *
+     * Es la fuente de verdad para el seed de `permisos_rol` y el
+     * fallback de `permiso()`. La matriz dinámica vive en BD — la
+     * `permiso()` consulta BD primero y solo cae a esta constante si
+     * no hay override.
      *
      * @return array<string, array<string, array<string, bool>>>
      */
@@ -119,9 +182,26 @@ final class Roles
     /**
      * Devuelve el permiso (true/false) para un rol/recurso/acción.
      * Si el rol/recurso/acción no existe, devuelve false.
+     *
+     * Orden de resolución (issue #130):
+     *   1. Cache lazy de BD (`permisos_rol`). Si la celda está definida,
+     *      ese valor gana.
+     *   2. Fallback a la constante hardcodeada `matriz()`.
+     *
+     * Si la BD está vacía o no responde, todo cae al fallback — la app
+     * sigue funcionando con los defaults hasta que se siembren toggles
+     * desde la UI.
      */
     public static function permiso(string $rol, string $recurso, string $accion): bool
     {
+        self::cargarCachePermisosBd();
+
+        // 1. Override desde BD.
+        if (isset(self::$cachePermisosBd[$rol][$recurso][$accion])) {
+            return (bool)self::$cachePermisosBd[$rol][$recurso][$accion];
+        }
+
+        // 2. Fallback hardcoded.
         $matriz = self::matriz();
         return $matriz[$rol][$recurso][$accion] ?? false;
     }
