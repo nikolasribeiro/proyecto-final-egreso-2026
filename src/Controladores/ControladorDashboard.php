@@ -696,6 +696,26 @@ class ControladorDashboard extends RutaProtegida
             abortar(403);
         }
 
+        // Resolvemos id_rol (PK numérica de la BD) por cada UI key del
+        // catálogo. La API espera id_rol numérico, no la UI key — y
+        // del lado JS no queremos ir a buscarlo en cada click (#130).
+        $idRoles = [];
+        try {
+            $modelo = new \Modelos\ModeloPermiso();
+            $rolesBd = $modelo->obtenerRoles(); // [id_rol] => tipo_rol enum
+            foreach (Roles::labels() as $uiKey => $label) {
+                $enum = Roles::mapUiToEnum($uiKey);
+                if ($enum === null) continue;
+                $id = array_search($enum, $rolesBd, true);
+                if ($id !== false) {
+                    $idRoles[$uiKey] = (int)$id;
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('permisos(): no se pudo resolver idRoles: ' . $e->getMessage());
+            $idRoles = [];
+        }
+
         vista('modulos/permisos/inicio', [
             'titulo_pagina' => 'Matriz de Permisos',
             'nombre' => $this->nombre_usuario,
@@ -704,6 +724,9 @@ class ControladorDashboard extends RutaProtegida
             'recursos' => Roles::recursos(),
             'acciones' => Roles::acciones(),
             'roles' => Roles::labels(),
+            'id_roles' => $idRoles,
+            'puede_editar' => Roles::permiso($this->rol, 'permisos', 'editar'),
+            'csrf_token' => \Nucleo\Sesion::generarTokenCsrf(),
         ], 'admin');
     }
 
