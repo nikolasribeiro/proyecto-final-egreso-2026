@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS `vehiculos` (
 CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_usuario` INT,
-  `accion` ENUM('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT') NOT NULL,
+  `accion` ENUM('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT', 'LOGIN_FAIL') NOT NULL,
   `tabla_afectada` VARCHAR(100) NOT NULL,
   `registro_id` INT,
   `detalles` JSON,
@@ -110,6 +110,17 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `fecha_hora` DATETIME,
   FOREIGN KEY (`id_usuario`) REFERENCES `usuarios`(`id`)
 );
+
+-- ============================================================
+-- Migración fix/issue-114-auth-real-bd
+-- Extiende el enum `logs_auditoria.accion` con `LOGIN_FAIL` para
+-- registrar intentos de autenticación fallidos (id_usuario NULL en
+-- ese caso, porque el identificador puede no corresponder a nadie).
+-- Idempotente: MODIFY COLUMN reescribe el enum al valor deseado.
+-- ============================================================
+ALTER TABLE `logs_auditoria`
+  MODIFY COLUMN `accion`
+  ENUM('CREAR','ACTUALIZAR','ELIMINAR','LOGIN','LOGOUT','LOGIN_FAIL') NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS `solicitud_traslados` (
