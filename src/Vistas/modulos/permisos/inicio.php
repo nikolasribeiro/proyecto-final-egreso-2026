@@ -7,7 +7,7 @@
  * @var array $recursos
  * @var array $acciones
  * @var array $roles
- * @var array $idRoles
+ * @var array $id_roles
  * @var bool  $puede_editar
  * @var string $csrf_token
  */
@@ -43,7 +43,7 @@
                     'matriz' => $matriz,
                     'acciones' => $acciones,
                     'roles' => $roles,
-                    'idRoles' => $idRoles,
+                    'idRoles' => $id_roles,
                     'puede_editar' => $puede_editar,
                     'recursoClave' => $recursoClave,
                     'recursoLabel' => $recursoLabel,
