@@ -2,14 +2,51 @@
 
 /**
  * @var array $documentos
+ *
+ * ModeloDocumento::obtenerTodos() devuelve filas con keys:
+ *   - id, id_categoria, titulo, ruta_archivo, documento_activo,
+ *     ci_funcionario, created_at, updated_at
+ *   - nombre_categoria, slug (del JOIN con categorias_documentos)
+ *
+ * El componente `tabla/fila` espera un shape distinto:
+ *   - nombreDocumento (= titulo)
+ *   - tipoDocumento (derivado de la extensión de ruta_archivo)
+ *   - tamanoDocumento (no se persiste en BD → 'N/A')
+ *   - fechaSubidaDocumento (= created_at)
+ *   - rutaDocumento (= ruta_archivo)
+ *   - categoriaDocumento = ['slug' => ..., 'nombre' => ...]
+ *
+ * El mapeo vive acá. Si el modelo agrega más columnas (ej. tamaño
+ * real del archivo en BD), alcanza con actualizar este view.
  */
 $documentos = $documentos ?? [];
+
+/**
+ * Devuelve el tipo MIME aproximado según la extensión de la ruta.
+ * Si no se puede inferir, devuelve 'Documento'.
+ */
+function tipoDocumentoDesdeRuta(?string $ruta): string
+{
+    if ($ruta === null || $ruta === '') return 'Documento';
+    $ext = strtolower(pathinfo($ruta, PATHINFO_EXTENSION));
+    $map = [
+        'pdf'  => 'PDF',
+        'doc'  => 'DOC',  'docx' => 'DOCX',
+        'xls'  => 'XLS',  'xlsx' => 'XLSX',
+        'ppt'  => 'PPT',  'pptx' => 'PPTX',
+        'png'  => 'PNG',  'jpg'  => 'JPG', 'jpeg' => 'JPG',
+        'gif'  => 'GIF',  'svg'  => 'SVG',
+        'txt'  => 'TXT',  'csv'  => 'CSV',
+        'zip'  => 'ZIP',  'rar'  => 'RAR',
+    ];
+    return $map[$ext] ?? strtoupper($ext ?: 'Documento');
+}
 
 // Calcular categorías únicas para el filtro
 $categoriasUnicas = [];
 foreach ($documentos as $doc) {
-    $slug = $doc['categoria']['slug'] ?? 'general';
-    $nombre = $doc['categoria']['nombre'] ?? 'General';
+    $slug = (string)($doc['slug'] ?? 'general');
+    $nombre = (string)($doc['nombre_categoria'] ?? 'General');
     $categoriasUnicas[$slug] = $nombre;
 }
 ?>
@@ -64,15 +101,21 @@ foreach ($documentos as $doc) {
                 </thead>
                 <tbody>
                     <?php foreach ($documentos as $doc) : ?>
-                        <?php componente('modulos/documentos/tabla/fila', [
-                            'idDocumento' => $doc['id'],
-                            'nombreDocumento' => $doc['nombre'],
-                            'tipoDocumento' => $doc['tipo'],
-                            'tamanoDocumento' => $doc['tamano'],
-                            'fechaSubidaDocumento' => $doc['fecha_subida'],
-                            'rutaDocumento' => $doc['ruta'],
-                            'categoriaDocumento' => $doc['categoria'] ?? ['slug' => 'general', 'nombre' => 'General'],
-                        ]) ?>
+                        <?php
+                            $ruta = (string)($doc['ruta_archivo'] ?? '');
+                            componente('modulos/documentos/tabla/fila', [
+                                'idDocumento'         => (int)($doc['id'] ?? 0),
+                                'nombreDocumento'     => (string)($doc['titulo'] ?? '(sin título)'),
+                                'tipoDocumento'       => tipoDocumentoDesdeRuta($ruta),
+                                'tamanoDocumento'     => 'N/A',
+                                'fechaSubidaDocumento' => (string)($doc['created_at'] ?? ''),
+                                'rutaDocumento'       => $ruta,
+                                'categoriaDocumento'  => [
+                                    'slug'   => (string)($doc['slug'] ?? 'general'),
+                                    'nombre' => (string)($doc['nombre_categoria'] ?? 'General'),
+                                ],
+                            ]);
+                        ?>
                     <?php endforeach; ?>
 
                 </tbody>
