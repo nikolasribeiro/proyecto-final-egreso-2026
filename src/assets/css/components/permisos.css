@@ -110,3 +110,77 @@
   background: var(--light-gray);
   color: var(--secondary-gray);
 }
+
+/* ==========================================================================
+   Botón toggle (#130): estados hover/active/focus/pending/disabled.
+   Reusa las variables de base/variables.css — sin colores nuevos.
+   ========================================================================== */
+
+button.permisos-check {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 80ms ease, box-shadow 120ms ease, background 120ms ease;
+  font-family: inherit;
+}
+
+button.permisos-check:hover {
+  transform: scale(1.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+button.permisos-check:active {
+  transform: scale(0.96);
+}
+
+button.permisos-check:focus-visible {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 2px;
+}
+
+button.permisos-check.permisos-check-pending {
+  opacity: 0.55;
+  cursor: progress;
+  animation: permisos-pulse 800ms ease-in-out infinite;
+}
+
+button.permisos-check:disabled {
+  cursor: not-allowed;
+}
+
+@keyframes permisos-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.85; }
+}
+
+/* Readonly: celda que el usuario actual NO puede editar. */
+.permisos-check-readonly {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   Toast efímero de feedback (#130).
+   ========================================================================== */
+
+.permisos-toast {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--primary-blue);
+  color: var(--white);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 0.9rem;
+  transition: opacity 200ms ease, transform 200ms ease;
+  max-width: 320px;
+}
+
+.permisos-toast-info    { background: var(--primary-blue); }
+.permisos-toast-danger  { background: #c0392b; }
+
+.permisos-toast-out {
+  opacity: 0;
+  transform: translateY(-8px);
+}
