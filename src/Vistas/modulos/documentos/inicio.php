@@ -42,12 +42,18 @@ function tipoDocumentoDesdeRuta(?string $ruta): string
     return $map[$ext] ?? strtoupper($ext ?: 'Documento');
 }
 
-// Calcular categorías únicas para el filtro
+// Calcular categorías únicas para el filtro. OJO: las variables locales
+// de este loop NO deben llamarse $nombre ni $rol porque Vista::mostrar()
+// hace extract() en el mismo scope y $nombre/$rol se filtran al layout
+// admin.php, donde se usan para mostrar el usuario logueado en el
+// sidebar. Si pisamos $nombre acá, el sidebar muestra el nombre de la
+// categoría en lugar del nombre real (bug pre-existente que recién se
+// notó con el usuario root).
 $categoriasUnicas = [];
 foreach ($documentos as $doc) {
-    $slug = (string)($doc['slug'] ?? 'general');
-    $nombre = (string)($doc['nombre_categoria'] ?? 'General');
-    $categoriasUnicas[$slug] = $nombre;
+    $catSlug   = (string)($doc['slug'] ?? 'general');
+    $catNombre = (string)($doc['nombre_categoria'] ?? 'General');
+    $categoriasUnicas[$catSlug] = $catNombre;
 }
 ?>
 
@@ -81,8 +87,8 @@ foreach ($documentos as $doc) {
         <label class="form-label" for="filtro-categoria">Filtrar por categoría</label>
         <select id="filtro-categoria" class="form-select" onchange="filtrarDocumentos(this.value)">
             <option value="all">Todas las categorías</option>
-            <?php foreach ($categoriasUnicas as $slug => $nombre): ?>
-                <option value="<?= e($slug) ?>"><?= e($nombre) ?></option>
+            <?php foreach ($categoriasUnicas as $catSlug => $catNombre): ?>
+                <option value="<?= e($catSlug) ?>"><?= e($catNombre) ?></option>
             <?php endforeach; ?>
         </select>
     </div>

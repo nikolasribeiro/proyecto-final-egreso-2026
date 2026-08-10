@@ -87,11 +87,22 @@ class ControladorSeed {
             }
 
             // 3. Categorías de Documentos Médicos (Casos reales del Hospital de Clínicas)
-            $db->exec("INSERT INTO categorias_documentos (nombre_categoria) VALUES
-                ('Ginecobstetricia - IVE'),
-                ('Urología - Post-operatorio'),
-                ('Imagenología - Preparaciones'),
-                ('Cardiología - Tratamientos CONTINUOS')");
+            //    Insertamos con slug explícito para que el filtro de la
+            //    vista de documentos funcione (#109 + fix del filtro).
+            $db->exec("INSERT INTO categorias_documentos (nombre_categoria, slug) VALUES
+                ('Ginecobstetricia - IVE',                'ginecobstetricia-ive'),
+                ('Urología - Post-operatorio',            'urologia-post-operatorio'),
+                ('Imagenología - Preparaciones',          'imagenologia-preparaciones'),
+                ('Cardiología - Tratamientos CONTINUOS',  'cardiologia-tratamientos-continuos')");
+
+            // 3.b Self-healing: cualquier categoría existente que haya
+            //     quedado con slug NULL (ej. seed anterior a este fix)
+            //     se le autocalcula el slug. La columna tiene constraint
+            //     UNIQUE así que si dos nombres generan el mismo slug,
+            //     el primero gana.
+            $db->exec("UPDATE categorias_documentos
+                       SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-'))
+                       WHERE slug IS NULL OR slug = ''");
 
             // 4. Documentos de Muestra (Usando la CI del Administrador Ficticio: 11111111)
             $db->exec("INSERT INTO documentos (id_categoria, titulo, ruta_archivo, documento_activo, ci_funcionario) VALUES

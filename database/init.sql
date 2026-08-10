@@ -194,14 +194,59 @@ CREATE TABLE IF NOT EXISTS `reportes_destino` (
 );
 
 -- Agregar la columna slug a la tabla
-ALTER TABLE categorias_documentos 
+ALTER TABLE categorias_documentos
 ADD COLUMN slug VARCHAR(80) UNIQUE;
 
--- Poblar los slugs existentes transformando el nombre de la categoría
--- (Convierte a minúsculas y reemplaza espacios por guiones)
+-- Poblar los slugs existentes transformando el nombre de la categoría.
+-- Normaliza:
+--   - a minúsculas
+--   - acentos comunes (á é í ó ú ñ) a su versión sin tilde
+--   - todo lo no-alfanumérico a guion
+--   - guiones múltiples → uno solo
+--   - guiones al inicio/fin → se eliminan
+--
+-- Esto es para los inserts del seed que no especifiquen slug explícito.
+-- El seed actual (ControladorSeed.php) ya pasa slugs hardcoded para
+-- evitar depender de esta normalización — este UPDATE queda como
+-- fallback para BDs viejas donde quedó slug NULL (era el bug del filtro
+-- de categorías en /dashboard/documentos).
 UPDATE categorias_documentos
-SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-'))
-WHERE slug IS NULL;
+SET slug = LOWER(nombre_categoria)
+WHERE slug IS NULL OR slug = '';
+
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'á', 'a')
+WHERE slug IS NOT NULL AND slug LIKE '%á%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'é', 'e')
+WHERE slug IS NOT NULL AND slug LIKE '%é%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'í', 'i')
+WHERE slug IS NOT NULL AND slug LIKE '%í%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ó', 'o')
+WHERE slug IS NOT NULL AND slug LIKE '%ó%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ú', 'u')
+WHERE slug IS NOT NULL AND slug LIKE '%ú%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ñ', 'n')
+WHERE slug IS NOT NULL AND slug LIKE '%ñ%';
+
+-- Reemplazar todo lo no-alfanumérico por guion, colapsar y trim.
+UPDATE categorias_documentos
+SET slug = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(slug, ' ', '-'), '.', '-'), ',', '-'), ';', '-'), '/', '-')
+WHERE slug IS NOT NULL;
+
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, '--', '-')
+WHERE slug LIKE '%--%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, '--', '-')
+WHERE slug LIKE '%--%';
+UPDATE categorias_documentos
+SET slug = TRIM(BOTH '-' FROM slug)
+WHERE slug LIKE '-%' OR slug LIKE '%-';
 
 -- ============================================================
 -- Migración feat/127-gestion-usuarios
