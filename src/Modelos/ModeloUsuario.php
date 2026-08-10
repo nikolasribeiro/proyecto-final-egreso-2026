@@ -253,8 +253,6 @@ class ModeloUsuario
             'e_enfermero' => $enumEnferm,
             'e_soporte'   => $enumSoporte,
         ]);
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute();
         $fila = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
