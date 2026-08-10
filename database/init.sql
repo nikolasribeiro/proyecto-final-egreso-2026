@@ -208,3 +208,29 @@ ALTER TABLE `roles`
 -- "Fecha de Alta" sin tener que inferirla por orden de id.
 ALTER TABLE `usuarios`
   ADD COLUMN IF NOT EXISTS `fecha_alta` DATETIME DEFAULT CURRENT_TIMESTAMP AFTER `activo`;
+-- ============================================================
+-- Migración feat/issue-130-matriz-permisos-ui
+-- Persistencia de la matriz de permisos en BD (#130).
+-- Antes la matriz vivía hardcodeada en `Roles::matriz()`; ahora
+-- cada celda (rol × recurso × acción) puede alternarse desde la
+-- UI y persistir acá. `Roles::permiso()` lee de esta tabla con
+-- fallback a la constante (issue #115).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS `permisos_rol` (
+  `id_rol` INT NOT NULL,
+  `recurso` VARCHAR(50) NOT NULL,
+  `accion` VARCHAR(20) NOT NULL,
+  `permitido` TINYINT(1) NOT NULL DEFAULT 0,
+  `updated_at` DATETIME NULL,
+  `updated_by` INT NULL,
+  PRIMARY KEY (`id_rol`, `recurso`, `accion`),
+  FOREIGN KEY (`id_rol`) REFERENCES `roles`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`updated_by`) REFERENCES `usuarios`(`id`)
+);
+
+-- Agregar PERMISO_TOGGLE al enum de acción de auditoría (issue #130).
+-- Idempotente: MODIFY COLUMN reescribe el enum al set deseado.
+ALTER TABLE `logs_auditoria`
+  MODIFY COLUMN `accion`
+  ENUM('CREAR','ACTUALIZAR','ELIMINAR','LOGIN','LOGOUT','LOGIN_FAIL','PERMISO_TOGGLE') NOT NULL;
