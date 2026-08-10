@@ -25,35 +25,23 @@ class ModeloUsuario
     /**
      * Mapa UI key (`Roles::labels`) → `roles.tipo_rol` en MySQL.
      *
-     * Es el único punto de traducción entre el "nombre de rol" que conoce
-     * la UI / matriz de permisos (`administrador`, `medico`, `enfermero`,
-     * `soporte_tecnico`) y el enum interno de la BD (`ADMINISTRATIVO`,
-     * `MEDICO`, `ENFERMERO`, `SOPORTE_TECNICO`). El catálogo `Roles::labels()`
-     * usa el UI key; el filtro operativo de traslados (`tipo_rol = 'CHOFER'`)
-     * usa el enum BD.
+     * Re-export desde `Nucleo\Constantes\Roles::MAPA_UI_A_ENUM` (issue #115).
+     * El modelo conserva la constante para no romper callers externos
+     * (`ModeloUsuario::ROL_UI_A_DB`), pero la fuente de verdad única vive
+     * en `Roles`. Si se agrega un rol nuevo, se toca `Roles` y este shim
+     * lo refleja automáticamente.
      *
      * @var array<string, string>
      */
-    public const ROL_UI_A_DB = [
-        'administrador'   => 'ADMINISTRATIVO',
-        'medico'          => 'MEDICO',
-        'enfermero'       => 'ENFERMERO',
-        'chofer'          => 'CHOFER',
-        'soporte_tecnico' => 'SOPORTE_TECNICO',
-    ];
+    public const ROL_UI_A_DB = \Nucleo\Constantes\Roles::MAPA_UI_A_ENUM;
 
     /**
      * Mapa inverso: enum BD → UI key (para hidratar badges).
+     * Re-export desde `Roles::MAPA_ENUM_A_UI`.
      *
      * @var array<string, string>
      */
-    public const ROL_DB_A_UI = [
-        'ADMINISTRATIVO'   => 'administrador',
-        'MEDICO'           => 'medico',
-        'ENFERMERO'        => 'enfermero',
-        'CHOFER'           => 'chofer',
-        'SOPORTE_TECNICO'  => 'soporte_tecnico',
-    ];
+    public const ROL_DB_A_UI = \Nucleo\Constantes\Roles::MAPA_ENUM_A_UI;
 
     public function __construct()
     {
@@ -232,24 +220,39 @@ class ModeloUsuario
      */
     public function contarPorRol(): array
     {
+        // Los enum values vienen del mapa canónico de Roles (issue #115).
+        // NO hardcodear literales acá: si el enum se renombra, este query
+        // debe actualizarse junto con el ALTER de la BD.
+        $enumAdmin   = \Nucleo\Constantes\Roles::mapUiToEnum('administrador');
+        $enumMedico  = \Nucleo\Constantes\Roles::mapUiToEnum('medico');
+        $enumChofer  = \Nucleo\Constantes\Roles::mapUiToEnum('chofer');
+        $enumEnferm  = \Nucleo\Constantes\Roles::mapUiToEnum('enfermero');
+        $enumSoporte = \Nucleo\Constantes\Roles::mapUiToEnum('soporte_tecnico');
+
         $sql = "SELECT
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'ADMINISTRATIVO' THEN u.id
+                        WHEN r.tipo_rol = :e_admin THEN u.id
                     END) AS administrador,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'MEDICO' THEN u.id
+                        WHEN r.tipo_rol = :e_medico THEN u.id
                     END) AS medico,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol IN ('CHOFER', 'ENFERMERO') THEN u.id
+                        WHEN r.tipo_rol IN (:e_chofer, :e_enfermero) THEN u.id
                     END) AS enfermero,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'SOPORTE_TECNICO' THEN u.id
+                        WHEN r.tipo_rol = :e_soporte THEN u.id
                     END) AS soporte_tecnico
                 FROM usuarios u
                 INNER JOIN usuario_roles ur ON ur.id_usuario = u.id
                 INNER JOIN roles r ON ur.id_rol = r.id";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute();
+        $stmt->execute([
+            'e_admin'     => $enumAdmin,
+            'e_medico'    => $enumMedico,
+            'e_chofer'    => $enumChofer,
+            'e_enfermero' => $enumEnferm,
+            'e_soporte'   => $enumSoporte,
+        ]);
         $fila = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
