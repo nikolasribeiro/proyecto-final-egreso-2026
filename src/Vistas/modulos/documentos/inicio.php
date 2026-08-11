@@ -98,5 +98,7 @@ foreach ($documentos as $doc) {
     }
 </script>
 
-<!-- Upload Document Modal -->
-<?php componente('modulos/documentos/subida-documentos-modal') ?>
+<!-- Upload Document Modal issue 116 -->
+<?php componente('modulos/documentos/subida-documentos-modal', [
+    'categorias' => $categoriasUnicas
+]) ?>
