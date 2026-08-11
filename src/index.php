@@ -57,11 +57,20 @@ $enrutador = new \Nucleo\Enrutador();
 // Ruta para la Página de Inicio (Raíz)
 $enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
 
+// ==========================================
+// RUTAS PÚBLICAS (ACCESO POR QR - ISSUE # 110)
+// ==========================================
+$enrutador->get('/d/{slug}', [\Controladores\ControladorDocumentosPublico::class, 'categoriaPorSlug']);
+$enrutador->get('/d/doc/{id}', [\Controladores\ControladorDocumentosPublico::class, 'verPorId']);
 
 // Rutas de Autenticación
 $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
 $enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);
 $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
+
+// Cambio de contraseña obligatorio (#40 — usuario root recién creado).
+$enrutador->get('/cambiar-password',  [\Controladores\ControladorAuth::class, 'cambiarPassword']);
+$enrutador->post('/cambiar-password', [\Controladores\ControladorAuth::class, 'cambiarPasswordSubmit']);
 
 // Rutas del Dashboard (Luego de autenticacion)
 $enrutador->get('/dashboard/documentos', [\Controladores\ControladorDashboard::class, 'documentos']);
@@ -77,6 +86,10 @@ $enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::c
 
 // Permisos (matriz)
 $enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
+
+// MÓDULO PERMISOS (API) — issue #130
+$enrutador->post('/api/permisos/toggle', [\Controladores\ControladorDashboard::class, 'apiPermisoToggle']);
+$enrutador->post('/api/permisos/batch',  [\Controladores\ControladorDashboard::class, 'apiPermisoBatch']);
 
 // Usuarios (CRUD contra BD)
 $enrutador->get('/dashboard/usuarios', [\Controladores\ControladorDashboard::class, 'usuarios']);

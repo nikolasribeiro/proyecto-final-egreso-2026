@@ -53,4 +53,5 @@
    PAGE-SPECIFIC - Estilos específicos por página
    ========================================================================== */
 /* @import url("pages/auth.css"); */
+@import url("pages/documentos.css");
 /* @import url("pages/dashboard.css"); */

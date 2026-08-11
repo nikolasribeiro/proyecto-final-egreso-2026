@@ -481,6 +481,148 @@ class ControladorDashboard extends RutaProtegida
     }
 
     // ==========================================
+    // MÓDULO PERMISOS (API)
+    // ==========================================
+
+    /**
+     * Alterna una celda de la matriz de permisos (#130).
+     *
+     * Body esperado:
+     *   - id_rol    int
+     *   - recurso   string
+     *   - accion    string (ver | crear | editar | eliminar)
+     *   - permitido bool
+     *
+     * Devuelve `{success: true, antes: bool, despues: bool}` o
+     * `{success: false, message: string}` con código 4xx/5xx.
+     */
+    public function apiPermisoToggle(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!Roles::permiso($this->rol, 'permisos', 'editar')) {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'message' => 'No tenés permisos para editar la matriz.',
+            ]);
+            return;
+        }
+
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        $idRol    = (int)($data['id_rol'] ?? 0);
+        $recurso  = trim((string)($data['recurso'] ?? ''));
+        $accion   = trim((string)($data['accion'] ?? ''));
+        $permitido = filter_var(
+            $data['permitido'] ?? null,
+            FILTER_VALIDATE_BOOLEAN,
+            FILTER_NULL_ON_FAILURE
+        );
+
+        if ($idRol <= 0 || $recurso === '' || $accion === '' || $permitido === null) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Datos incompletos o inválidos.',
+            ]);
+            return;
+        }
+
+        $user = Sesion::obtener('user');
+        $usuarioId = is_array($user) ? (int)($user['id'] ?? 0) : 0;
+        if ($usuarioId <= 0) {
+            http_response_code(401);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Sesión inválida.',
+            ]);
+            return;
+        }
+
+        try {
+            $modelo = new \Modelos\ModeloPermiso();
+            $diff = $modelo->alternar($idRol, $recurso, $accion, $permitido, $usuarioId);
+            echo json_encode([
+                'success' => true,
+                'antes'   => $diff['antes'],
+                'despues' => $diff['despues'],
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            error_log('apiPermisoToggle: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Error interno al alternar el permiso.',
+            ]);
+        }
+    }
+
+    /**
+     * Alterna varias celdas en una sola transacción (#130).
+     *
+     * Body esperado:
+     *   - toggles: array<{id_rol:int, recurso:string, accion:string, permitido:bool}>
+     */
+    public function apiPermisoBatch(): void
+    {
+        header('Content-Type: application/json');
+
+        if (!Roles::permiso($this->rol, 'permisos', 'editar')) {
+            http_response_code(403);
+            echo json_encode([
+                'success' => false,
+                'message' => 'No tenés permisos para editar la matriz.',
+            ]);
+            return;
+        }
+
+        $data = $this->leerBodyConCsrf();
+        if ($data === null) return;
+
+        $toggles = $data['toggles'] ?? null;
+        if (!is_array($toggles) || empty($toggles)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Falta el array de toggles.',
+            ]);
+            return;
+        }
+
+        $user = Sesion::obtener('user');
+        $usuarioId = is_array($user) ? (int)($user['id'] ?? 0) : 0;
+        if ($usuarioId <= 0) {
+            http_response_code(401);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Sesión inválida.',
+            ]);
+            return;
+        }
+
+        try {
+            $modelo = new \Modelos\ModeloPermiso();
+            $diffs = $modelo->alternarBatch($toggles, $usuarioId);
+            echo json_encode(['success' => true, 'diffs' => $diffs]);
+        } catch (\InvalidArgumentException $e) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            error_log('apiPermisoBatch: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Error interno al alternar los permisos.',
+            ]);
+        }
+    }
+
+    // ==========================================
     // MÓDULO ENCUESTAS
     // ==========================================
 
@@ -554,6 +696,26 @@ class ControladorDashboard extends RutaProtegida
             abortar(403);
         }
 
+        // Resolvemos id_rol (PK numérica de la BD) por cada UI key del
+        // catálogo. La API espera id_rol numérico, no la UI key — y
+        // del lado JS no queremos ir a buscarlo en cada click (#130).
+        $idRoles = [];
+        try {
+            $modelo = new \Modelos\ModeloPermiso();
+            $rolesBd = $modelo->obtenerRoles(); // [id_rol] => tipo_rol enum
+            foreach (Roles::labels() as $uiKey => $label) {
+                $enum = Roles::mapUiToEnum($uiKey);
+                if ($enum === null) continue;
+                $id = array_search($enum, $rolesBd, true);
+                if ($id !== false) {
+                    $idRoles[$uiKey] = (int)$id;
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('permisos(): no se pudo resolver idRoles: ' . $e->getMessage());
+            $idRoles = [];
+        }
+
         vista('modulos/permisos/inicio', [
             'titulo_pagina' => 'Matriz de Permisos',
             'nombre' => $this->nombre_usuario,
@@ -562,6 +724,9 @@ class ControladorDashboard extends RutaProtegida
             'recursos' => Roles::recursos(),
             'acciones' => Roles::acciones(),
             'roles' => Roles::labels(),
+            'id_roles' => $idRoles,
+            'puede_editar' => Roles::permiso($this->rol, 'permisos', 'editar'),
+            'csrf_token' => \Nucleo\Sesion::generarTokenCsrf(),
         ], 'admin');
     }
 

@@ -7,6 +7,9 @@
  * @var array $recursos
  * @var array $acciones
  * @var array $roles
+ * @var array $id_roles
+ * @var bool  $puede_editar
+ * @var string $csrf_token
  */
 ?>
 
@@ -25,15 +28,23 @@
         <span class="permisos-check permisos-check-on">✓</span> Permitido
         &nbsp;&nbsp;
         <span class="permisos-check permisos-check-off">✗</span> Denegado
+        <?php if (!$puede_editar): ?>
+            &nbsp;&nbsp;<em>(solo lectura — tu rol no puede editar la matriz)</em>
+        <?php endif; ?>
     </div>
 
-    <div class="permisos-recursos-grid">
+    <div
+        class="permisos-recursos-grid"
+        data-permisos-csrf="<?= e($csrf_token ?? '') ?>"
+        data-permisos-puede-editar="<?= $puede_editar ? '1' : '0' ?>">
         <?php foreach ($recursos as $recursoClave => $recursoLabel): ?>
             <?php
                 componente('modulos/permisos/matriz-tabla', [
                     'matriz' => $matriz,
                     'acciones' => $acciones,
                     'roles' => $roles,
+                    'idRoles' => $id_roles,
+                    'puede_editar' => $puede_editar,
                     'recursoClave' => $recursoClave,
                     'recursoLabel' => $recursoLabel,
                 ]);
@@ -41,3 +52,7 @@
         <?php endforeach; ?>
     </div>
 </section>
+
+<?php if ($puede_editar): ?>
+    <script src="/assets/javascript/dashboard/permisos.js" defer></script>
+<?php endif; ?>

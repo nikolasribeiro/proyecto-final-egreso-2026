@@ -108,5 +108,20 @@ class ModeloDocumento {
         }
 
         return (int) $this->conexion->lastInsertId();
+
+    /**
+     * Obtiene todos los documentos activos que pertenecen a una categoría específica, 
+     * buscándola por su slug (Issue # 110).
+     */
+    public function obtenerPorSlugCategoria(string $slug): array {
+        $sql = "SELECT d.*, c.nombre_categoria, c.slug 
+                FROM documentos d 
+                INNER JOIN categorias_documentos c ON d.id_categoria = c.id 
+                WHERE c.slug = :slug AND d.documento_activo = 1
+                ORDER BY d.created_at DESC";
+                
+        $stmt = $this->conexion->prepare($sql);
+        $stmt->execute(['slug' => $slug]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

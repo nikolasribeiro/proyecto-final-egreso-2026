@@ -25,35 +25,23 @@ class ModeloUsuario
     /**
      * Mapa UI key (`Roles::labels`) → `roles.tipo_rol` en MySQL.
      *
-     * Es el único punto de traducción entre el "nombre de rol" que conoce
-     * la UI / matriz de permisos (`administrador`, `medico`, `enfermero`,
-     * `soporte_tecnico`) y el enum interno de la BD (`ADMINISTRATIVO`,
-     * `MEDICO`, `ENFERMERO`, `SOPORTE_TECNICO`). El catálogo `Roles::labels()`
-     * usa el UI key; el filtro operativo de traslados (`tipo_rol = 'CHOFER'`)
-     * usa el enum BD.
+     * Re-export desde `Nucleo\Constantes\Roles::MAPA_UI_A_ENUM` (issue #115).
+     * El modelo conserva la constante para no romper callers externos
+     * (`ModeloUsuario::ROL_UI_A_DB`), pero la fuente de verdad única vive
+     * en `Roles`. Si se agrega un rol nuevo, se toca `Roles` y este shim
+     * lo refleja automáticamente.
      *
      * @var array<string, string>
      */
-    public const ROL_UI_A_DB = [
-        'administrador'   => 'ADMINISTRATIVO',
-        'medico'          => 'MEDICO',
-        'enfermero'       => 'ENFERMERO',
-        'chofer'          => 'CHOFER',
-        'soporte_tecnico' => 'SOPORTE_TECNICO',
-    ];
+    public const ROL_UI_A_DB = \Nucleo\Constantes\Roles::MAPA_UI_A_ENUM;
 
     /**
      * Mapa inverso: enum BD → UI key (para hidratar badges).
+     * Re-export desde `Roles::MAPA_ENUM_A_UI`.
      *
      * @var array<string, string>
      */
-    public const ROL_DB_A_UI = [
-        'ADMINISTRATIVO'   => 'administrador',
-        'MEDICO'           => 'medico',
-        'ENFERMERO'        => 'enfermero',
-        'CHOFER'           => 'chofer',
-        'SOPORTE_TECNICO'  => 'soporte_tecnico',
-    ];
+    public const ROL_DB_A_UI = \Nucleo\Constantes\Roles::MAPA_ENUM_A_UI;
 
     public function __construct()
     {
@@ -232,24 +220,39 @@ class ModeloUsuario
      */
     public function contarPorRol(): array
     {
+        // Los enum values vienen del mapa canónico de Roles (issue #115).
+        // NO hardcodear literales acá: si el enum se renombra, este query
+        // debe actualizarse junto con el ALTER de la BD.
+        $enumAdmin   = \Nucleo\Constantes\Roles::mapUiToEnum('administrador');
+        $enumMedico  = \Nucleo\Constantes\Roles::mapUiToEnum('medico');
+        $enumChofer  = \Nucleo\Constantes\Roles::mapUiToEnum('chofer');
+        $enumEnferm  = \Nucleo\Constantes\Roles::mapUiToEnum('enfermero');
+        $enumSoporte = \Nucleo\Constantes\Roles::mapUiToEnum('soporte_tecnico');
+
         $sql = "SELECT
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'ADMINISTRATIVO' THEN u.id
+                        WHEN r.tipo_rol = :e_admin THEN u.id
                     END) AS administrador,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'MEDICO' THEN u.id
+                        WHEN r.tipo_rol = :e_medico THEN u.id
                     END) AS medico,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol IN ('CHOFER', 'ENFERMERO') THEN u.id
+                        WHEN r.tipo_rol IN (:e_chofer, :e_enfermero) THEN u.id
                     END) AS enfermero,
                     COUNT(DISTINCT CASE
-                        WHEN r.tipo_rol = 'SOPORTE_TECNICO' THEN u.id
+                        WHEN r.tipo_rol = :e_soporte THEN u.id
                     END) AS soporte_tecnico
                 FROM usuarios u
                 INNER JOIN usuario_roles ur ON ur.id_usuario = u.id
                 INNER JOIN roles r ON ur.id_rol = r.id";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute();
+        $stmt->execute([
+            'e_admin'     => $enumAdmin,
+            'e_medico'    => $enumMedico,
+            'e_chofer'    => $enumChofer,
+            'e_enfermero' => $enumEnferm,
+            'e_soporte'   => $enumSoporte,
+        ]);
         $fila = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         return [
@@ -276,6 +279,81 @@ class ModeloUsuario
             return null;
         }
         $fila['roles'] = $this->obtenerRolesUiPorUsuario((int)$fila['id']);
+        return $fila;
+    }
+
+    /**
+     * Autentica un usuario contra la BD real.
+     *
+     * Reemplaza al mock que vivía en `ControladorAuth::autenticar()` con
+     * 4 usuarios hardcodeados (issue #114). Acepta como identificador la
+     * CI (string numérica) o el email — los dos campos únicos del modelo.
+     * Devuelve null tanto cuando el usuario no existe como cuando la
+     * contraseña no coincide: el caller debe devolver SIEMPRE el mismo
+     * mensaje genérico para no permitir enumeración de cuentas.
+     *
+     * Si las credenciales son válidas, el array de retorno trae:
+     *   - id, ci, nombre, apellido, email, activo, fecha_alta
+     *   - roles: array<int, string> con UI keys (administrador, etc.)
+     *
+     * Esta función NO toca la sesión. El caller decide cómo persistir
+     * los datos del usuario autenticado (ControladorAuth).
+     *
+     * Usuarios inactivos (`activo = FALSE`) son rechazados aunque la
+     * contraseña sea correcta: no se permite login de cuentas dadas de
+     * baja.
+     */
+    public function autenticar(string $identifier, string $password): ?array
+    {
+        $identifier = trim($identifier);
+        if ($identifier === '' || $password === '') {
+            return null;
+        }
+
+        // Lookup por email o por CI. La CI es numérica, así que usamos
+        // ctype_digit para discriminar; cualquier otra cosa cae a email.
+        $columna = ctype_digit($identifier) ? 'ci' : 'email';
+        $stmt = $this->db->prepare(
+            "SELECT id, ci, nombre, apellido, email, contrasena, activo, fecha_alta, debe_cambiar_password
+             FROM usuarios
+             WHERE {$columna} = :id
+             LIMIT 1"
+        );
+        $stmt->execute(['id' => ctype_digit($identifier) ? (int)$identifier : $identifier]);
+        $fila = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$fila) {
+            // Para evitar timing attacks en la verificación de password,
+            // hacemos un hash dummy cuando el usuario no existe.
+            password_verify($password, '$2y$10$' . str_repeat('a', 53));
+            return null;
+        }
+
+        if (!$fila['activo']) {
+            return null;
+        }
+
+        if (!password_verify($password, (string)$fila['contrasena'])) {
+            return null;
+        }
+
+        // Si el hash necesitase re-hash (algoritmo viejo o cost factor
+        // bajo), lo actualizamos en una segunda pasada. Esto es idempotente
+        // y barato: solo se ejecuta cuando password_verify lo sugiere.
+        if (password_needs_rehash((string)$fila['contrasena'], PASSWORD_BCRYPT)) {
+            $nuevo = password_hash($password, PASSWORD_BCRYPT);
+            $upd = $this->db->prepare(
+                'UPDATE usuarios SET contrasena = :h WHERE id = :id'
+            );
+            $upd->execute(['h' => $nuevo, 'id' => (int)$fila['id']]);
+        }
+
+        unset($fila['contrasena']); // nunca exponer el hash al caller
+        $fila['id']                     = (int)$fila['id'];
+        $fila['ci']                     = (int)$fila['ci'];
+        $fila['activo']                 = (bool)$fila['activo'];
+        $fila['debe_cambiar_password']  = (bool)($fila['debe_cambiar_password'] ?? false);
+        $fila['roles']                  = $this->obtenerRolesUiPorUsuario((int)$fila['id']);
+
         return $fila;
     }
 

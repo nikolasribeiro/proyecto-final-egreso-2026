@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS `vehiculos` (
 CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `id_usuario` INT,
-  `accion` ENUM('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT') NOT NULL,
+  `accion` ENUM('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT', 'LOGIN_FAIL') NOT NULL,
   `tabla_afectada` VARCHAR(100) NOT NULL,
   `registro_id` INT,
   `detalles` JSON,
@@ -110,6 +110,17 @@ CREATE TABLE IF NOT EXISTS `logs_auditoria` (
   `fecha_hora` DATETIME,
   FOREIGN KEY (`id_usuario`) REFERENCES `usuarios`(`id`)
 );
+
+-- ============================================================
+-- Migración fix/issue-114-auth-real-bd
+-- Extiende el enum `logs_auditoria.accion` con `LOGIN_FAIL` para
+-- registrar intentos de autenticación fallidos (id_usuario NULL en
+-- ese caso, porque el identificador puede no corresponder a nadie).
+-- Idempotente: MODIFY COLUMN reescribe el enum al valor deseado.
+-- ============================================================
+ALTER TABLE `logs_auditoria`
+  MODIFY COLUMN `accion`
+  ENUM('CREAR','ACTUALIZAR','ELIMINAR','LOGIN','LOGOUT','LOGIN_FAIL') NOT NULL;
 
 
 CREATE TABLE IF NOT EXISTS `solicitud_traslados` (
@@ -183,14 +194,59 @@ CREATE TABLE IF NOT EXISTS `reportes_destino` (
 );
 
 -- Agregar la columna slug a la tabla
-ALTER TABLE categorias_documentos 
+ALTER TABLE categorias_documentos
 ADD COLUMN slug VARCHAR(80) UNIQUE;
 
--- Poblar los slugs existentes transformando el nombre de la categoría
--- (Convierte a minúsculas y reemplaza espacios por guiones)
+-- Poblar los slugs existentes transformando el nombre de la categoría.
+-- Normaliza:
+--   - a minúsculas
+--   - acentos comunes (á é í ó ú ñ) a su versión sin tilde
+--   - todo lo no-alfanumérico a guion
+--   - guiones múltiples → uno solo
+--   - guiones al inicio/fin → se eliminan
+--
+-- Esto es para los inserts del seed que no especifiquen slug explícito.
+-- El seed actual (ControladorSeed.php) ya pasa slugs hardcoded para
+-- evitar depender de esta normalización — este UPDATE queda como
+-- fallback para BDs viejas donde quedó slug NULL (era el bug del filtro
+-- de categorías en /dashboard/documentos).
 UPDATE categorias_documentos
-SET slug = LOWER(REPLACE(nombre_categoria, ' ', '-'))
-WHERE slug IS NULL;
+SET slug = LOWER(nombre_categoria)
+WHERE slug IS NULL OR slug = '';
+
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'á', 'a')
+WHERE slug IS NOT NULL AND slug LIKE '%á%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'é', 'e')
+WHERE slug IS NOT NULL AND slug LIKE '%é%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'í', 'i')
+WHERE slug IS NOT NULL AND slug LIKE '%í%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ó', 'o')
+WHERE slug IS NOT NULL AND slug LIKE '%ó%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ú', 'u')
+WHERE slug IS NOT NULL AND slug LIKE '%ú%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, 'ñ', 'n')
+WHERE slug IS NOT NULL AND slug LIKE '%ñ%';
+
+-- Reemplazar todo lo no-alfanumérico por guion, colapsar y trim.
+UPDATE categorias_documentos
+SET slug = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(slug, ' ', '-'), '.', '-'), ',', '-'), ';', '-'), '/', '-')
+WHERE slug IS NOT NULL;
+
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, '--', '-')
+WHERE slug LIKE '%--%';
+UPDATE categorias_documentos
+SET slug = REPLACE(slug, '--', '-')
+WHERE slug LIKE '%--%';
+UPDATE categorias_documentos
+SET slug = TRIM(BOTH '-' FROM slug)
+WHERE slug LIKE '-%' OR slug LIKE '%-';
 
 -- ============================================================
 -- Migración feat/127-gestion-usuarios
@@ -208,3 +264,45 @@ ALTER TABLE `roles`
 -- "Fecha de Alta" sin tener que inferirla por orden de id.
 ALTER TABLE `usuarios`
   ADD COLUMN IF NOT EXISTS `fecha_alta` DATETIME DEFAULT CURRENT_TIMESTAMP AFTER `activo`;
+-- ============================================================
+-- Migración feat/issue-130-matriz-permisos-ui
+-- Persistencia de la matriz de permisos en BD (#130).
+-- Antes la matriz vivía hardcodeada en `Roles::matriz()`; ahora
+-- cada celda (rol × recurso × acción) puede alternarse desde la
+-- UI y persistir acá. `Roles::permiso()` lee de esta tabla con
+-- fallback a la constante (issue #115).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS `permisos_rol` (
+  `id_rol` INT NOT NULL,
+  `recurso` VARCHAR(50) NOT NULL,
+  `accion` VARCHAR(20) NOT NULL,
+  `permitido` TINYINT(1) NOT NULL DEFAULT 0,
+  `updated_at` DATETIME NULL,
+  `updated_by` INT NULL,
+  PRIMARY KEY (`id_rol`, `recurso`, `accion`),
+  FOREIGN KEY (`id_rol`) REFERENCES `roles`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`updated_by`) REFERENCES `usuarios`(`id`)
+);
+
+-- Agregar PERMISO_TOGGLE al enum de acción de auditoría (issue #130).
+-- Idempotente: MODIFY COLUMN reescribe el enum al set deseado.
+ALTER TABLE `logs_auditoria`
+  MODIFY COLUMN `accion`
+  ENUM('CREAR','ACTUALIZAR','ELIMINAR','LOGIN','LOGOUT','LOGIN_FAIL','PERMISO_TOGGLE') NOT NULL;
+
+-- ============================================================
+-- Migración feat/usuario-root
+-- Crea el usuario root con permisos máximos y obliga cambio de
+-- contraseña al primer login.
+--
+-- ADVERTENCIA DE SEGURIDAD: este seed crea un usuario con username
+-- implícito 'root' y password 'root' hasheada. NO USAR EN PRODUCCIÓN
+-- sin regenerar la password con un valor aleatorio. Está pensado para
+-- el primer bootstrap del entorno de desarrollo y para uso interno
+-- del equipo (#40).
+-- ============================================================
+
+ALTER TABLE `usuarios`
+  ADD COLUMN IF NOT EXISTS `debe_cambiar_password` TINYINT(1) NOT NULL DEFAULT 0
+  AFTER `activo`;
