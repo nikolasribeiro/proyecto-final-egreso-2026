@@ -63,6 +63,11 @@ $enrutador->get('/', [\Controladores\ControladorDocumentos::class, 'inicio']);
 $enrutador->get('/d/{slug}', [\Controladores\ControladorDocumentosPublico::class, 'categoriaPorSlug']);
 $enrutador->get('/d/doc/{id}', [\Controladores\ControladorDocumentosPublico::class, 'verPorId']);
 
+// RUTAS PÚBLICAS (ENCUESTAS)
+$enrutador->get('/encuesta/gracias', [\Controladores\ControladorEncuestaPublica::class, 'gracias']);
+$enrutador->get('/encuesta/{token}', [\Controladores\ControladorEncuestaPublica::class, 'mostrar']);
+$enrutador->post('/encuesta/{token}/enviar', [\Controladores\ControladorEncuestaPublica::class, 'enviar']);
+
 // Rutas de Autenticación
 $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
 $enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);

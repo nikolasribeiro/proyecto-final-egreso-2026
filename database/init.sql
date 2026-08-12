@@ -306,3 +306,30 @@ ALTER TABLE `logs_auditoria`
 ALTER TABLE `usuarios`
   ADD COLUMN IF NOT EXISTS `debe_cambiar_password` TINYINT(1) NOT NULL DEFAULT 0
   AFTER `activo`;
+
+
+-- 1. Ampliar tabla encuestas para soportar anonimato y links públicos 
+ALTER TABLE `encuestas` 
+  ADD COLUMN IF NOT EXISTS `es_anonima` TINYINT(1) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS `token_publico` VARCHAR(64) UNIQUE DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS `fecha_vencimiento` DATETIME DEFAULT NULL;
+
+-- 2. Ampliar tabla respuestas_encuesta existente para guardar al usuario 
+ALTER TABLE `respuestas_encuesta`
+  ADD COLUMN IF NOT EXISTS `ci_usuario` INT DEFAULT NULL AFTER `id_encuesta`;
+
+-- Vinculamos la CI como clave foránea a los usuarios para garantizar Integridad Referencial
+ALTER TABLE `respuestas_encuesta`
+  ADD CONSTRAINT `fk_respuestas_usuario` 
+  FOREIGN KEY (`ci_usuario`) REFERENCES `usuarios`(`ci`) 
+  ON DELETE SET NULL 
+  ON UPDATE CASCADE;
+
+-- 3. Crear tabla hija para guardar las 4 respuestas separadas cumpliendo 3FN 
+CREATE TABLE IF NOT EXISTS `respuestas_encuesta_detalle` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id_respuesta_encuesta` INT NOT NULL,
+    `numero_pregunta` INT NOT NULL, 
+    `respuesta_valor` INT NOT NULL,
+    FOREIGN KEY (`id_respuesta_encuesta`) REFERENCES `respuestas_encuesta`(`id`) ON DELETE CASCADE
+);

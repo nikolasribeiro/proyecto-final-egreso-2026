@@ -647,39 +647,59 @@ class ControladorDashboard extends RutaProtegida
         ], 'admin');
     }
 
-    /**
-     * Procesa el envío de una encuesta.
+   /**
+     * Procesa el envío de una encuesta
      */
-    public function encuestaSubmit(): void
-    {
-        $plantillaId = $_POST['plantilla'] ?? 'general';
-        $plantilla = PlantillasEncuestas::obtener($plantillaId);
+    public function encuestaSubmit() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Método no permitido']);
+            // CORRECCIÓN 1: Redirección nativa
+            header('Location: /dashboard/encuestas');
+            exit;
+        }
 
-        // Validar que las 4 preguntas tengan un valor 1..10
-        $errores = [];
-        foreach ($plantilla['preguntas'] as $pregunta) {
-            $valor = $_POST['p_' . $pregunta['id']] ?? null;
-            if ($valor === null || !is_numeric($valor) || (int) $valor < 1 || (int) $valor > 10) {
-                $errores[] = "Debe responder '{$pregunta['texto']}' con un valor entre 1 y 10.";
+        $idEncuesta = (int)($_POST['id_encuesta'] ?? 1); 
+        $modelo = new \Modelos\ModeloEncuesta();
+        
+        $encuestaBD = $modelo->obtenerPorId($idEncuesta);
+        $esAnonima = $encuestaBD ? (bool)$encuestaBD['es_anonima'] : false;
+
+        $usuario = \Nucleo\Sesion::obtener('user');
+        $ciUsuario = $esAnonima ? null : ($usuario['ci'] ?? null);
+
+        $respuestasDetalle = [];
+        $sumaCalificaciones = 0;
+        $cantidadPreguntas = 0;
+
+        foreach ($_POST as $key => $value) {
+            if (strpos($key, 'p_') === 0) {
+                $numeroPregunta = (int) str_replace('p_', '', $key);
+                $valor = (int) $value;
+                
+                $respuestasDetalle[$numeroPregunta] = $valor;
+                $sumaCalificaciones += $valor;
+                $cantidadPreguntas++;
             }
         }
 
-        if (!empty($errores)) {
-            Sesion::guardar('flash_encuesta', [
-                'tipo' => 'error',
-                'mensaje' => implode(' ', $errores),
-            ]);
-            redirigir('/dashboard/encuestas?plantilla=' . urlencode($plantillaId));
-            return;
+        $calificacionGeneral = $cantidadPreguntas > 0 ? (int) round($sumaCalificaciones / $cantidadPreguntas) : 0;
+
+        $data = [
+            'id_encuesta' => $idEncuesta,
+            'ci_usuario' => $ciUsuario,
+            'calificacion' => $calificacionGeneral,
+            'respuestas_detalle' => $respuestasDetalle
+        ];
+        
+        if ($modelo->guardarRespuestas($data)) {
+            \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'exito', 'mensaje' => 'Encuesta guardada correctamente.']);
+        } else {
+            \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al guardar.']);
         }
-
-        // (Acá se persistiría en la base de datos)
-        Sesion::guardar('flash_encuesta', [
-            'tipo' => 'success',
-            'mensaje' => "Encuesta \"{$plantilla['nombre']}\" enviada correctamente. ¡Gracias!",
-        ]);
-
-        redirigir('/dashboard/encuestas?plantilla=' . urlencode($plantillaId));
+        
+        // CORRECCIÓN 2: Redirección nativa
+        header('Location: /dashboard/encuestas');
+        exit;
     }
 
     // ==========================================
