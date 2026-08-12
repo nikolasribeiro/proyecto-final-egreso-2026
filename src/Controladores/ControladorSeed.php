@@ -110,6 +110,12 @@ class ControladorSeed {
                 (2, 'Prostatectomía Radical: Guía de Cuidados para el Paciente', '/uploads/prostatectomia_guia.pdf', TRUE, 11111111),
                 (4, 'Pauta e Indicaciones para Pacientes en Tratamiento con Warfarina', '/uploads/warfarina_tratamiento.pdf', TRUE, 11111111)");
 
+            // SEED: Módulo de Encuestas (Ticket #97)
+             $sqlEncuestas = "INSERT IGNORE INTO `encuestas` (`id`, `segmento_dirigido`, `es_anonima`, `token_publico`, `fecha_vencimiento`) VALUES
+                (1, 'Pacientes Alta General (Nominada)', 0, NULL, '2027-12-31 23:59:59'),
+                (2, 'Atención Puerta Emergencia (Anónima)', 1, 'token_emergencia_anonimo_2026', '2027-12-31 23:59:59')";
+                $db->query($sqlEncuestas);
+
             // 5. Ubicaciones (10 destinos reales del Hospital de Clínicas)
             $db->exec("INSERT INTO ubicaciones (nombre_lugar, direccion) VALUES
                 ('Hospital de Clínicas - Base Ambulancias', 'Av. Italia s/n, Piso 1'),
