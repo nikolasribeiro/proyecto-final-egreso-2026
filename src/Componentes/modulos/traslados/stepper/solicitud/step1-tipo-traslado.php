@@ -13,8 +13,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                 </div>
-                <span class="tipo-nombre">Paciente Dado de Alta</span>
-                <span class="tipo-desc">Traslado de paciente receiverado y dado de alta</span>
+                <span class="tipo-nombre">Paciente </span>
+                <span class="tipo-desc">Traslado de paciente</span>
             </div>
         </label>
 

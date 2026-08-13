@@ -3,7 +3,7 @@
 $td = $traslado_data ?? [];
 $destinos = $td['destinos'] ?? [];
 $prioridad = $td['prioridad'] ?? 'verde';
-$tipo = $td['tipo'] ?? 'paciente_alta';
+$tipo = $td['tipo'] ?? 'paciente';
 
 $prioridadLabel = match ($prioridad) {
     'rojo' => 'EMERGENCIA',
@@ -12,7 +12,7 @@ $prioridadLabel = match ($prioridad) {
 };
 
 $tipoLabel = match ($tipo) {
-    'paciente_alta' => 'Paciente',
+    'paciente' => 'Paciente',
     'biologico' => 'Material Biológico',
     'equipamiento' => 'Equipamiento',
     default => 'Traslado',

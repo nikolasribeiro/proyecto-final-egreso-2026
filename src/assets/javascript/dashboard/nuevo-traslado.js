@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Nombres legibles para tipos de traslado
   const nombresTipo = {
-    paciente_alta: "Paciente Dado de Alta",
+    paciente_alta: "Paciente",
     biologico: "Material Biológico",
     equipamiento: "Equipamiento",
   };
@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (
         prev === 2 &&
         estado.tipoTraslado &&
-        estado.tipoTraslado !== "paciente_alta"
+        estado.tipoTraslado !== "paciente"
       ) {
         prev--;
         continue;
