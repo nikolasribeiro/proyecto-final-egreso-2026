@@ -1,11 +1,9 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-// Si no hay token, lo creamos en este mismo instante
-if (empty($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
+
+use Nucleo\Sesion;
+
+// La sesión ya está iniciada en src/index.php vía Sesion::iniciar().
+$csrfToken = Sesion::generarTokenCsrf();
 ?>
 
 <div
@@ -67,8 +65,20 @@ if (empty($_SESSION['csrf_token'])) {
                     <label for="selectCategoriaModal">Categoría</label>
                     <select id="selectCategoriaModal" class="form-control">
                         <option value="">Seleccione una categoría</option>
-                        <?php foreach ($categorias as $cat): ?>
-                            <option value="<?= $cat['id'] ?>"><?= htmlspecialchars($cat['nombre_categoria']) ?></option>
+                        <?php foreach ($categorias as $catKey => $catVal): ?>
+                            <?php
+                            // Acepta dos shapes para no romper la página:
+                            // 1) ModeloDocumento::obtenerCategorias(): ['id' => int, 'nombre_categoria' => string]
+                            // 2) $categoriasUnicas de inicio.php: ['slug' => 'nombre']
+                            if (is_array($catVal)) {
+                                $catValue = (string)($catVal['id'] ?? '');
+                                $catLabel = (string)($catVal['nombre_categoria'] ?? '');
+                            } else {
+                                $catValue = (string)$catKey;
+                                $catLabel = (string)$catVal;
+                            }
+                            ?>
+                            <option value="<?= e($catValue) ?>"><?= e($catLabel) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -85,121 +95,4 @@ if (empty($_SESSION['csrf_token'])) {
     </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const dropZone = document.getElementById('drop-zone');
-    const inputArchivo = document.getElementById('inputDocumento');
-    const titleText = document.getElementById('drop-zone-title');
-    const subText = document.getElementById('drop-zone-text');
-    const btnSubir = document.getElementById('btnSubirDocumento');
-    const feedbackBox = document.getElementById('modalFeedback');
-    const selectCategoria = document.getElementById('selectCategoriaModal');
-
-    if (!btnSubir || !inputArchivo) return;
-
-    // Manejar eventos de Drag and Drop
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        }, false);
-    });
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => dropZone.style.borderColor = '#0056b3', false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, () => dropZone.style.borderColor = '', false);
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            inputArchivo.files = files;
-            actualizarUIArchivo(files[0]);
-        }
-    });
-
-    inputArchivo.addEventListener('change', () => {
-        if (inputArchivo.files.length > 0) {
-            actualizarUIArchivo(inputArchivo.files[0]);
-        }
-    });
-
-    function actualizarUIArchivo(file) {
-        titleText.textContent = file.name;
-        subText.textContent = `(${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
-    }
-
-    // Petición POST al servidor con captura de errores
-    btnSubir.addEventListener('click', async (e) => {
-        e.preventDefault();
-
-        if (!inputArchivo.files[0]) {
-            mostrarFeedback('Por favor, selecciona un archivo PDF.', 'error');
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('documento', inputArchivo.files[0]);
-        
-        if (selectCategoria && selectCategoria.value) {
-            formData.append('id_categoria', selectCategoria.value);
-        }
-
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '<?= $_SESSION["csrf_token"] ?? "" ?>';
-        formData.append('csrf_token', csrfToken);
-
-        btnSubir.disabled = true;
-        btnSubir.textContent = 'Subiendo...';
-
-        try {
-
-            console.log("Token CSRF a enviar:", csrfToken); // Para depurar en F12 # 116
-
-            const response = await fetch('/api/documentos', { 
-            method: 'POST',
-            credentials: 'same-origin', // ¡ESTO ES VITAL PARA MANTENER LA SESIÓN PHP! # 116
-            headers: {
-                'X-CSRF-TOKEN': csrfToken
-            },
-            body: formData
-        });
-
-            const rawText = await response.text();
-            let result;
-
-            try {
-                result = JSON.parse(rawText);
-            } catch (jsonErr) {
-                throw new Error(`Error del servidor (${response.status}): ${rawText.replace(/<[^>]*>?/gm, '').substring(0, 120)}`);
-            }
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Error al procesar la subida.');
-            }
-
-            mostrarFeedback(result.mensaje || 'Documento subido con éxito.', 'exito');
-            setTimeout(() => window.location.reload(), 1200);
-
-        } catch (err) {
-            mostrarFeedback(err.message, 'error');
-        } finally {
-            btnSubir.disabled = false;
-            btnSubir.textContent = 'Subir Documento';
-        }
-    });
-
-    function mostrarFeedback(msg, tipo) {
-        if (!feedbackBox) return;
-        feedbackBox.textContent = msg;
-        feedbackBox.style.display = 'block';
-        feedbackBox.style.padding = '0.75rem';
-        feedbackBox.style.borderRadius = '4px';
-        feedbackBox.style.color = tipo === 'exito' ? '#155724' : '#721c24';
-        feedbackBox.style.backgroundColor = tipo === 'exito' ? '#d4edda' : '#f8d7da';
-        feedbackBox.style.borderColor = tipo === 'exito' ? '#c3e6cb' : '#f5c6cb';
-    }
-});
-</script>
+<script src="/assets/javascript/documentos/subida-documentos.js"></script>

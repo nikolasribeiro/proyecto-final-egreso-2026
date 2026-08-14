@@ -50,8 +50,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - ./src:/var/www/html:z
-      - uploads_data:/var/www/html/uploads:z
-      
+
     networks:
       - songbird_network
     depends_on:
@@ -304,7 +303,6 @@ services:
 volumes:
   mariadb_data:
   zabbix-db-data:
-  uploads_data:
 
 networks:
   songbird_network:
