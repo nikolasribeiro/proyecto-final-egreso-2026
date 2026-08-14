@@ -42,7 +42,9 @@ document.addEventListener("DOMContentLoaded", function () {
     resumenJerarquia: document.getElementById("resumen-jerarquia"),
     resumenVehiculo: document.getElementById("resumen-vehiculo"),
     resumenVueltaRow: document.getElementById("resumen-vuelta-row"),
-    resumenEstadoCriticoRow: document.getElementById("resumen-estado-critico-row"),
+    resumenEstadoCriticoRow: document.getElementById(
+      "resumen-estado-critico-row",
+    ),
     resumenEstadoCritico: document.getElementById("resumen-estado-critico"),
     resumenCamillaRow: document.getElementById("resumen-camilla-row"),
     resumenCamilla: document.getElementById("resumen-camilla"),
@@ -128,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (
         prev === 2 &&
         estado.tipoTraslado &&
-        estado.tipoTraslado !== "paciente"
+        estado.tipoTraslado !== "paciente_alta"
       ) {
         prev--;
         continue;
@@ -245,12 +247,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     // Navegación entre pasos (7 pasos totales)
-    document
-      .getElementById("btn-step-1")
-      ?.addEventListener("click", () => {
-        // Si el tipo NO es paciente_alta, saltar paso 2 (datos clínicos)
-        irAPaso(estado.tipoTraslado === "paciente_alta" ? 2 : 3);
-      });
+    document.getElementById("btn-step-1")?.addEventListener("click", () => {
+      // Si el tipo NO es paciente_alta, saltar paso 2 (datos clínicos)
+      irAPaso(estado.tipoTraslado === "paciente_alta" ? 2 : 3);
+    });
     document
       .getElementById("btn-back-2")
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(2)));
@@ -440,13 +440,17 @@ document.addEventListener("DOMContentLoaded", function () {
    */
   function bindAutocompletes() {
     const escapeHtml = (s) =>
-      String(s).replace(/[&<>"']/g, (ch) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      })[ch]);
+      String(s).replace(
+        /[&<>"']/g,
+        (ch) =>
+          ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          })[ch],
+      );
 
     const highlight = (text, query) => {
       if (!query) return escapeHtml(text);
@@ -1049,7 +1053,9 @@ document.addEventListener("DOMContentLoaded", function () {
    * Eliminar un destino de la lista
    */
   function eliminarDestino(id) {
-    estado.destinos = estado.destinos.filter((d) => String(d.id) !== String(id));
+    estado.destinos = estado.destinos.filter(
+      (d) => String(d.id) !== String(id),
+    );
     guardarEstado();
     renderizarDestinos();
     actualizarBotonPaso4();
@@ -1135,7 +1141,8 @@ document.addEventListener("DOMContentLoaded", function () {
         elementos.resumenJerarquiaRow.style.display = "flex";
         if (elementos.resumenJerarquia) {
           elementos.resumenJerarquia.textContent =
-            jerarquiaLabels[estado.jerarquiaEnfermero] || estado.jerarquiaEnfermero;
+            jerarquiaLabels[estado.jerarquiaEnfermero] ||
+            estado.jerarquiaEnfermero;
         }
       } else {
         elementos.resumenJerarquiaRow.style.display = "none";
@@ -1173,8 +1180,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const vehiculoRadio = document.querySelector(
       `input[name="vehiculo"][value="${estado.vehiculo}"]`,
     );
-    const vehiculoCard = vehiculoRadio ? vehiculoRadio.closest(".vehiculo-card") : null;
-    const esCamion = vehiculoCard && vehiculoCard.dataset.restringido === "true";
+    const vehiculoCard = vehiculoRadio
+      ? vehiculoRadio.closest(".vehiculo-card")
+      : null;
+    const esCamion =
+      vehiculoCard && vehiculoCard.dataset.restringido === "true";
     if (esCamion && estado.tipoTraslado !== "equipamiento") {
       alert("El camión solo está disponible para traslados de equipamiento.");
       return;

@@ -3,7 +3,7 @@
 $td = $traslado_data ?? [];
 $destinos = $td['destinos'] ?? [];
 $prioridad = $td['prioridad'] ?? 'verde';
-$tipo = $td['tipo'] ?? 'paciente';
+$tipo = $td['tipo'] ?? 'paciente_alta';
 
 $prioridadLabel = match ($prioridad) {
     'rojo' => 'EMERGENCIA',
@@ -12,7 +12,7 @@ $prioridadLabel = match ($prioridad) {
 };
 
 $tipoLabel = match ($tipo) {
-    'paciente' => 'Paciente',
+    'paciente_alta' => 'Paciente',
     'biologico' => 'Material Biológico',
     'equipamiento' => 'Equipamiento',
     default => 'Traslado',
@@ -171,7 +171,7 @@ $estadoLabel = match ($estadoNormalizado) {
                                         <?php if ($ocultosReportes > 0): ?>
                                             <button type="button" class="report-toggle" data-orden="<?= (int)($destino['orden'] ?? 1) ?>" data-accion="expand">
                                                 <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                                 </svg>
                                                 Ver <?= $ocultosReportes ?> reporte<?= $ocultosReportes > 1 ? 's' : '' ?> más
                                             </button>
