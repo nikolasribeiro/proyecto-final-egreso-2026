@@ -32,6 +32,7 @@ services:
     container_name: songbird_web
     volumes:
       - ./src:/var/www/html:z
+
     networks:
       - songbird_network
     depends_on:

@@ -3,3 +3,7 @@ issues_context.json
 .docs/
 .claude/
 .worktrees/
+
+# PDFs subidos por los usuarios en la app web (issue #116)
+src/uploads/*
+!src/uploads/.gitkeep

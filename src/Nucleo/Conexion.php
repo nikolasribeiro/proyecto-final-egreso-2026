@@ -12,12 +12,15 @@ class Conexion
     public static function obtenerInstancia(): PDO
     {
         if (self::$instancia === null) {
-            // Obtenemos los valores leyendo dinámicamente el entorno de Docker / .env
-            $host = $_ENV['DB_HOST'] ?? 'db';
-            $db   = $_ENV['DB_NAME'] ?? $_ENV['MYSQL_DATABASE'] ?? 'database';
-            $user = $_ENV['DB_USER'] ?? $_ENV['MYSQL_USER'] ?? 'elcapo';
-            $pass = $_ENV['DB_PASS'] ?? $_ENV['MYSQL_PASSWORD'] ?? 'capo';
-            $port = $_ENV['DB_PORT'] ?? '3306';
+            // Usar getenv() en lugar de $_ENV para asegurar la lectura en Docker
+            $host = getenv('DB_HOST') ?: 'db';
+
+          // voy a probar con ésto # 116
+            $db   = getenv('DB_NAME') ?: getenv('MYSQL_DATABASE') ?: 'nico';
+            $user = getenv('DB_USER') ?: getenv('MYSQL_USER') ?: 'nico';
+            $pass = getenv('DB_PASS') ?: getenv('MYSQL_PASSWORD') ?: 'nico';
+            
+            $port = getenv('DB_PORT') ?: '3306';
 
             $dsn = "mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4";
 

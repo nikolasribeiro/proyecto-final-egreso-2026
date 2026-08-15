@@ -14,6 +14,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Meta tag Token CSRF para peticiones Fetch/AJAX (#116) -->
+    <meta name="csrf-token" content="<?= e(\Nucleo\Sesion::generarTokenCsrf()) ?>" />
     <title>HC - <?php echo e($titulo_pagina) ?></title>
     <link rel="stylesheet" href="/assets/css/main.css">
 </head>
