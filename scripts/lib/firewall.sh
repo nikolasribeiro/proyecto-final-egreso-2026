@@ -32,11 +32,13 @@ mod_firewall_run() {
     # 4. Reglas
     run_cmd ufw allow "${SB_SSH_PORT}/tcp" comment 'songbird-ssh'
     run_cmd ufw allow "${SB_APP_PORT}/tcp" comment 'songbird-app'
-    run_cmd ufw allow "${SB_ZABBIX_AGENT_PORT}/tcp" comment 'zabbix-agent'
-    run_cmd ufw allow "${SB_ZABBIX_SERVER_PORT}/tcp" comment 'zabbix-server'
+    
+    # Se aplican valores por defecto si la variable no fue definida en el orquestador
+    run_cmd ufw allow "${SB_ZABBIX_AGENT_PORT:-10050}/tcp" comment 'zabbix-agent'
+    run_cmd ufw allow "${SB_ZABBIX_SERVER_PORT:-10051}/tcp" comment 'zabbix-server'
 
-    if [[ "$SB_EXPOSE_ZABBIX_WEB" == "true" ]]; then
-        run_cmd ufw allow "${SB_ZABBIX_WEB_PORT}/tcp" comment 'zabbix-web-public'
+    if [[ "${SB_EXPOSE_ZABBIX_WEB:-false}" == "true" ]]; then
+        run_cmd ufw allow "${SB_ZABBIX_WEB_PORT:-8080}/tcp" comment 'zabbix-web-public'
     fi
 
     # 5. Habilitar
