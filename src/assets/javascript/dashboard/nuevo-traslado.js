@@ -251,20 +251,48 @@ document.addEventListener("DOMContentLoaded", function () {
       // Si el tipo NO es paciente_alta, saltar paso 2 (datos clínicos)
       irAPaso(estado.tipoTraslado === "paciente_alta" ? 2 : 3);
     });
-    document
-      .getElementById("btn-back-2")
-      ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(2)));
-    document
+   document
       .getElementById("btn-step-2")
       ?.addEventListener("click", () => {
-        // Validación Bug # 145: Si es crítico o camilla, el diagnóstico es obligatorio
         const requiereAtencion = estado.estadoCritico || estado.requiereCamilla;
         const diagnosticoVacio = !estado.tipoDiagnostico || estado.tipoDiagnostico === "";
+        const selectDiag = elementos.tipoDiagnostico;
 
         if (requiereAtencion && diagnosticoVacio) {
-            alert("Debe especificar un tipo de diagnóstico para pacientes en estado crítico o que requieren camilla.");
-            if (elementos.tipoDiagnostico) elementos.tipoDiagnostico.focus();
-            return; // Detiene la ejecución, no avanza al paso 3
+            // 1. Agregamos la clase de error al select (se pondrá el borde rojo si tu CSS ya lo soporta)
+            if (selectDiag) {
+                selectDiag.classList.add("is-invalid");
+                selectDiag.focus();
+                
+                // 2. Creamos o mostramos un mensaje de error inline debajo del select si no existe
+                let errorMsg = document.getElementById("error-diagnostico-inline");
+                if (!errorMsg) {
+                    errorMsg = document.createElement("div");
+                    errorMsg.id = "error-diagnostico-inline";
+                    errorMsg.style.color = "#dc3545"; // Color rojo de alerta estándar
+                    errorMsg.style.fontSize = "0.85rem";
+                    errorMsg.style.marginTop = "0.3rem";
+                    errorMsg.textContent = "Por favor, seleccione un tipo de diagnóstico obligatorio para pacientes críticos o con camilla.";
+                    selectDiag.parentNode.appendChild(errorMsg);
+                }
+                
+                // 3. Quitamos el error automáticamente en cuanto el usuario elija una opción válida
+                selectDiag.addEventListener("change", function handler() {
+                    if (this.value) {
+                        this.classList.remove("is-invalid");
+                        if (errorMsg) errorMsg.remove();
+                        this.removeEventListener("change", handler);
+                    }
+                });
+            }
+            return; // Detiene el avance
+        }
+
+        // Si pasa la validación, limpiamos por si acaso había quedado algún error visual previo
+        if (selectDiag) {
+            selectDiag.classList.remove("is-invalid");
+            const errorMsg = document.getElementById("error-diagnostico-inline");
+            if (errorMsg) errorMsg.remove();
         }
 
         irAPaso(3);
