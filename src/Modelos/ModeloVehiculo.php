@@ -148,21 +148,24 @@ class ModeloVehiculo
             return $cache;
         }
 
-        $stmt = $this->db->query('SELECT id, descripcion FROM tipo_vehiculo ORDER BY descripcion');
+        // FIX: Agrupamos por descripción y tomamos el ID más bajo.
+        // Esto actúa como un escudo contra registros duplicados en la BD.
+        $sql = 'SELECT MIN(id) AS id, descripcion FROM tipo_vehiculo GROUP BY descripcion ORDER BY descripcion';
+        
+        $stmt = $this->db->query($sql);
         $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Auto-seed defensivo: si la tabla está vacía, INSERT IGNORE
-        // los 4 tipos básicos y volver a consultar.
+        // Auto-seed defensivo
         if (empty($filas)) {
-                $this->db->exec(
-                    "INSERT IGNORE INTO tipo_vehiculo (descripcion) VALUES
-                     ('Ambulancia'),
-                     ('Auto'),
-                     ('Camión'),
-                     ('Otro')"
-                );
-                $stmt = $this->db->query('SELECT id, descripcion FROM tipo_vehiculo ORDER BY descripcion');
-                $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $this->db->exec(
+                "INSERT IGNORE INTO tipo_vehiculo (descripcion) VALUES
+                 ('Ambulancia'),
+                 ('Auto'),
+                 ('Camión'),
+                 ('Otro')"
+            );
+            $stmt = $this->db->query($sql);
+            $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         $cache = array_map(
