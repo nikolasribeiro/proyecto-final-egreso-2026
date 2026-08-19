@@ -48,9 +48,9 @@ mod_firewall_run() {
     logger_info "Estado final de UFW:"
     run_cmd ufw status verbose
 
-    # Verificar que las reglas críticas estén
+    # Verificar que las reglas críticas estén (Corregido orden de lectura e idioma)
     local ssh_app_rules
-    ssh_app_rules="$(ufw status 2>/dev/null | grep -cE "ALLOW IN.*(${SB_SSH_PORT}|${SB_APP_PORT})" || true)"
+    ssh_app_rules="$(ufw status 2>/dev/null | grep -cE "^(${SB_SSH_PORT}|${SB_APP_PORT})/tcp" || true)"
     if [[ "$ssh_app_rules" -lt 2 ]]; then
         logger_error "Reglas UFW para SSH/app no detectadas"
         return 70
