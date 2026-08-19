@@ -256,7 +256,19 @@ document.addEventListener("DOMContentLoaded", function () {
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(2)));
     document
       .getElementById("btn-step-2")
-      ?.addEventListener("click", () => irAPaso(3));
+      ?.addEventListener("click", () => {
+        // Validación Bug # 145: Si es crítico o camilla, el diagnóstico es obligatorio
+        const requiereAtencion = estado.estadoCritico || estado.requiereCamilla;
+        const diagnosticoVacio = !estado.tipoDiagnostico || estado.tipoDiagnostico === "";
+
+        if (requiereAtencion && diagnosticoVacio) {
+            alert("Debe especificar un tipo de diagnóstico para pacientes en estado crítico o que requieren camilla.");
+            if (elementos.tipoDiagnostico) elementos.tipoDiagnostico.focus();
+            return; // Detiene la ejecución, no avanza al paso 3
+        }
+
+        irAPaso(3);
+      });
     document
       .getElementById("btn-back-3")
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(3)));
@@ -350,12 +362,14 @@ document.addEventListener("DOMContentLoaded", function () {
       elementos.estadoCritico.addEventListener("change", function () {
         estado.estadoCritico = this.checked;
         guardarEstado();
+        aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
       });
     }
     if (elementos.requiereCamilla) {
       elementos.requiereCamilla.addEventListener("change", function () {
         estado.requiereCamilla = this.checked;
         guardarEstado();
+        aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
       });
     }
     if (elementos.tipoDiagnostico) {
@@ -807,17 +821,33 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!elementos.vehiculosGrid) return;
 
     const esEquipamiento = estado.tipoTraslado === "equipamiento";
+    const requiereAtencion = estado.estadoCritico || estado.requiereCamilla; // <-- capturamos la camilla/estado crítico
     let cambioSeleccion = false;
 
     elementos.vehiculosGrid
       .querySelectorAll(".vehiculo-card")
       .forEach((card) => {
         const esCamion = card.dataset.restringido === "true";
+        const esAuto = card.dataset.tipoVehiculo === "auto" || card.dataset.tipo === "auto"; // <-- Identificamos si la tarjeta es un auto
         const input = card.querySelector('input[type="radio"]');
-        // Mostrar SOLO si: (es equipamiento Y es camión) O (no es equipamiento Y no es camión)
-        const visible = esEquipamiento ? esCamion : !esCamion;
+        
+        let visible = true;
+        
+        // 1. Regla base: Camiones
+        if (esEquipamiento) {
+            visible = esCamion; // Si es equipamiento, solo vemos camiones
+        } else {
+            visible = !esCamion; // Si es paciente, NO vemos camiones
+            
+            // 2. Regla Bug # 145: Si requiere camilla/crítico, ocultamos los autos
+            if (requiereAtencion && esAuto) {
+                visible = false;
+            }
+        }
+
         card.style.display = visible ? "" : "none";
 
+        // Limpiar selección si el vehículo quedó oculto
         if (!visible && input && estado.vehiculo === input.value) {
           estado.vehiculo = null;
           if (input) input.checked = false;
@@ -830,7 +860,6 @@ document.addEventListener("DOMContentLoaded", function () {
       actualizarBotonPaso6();
     }
   }
-
   /**
    * Abrir modal de destino
    */
