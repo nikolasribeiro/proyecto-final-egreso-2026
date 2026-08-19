@@ -7,3 +7,9 @@ issues_context.json
 # PDFs subidos por los usuarios en la app web (issue #116)
 src/uploads/*
 !src/uploads/.gitkeep
+
+# scripts/operator — generated / runtime artifacts (issue #35)
+scripts/.cache/
+scripts/state/
+*.bak
+*.orig
