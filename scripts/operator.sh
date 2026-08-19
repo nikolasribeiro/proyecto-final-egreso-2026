@@ -66,11 +66,11 @@ SB_HOSTNAME=""
 SB_RESET_VOLUMES="false"
 SB_UNINSTALL="false"
 SB_HELP="false"
-SB_VERSION="false"
+SB_SHOW_VERSION="false"
 
 usage() {
     cat <<EOF
-${C_BOLD}${SB_NAME} v${SB_VERSION}${C_RESET}
+${C_BOLD}${SB_NAME} v${SB_SHOW_VERSION}${C_RESET}
 
 Script bash modular para configurar un servidor Debian 12 con SSH endurecido,
 UFW, usuarios, Docker, backups, logs y el stack del proyecto (PHP + MariaDB +
@@ -187,7 +187,7 @@ parse_cli() {
                 shift
                 ;;
             --version|-V)
-                SB_VERSION="true"
+                SB_SHOW_VERSION="true"
                 shift
                 ;;
             *)
@@ -233,8 +233,8 @@ validate_args() {
         usage
         exit 0
     fi
-    if [[ "$SB_VERSION" == "true" ]]; then
-        printf '%s %s\n' "$SB_NAME" "$SB_VERSION"
+    if [[ "$SB_SHOW_VERSION" == "true" ]]; then
+        printf '%s %s\n' "$SB_NAME" "$SB_SHOW_VERSION"
         exit 0
     fi
 
@@ -284,7 +284,7 @@ print_banner() {
     printf '%s%s═══════════════════════════════════════════════%s\n' \
         "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
     printf '%s%s  %s v%s%s\n' \
-        "$C_BOLD" "$C_CYAN" "$SB_NAME" "$SB_VERSION" "$C_RESET" >&2
+        "$C_BOLD" "$C_CYAN" "$SB_NAME" "$SB_SHOW_VERSION" "$C_RESET" >&2
     printf '%s%s═══════════════════════════════════════════════%s\n\n' \
         "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
 
@@ -363,7 +363,7 @@ main() {
         for mod in "${SB_MODULES[@]}"; do
             run_module "$mod"
         done
-        logger_ok "Songbird-operator v${SB_VERSION} finalizado"
+        logger_ok "Songbird-operator v${SB_SHOW_VERSION} finalizado"
         exit 0
     fi
 
