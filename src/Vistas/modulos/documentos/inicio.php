@@ -85,12 +85,15 @@ foreach ($documentos as $doc) {
 
     <div class="docs-filtros">
         <label class="form-label" for="filtro-categoria">Filtrar por categoría</label>
-        <select id="filtro-categoria" class="form-select" onchange="filtrarDocumentos(this.value)">
-            <option value="all">Todas las categorías</option>
-            <?php foreach ($categoriasUnicas as $catSlug => $catNombre): ?>
-                <option value="<?= e($catSlug) ?>"><?= e($catNombre) ?></option>
-            <?php endforeach; ?>
-        </select>
+        <div class="docs-filtros-row">
+            <select id="filtro-categoria" class="form-select" onchange="filtrarDocumentos(this.value)">
+                <option value="all">Todas las categorías</option>
+                <?php foreach ($categoriasUnicas as $catSlug => $catNombre): ?>
+                    <option value="<?= e($catSlug) ?>"><?= e($catNombre) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div id="qr-categoria-slot" class="docs-filtros-slot"></div>
+        </div>
     </div>
 
     <div class="table-container">
@@ -134,6 +137,11 @@ foreach ($documentos as $doc) {
     /**
      * Filtro client-side por categoría. El atributo data-categoria
      * de cada <tr> se setea en fila.php.
+     *
+     * Además, cuando hay una categoría específica seleccionada
+     * (slug !== 'all') inyecta un botón "Generar QR de la categoría"
+     * al lado del dropdown. Cuando vuelve a "all", el botón se
+     * elimina del DOM.
      */
     function filtrarDocumentos(slug) {
         const filas = document.querySelectorAll('.documents-table tbody tr');
@@ -144,6 +152,69 @@ foreach ($documentos as $doc) {
                 fila.style.display = 'none';
             }
         });
+
+        const slot = document.getElementById('qr-categoria-slot');
+        if (!slot) return;
+
+        // Limpiar cualquier botón previo (categoría anterior).
+        slot.innerHTML = '';
+
+        if (slug === 'all') return;
+
+        const select = document.getElementById('filtro-categoria');
+        const nombreCategoria = select
+            ? (select.options[select.selectedIndex]?.text || slug)
+            : slug;
+
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'btn btn-primary';
+        boton.innerHTML = `
+            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+            Generar QR de la categoria
+        `;
+        boton.addEventListener('click', function () {
+            openCategoryQRModal(slug, nombreCategoria);
+        });
+
+        slot.appendChild(boton);
+    }
+
+    /**
+     * Abre el modal de QR de categoría con la URL pública
+     * `/d/{slug}` codificada en el QR. La URL es la misma que
+     * usa el botón "Generar QR" de cada fila (ver fila.php:13).
+     */
+    function openCategoryQRModal(slug, nombreCategoria) {
+        const url = '/d/' + encodeURIComponent(slug);
+        const img = document.getElementById('qr-categoria-img');
+        const nombre = document.getElementById('qr-categoria-nombre');
+        const urlLabel = document.getElementById('qr-categoria-url');
+
+        if (img) {
+            img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data='
+                + encodeURIComponent(url);
+        }
+        if (nombre) {
+            nombre.textContent = nombreCategoria;
+        }
+        if (urlLabel) {
+            urlLabel.textContent = url;
+        }
+
+        // downloadQR() y printQR() en dashboard.js leen
+        // window.currentQRData para componer la imagen, así que
+        // seteamos el mismo shape que usa openQRModal().
+        window.currentQRData = {
+            documentName: nombreCategoria,
+            documentId: 'categoria',
+            documentUrl: url,
+        };
+
+        openModal('qr-modal-categoria');
     }
 </script>
 
@@ -151,3 +222,20 @@ foreach ($documentos as $doc) {
 <?php componente('modulos/documentos/subida-documentos-modal', [
     'categorias' => $categoriasUnicas
 ]) ?>
+
+<!-- Modal de QR por categoría (el botón al lado del filtro lo abre) -->
+<?php componente('modulos/documentos/qr-modal-categoria') ?>
+
+<!-- Modal de edición de documento (issue #152) -->
+<?php
+// El modal de edición necesita la lista COMPLETA de categorías
+// (con id, nombre y slug), no el mapa reducido que usa el filtro.
+componente('modulos/documentos/editar-documento-modal', [
+    'categorias' => $categorias ?? [],
+])
+?>
+
+<!-- Modal de confirmación de borrado (soft delete, issue #152) -->
+<?php componente('modulos/documentos/eliminar-documento-modal') ?>
+
+<script src="/assets/javascript/documentos/gestion-documentos.js"></script>

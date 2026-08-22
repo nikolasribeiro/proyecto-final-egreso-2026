@@ -148,6 +148,10 @@ $enrutador->post('/api/ubicaciones', [\Controladores\ControladorDashboard::class
 // Endpoint API POST para subida de documentos (#116) — ¡DEBE IR ANTES DE DESPACHAR!
 $enrutador->post('/api/documentos', [\Controladores\ControladorDocumentos::class, 'subir']);
 
+// Endpoints para actualizar / eliminar (soft delete) documentos.
+$enrutador->post('/api/documentos/{id}',          [\Controladores\ControladorDocumentos::class, 'actualizar']);
+$enrutador->post('/api/documentos/{id}/eliminar', [\Controladores\ControladorDocumentos::class, 'eliminar']);
+
 // Registrar endpoint del seeder
 $enrutador->get('/seed', [\Controladores\ControladorSeed::class, 'ejecutar']);
 

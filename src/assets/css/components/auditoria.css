@@ -1,0 +1,312 @@
+/* ==========================================================================
+   COMPONENTS - Auditoría
+   Tabla read-only de logs de auditoría. Estética consistente con el resto
+   del panel: usa los tokens de base/variables.css y hereda el patrón
+   de .documents-table. Solo se diferencia en el layout de la columna
+   "Detalles" (lista con diff viejo→nuevo) y los badges de acción.
+   ========================================================================== */
+
+.auditoria-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.auditoria-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--secondary-gray);
+}
+
+.auditoria-meta .auditoria-count {
+  font-weight: 600;
+  color: var(--black);
+}
+
+/* ========== Action Badges (CREAR / ACTUALIZAR / ELIMINAR) ========== */
+.auditoria-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.auditoria-action-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.auditoria-action-create {
+  background: var(--success-green-light);
+  color: var(--success-green);
+}
+
+.auditoria-action-update {
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+}
+
+.auditoria-action-delete {
+  background: var(--danger-red-light);
+  color: var(--danger-red);
+}
+
+.auditoria-action-other {
+  background: var(--light-gray);
+  color: var(--secondary-gray);
+}
+
+/* ========== Tabla ========== */
+.auditoria-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.auditoria-table thead {
+  background: var(--light-gray);
+  border-bottom: 1px solid var(--border-gray);
+}
+
+.auditoria-table th {
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--secondary-gray);
+  white-space: nowrap;
+}
+
+.auditoria-table td {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-gray);
+  vertical-align: top;
+  font-size: var(--font-size-sm);
+  color: var(--black);
+}
+
+.auditoria-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.auditoria-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.auditoria-table tbody tr:hover {
+  background: var(--light-gray);
+}
+
+/* ========== Celdas ========== */
+.auditoria-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--secondary-gray);
+  font-size: var(--font-size-xs);
+}
+
+.auditoria-timestamp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.auditoria-timestamp-date {
+  font-weight: 600;
+  color: var(--black);
+}
+
+.auditoria-timestamp-time {
+  font-size: var(--font-size-xs);
+  color: var(--secondary-gray);
+}
+
+.auditoria-user {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 500;
+  color: var(--black);
+}
+
+.auditoria-user-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-blue-light);
+  color: var(--primary-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.auditoria-table-name {
+  display: inline-flex;
+  padding: var(--space-1) var(--space-3);
+  background: var(--light-gray);
+  color: var(--black);
+  border-radius: var(--radius-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--font-size-xs);
+}
+
+.auditoria-ip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--secondary-gray);
+  font-size: var(--font-size-xs);
+}
+
+/* ========== Detalles (diff viejo→nuevo) ========== */
+.auditoria-details {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.auditoria-details li {
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.auditoria-details-key {
+  font-weight: 600;
+  color: var(--black);
+  margin-right: var(--space-2);
+}
+
+.auditoria-details-old {
+  color: var(--danger-red);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger-red);
+  background: var(--danger-red-light);
+  padding: 0 var(--space-1);
+  border-radius: 4px;
+  margin-right: var(--space-2);
+}
+
+.auditoria-details-arrow {
+  color: var(--secondary-gray);
+  margin-right: var(--space-2);
+  font-weight: 700;
+}
+
+.auditoria-details-new {
+  color: var(--success-green);
+  font-weight: 600;
+  background: var(--success-green-light);
+  padding: 0 var(--space-1);
+  border-radius: 4px;
+}
+
+.auditoria-details-flat {
+  color: var(--black);
+}
+
+.auditoria-empty-details {
+  color: var(--secondary-gray);
+  font-style: italic;
+  font-size: var(--font-size-xs);
+}
+
+/* ========== Empty state ========== */
+.auditoria-empty {
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  color: var(--secondary-gray);
+}
+
+.auditoria-empty-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-4);
+  background: var(--light-gray);
+  color: var(--secondary-gray);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auditoria-empty-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--black);
+  margin: 0 0 var(--space-2);
+}
+
+.auditoria-empty-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+/* ========== Mobile: stack table ========== */
+@media (max-width: 767px) {
+  .auditoria-table {
+    min-width: unset;
+  }
+
+  .auditoria-table thead {
+    display: none;
+  }
+
+  .auditoria-table tbody tr {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border-gray);
+    gap: var(--space-3);
+  }
+
+  .auditoria-table td {
+    padding: 0;
+    border-bottom: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  .auditoria-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--secondary-gray);
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+
+  .auditoria-table td:last-child {
+    display: block;
+  }
+
+  .auditoria-table td:last-child::before {
+    display: none;
+  }
+
+  .auditoria-details li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

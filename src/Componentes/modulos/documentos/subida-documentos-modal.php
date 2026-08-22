@@ -62,8 +62,8 @@ $csrfToken = Sesion::generarTokenCsrf();
             <!-- Selector de Categoría (si existen en la vista) -->
             <?php if (isset($categorias) && !empty($categorias)): ?>
                 <div class="form-group" style="margin-top: 1rem;">
-                    <label for="selectCategoriaModal">Categoría</label>
-                    <select id="selectCategoriaModal" class="form-control">
+                    <label class="form-label" for="selectCategoriaModal">Categoría</label>
+                    <select id="selectCategoriaModal" class="form-select">
                         <option value="">Seleccione una categoría</option>
                         <?php foreach ($categorias as $catKey => $catVal): ?>
                             <?php

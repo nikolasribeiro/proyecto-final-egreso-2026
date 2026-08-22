@@ -1,31 +1,24 @@
 <?php
 
 /**
- * @var string $idDocumento
- * @var string $nombreDocumento
- * @var string $rutaDocumento
- * @var string $tituloModal      (opcional) Título del modal. Si no se
- *                                pasa, usa "Codigo QR del Documento".
- * @var string $textoInstruccion (opcional) Texto bajo el nombre. Si no
- *                                se pasa, usa el mensaje genérico.
+ * Modal genérico para mostrar el QR de una categoría. La URL y el nombre
+ * de la categoría se setean por JS (`openCategoryQRModal`) antes de abrir
+ * el modal, así un solo modal sirve para cualquier categoría.
+ *
+ * Para que `downloadQR` y `printQR` (definidas en dashboard.js) funcionen
+ * sin tocarse, este modal sigue la convención de setear
+ * `window.currentQRData` con los mismos campos que el modal por documento.
  */
-
-// El modal se usa desde la tabla de documentos (QR por archivo) y
-// también podría usarse desde otros lugares. El título y la instrucción
-// son configurables para no atar el componente a un solo caso de uso.
-$tituloModal      = $tituloModal      ?? 'Codigo QR del Documento';
-$textoInstruccion = $textoInstruccion
-    ?? 'Escanee este codigo para acceder al documento.';
 ?>
 
 <div
-    id="qr-modal-<?= e($idDocumento) ?>"
+    id="qr-modal-categoria"
     class="modal-overlay"
     onclick="closeModalOnOverlay(event)">
     <div class="modal">
         <div class="modal-header">
-            <h3 class="modal-title"><?= e($tituloModal) ?></h3>
-            <button class="modal-close" onclick="closeModal('qr-modal-<?= e($idDocumento) ?>')">
+            <h3 class="modal-title">Codigo QR de la Categoria</h3>
+            <button class="modal-close" onclick="closeModal('qr-modal-categoria')">
                 <svg
                     width="16"
                     height="16"
@@ -44,24 +37,23 @@ $textoInstruccion = $textoInstruccion
             <div class="qr-container">
                 <div class="qr-code">
                     <img
-                        src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=<?= e($rutaDocumento) ?>"
+                        id="qr-categoria-img"
+                        src=""
                         alt="Codigo QR"
                         width="200"
                         height="200" />
                 </div>
-                <p class="qr-document-name" id="qr-document-name">
-                    <?php echo e($nombreDocumento) ?>
-                </p>
+                <p class="qr-document-name" id="qr-categoria-nombre"></p>
                 <p style="font-size: 0.875rem; color: var(--secondary-gray); text-align: center; margin-top: 0.5rem;">
-                    <?= e($textoInstruccion) ?><br>
-                    <span class="qr-url"><?= e($rutaDocumento) ?></span>
+                    Escanee este codigo para acceder a la categoria completa de documentos.<br>
+                    <span class="qr-url" id="qr-categoria-url"></span>
                 </p>
             </div>
         </div>
         <div class="modal-footer">
             <button
                 class="btn btn-secondary btn-small"
-                onclick="closeModal('qr-modal-<?= e($idDocumento) ?>')">
+                onclick="closeModal('qr-modal-categoria')">
                 Cerrar
             </button>
             <button

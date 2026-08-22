@@ -1,0 +1,69 @@
+/* ==========================================================================
+   COMPONENTS - Documentos filtros
+   Layout del bloque de filtros en /dashboard/documentos. La fila pone el
+   dropdown a la izquierda y un slot a la derecha donde se inyecta el
+   botón "Generar QR de la categoría" cuando hay una categoría específica
+   seleccionada.
+
+   El select tiene ancho fijo (max-width) para que NO se encoja cuando
+   aparece el botón, así el select queda anclado a la izquierda y la tabla
+   de abajo no sufre layout shift horizontal.
+   ========================================================================== */
+
+.docs-filtros {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  width: 100%;
+}
+
+.docs-filtros-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.docs-filtros-row .form-select {
+  /* Ancho fijo para que el select no se mueva cuando aparece el botón. */
+  flex: 0 1 320px;
+  width: 320px;
+  max-width: 320px;
+  min-width: 220px;
+}
+
+.docs-filtros-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+}
+
+/* Cuando no hay botón, el slot queda vacío (sin ancho) y el select
+   sigue ocupando sus 320px a la izquierda. Cuando se inyecta el botón,
+   el slot crece hacia la derecha sin tocar al select. */
+
+@media (max-width: 480px) {
+  .docs-filtros-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .docs-filtros-row .form-select {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .docs-filtros-slot {
+    width: 100%;
+  }
+
+  .docs-filtros-slot .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
