@@ -63,13 +63,28 @@ class ModeloDocumento
         $sql = "INSERT INTO documentos (id_categoria, titulo, ruta_archivo, documento_activo, ci_funcionario)
                 VALUES (:id_categoria, :titulo, :ruta_archivo, :documento_activo, :ci_funcionario)";
         $stmt = $this->conexion->prepare($sql);
-        return $stmt->execute([
+        $ok = $stmt->execute([
             'id_categoria'     => $datos['id_categoria'],
             'titulo'           => $datos['titulo'],
             'ruta_archivo'     => $datos['ruta_archivo'],
             'documento_activo' => $datos['documento_activo'] ?? 1,
             'ci_funcionario'   => $datos['ci_funcionario']
         ]);
+
+        // Auditoría centralizada: cualquier camino que cree un documento
+        // (subirArchivo vía modal, o crearDocumento legacy del dashboard)
+        // queda registrado acá. Si falla la auditoría, no rompe el alta
+        // (el helper ya traga la excepción internamente).
+        if ($ok) {
+            $this->registrarAuditoria('CREAR', 'documentos', (int)$this->conexion->lastInsertId(), [
+                'titulo'         => (string)($datos['titulo'] ?? ''),
+                'id_categoria'   => (int)($datos['id_categoria'] ?? 0),
+                'ruta_archivo'   => (string)($datos['ruta_archivo'] ?? ''),
+                'ci_funcionario' => $datos['ci_funcionario'] ?? null,
+            ]);
+        }
+
+        return $ok;
     }
 
     /**
