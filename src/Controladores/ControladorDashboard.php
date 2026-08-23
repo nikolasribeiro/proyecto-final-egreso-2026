@@ -653,7 +653,6 @@ class ControladorDashboard extends RutaProtegida
     public function encuestaSubmit() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Método no permitido']);
-            // CORRECCIÓN 1: Redirección nativa
             header('Location: /dashboard/encuestas');
             exit;
         }
@@ -666,6 +665,7 @@ class ControladorDashboard extends RutaProtegida
 
         $usuario = \Nucleo\Sesion::obtener('user');
         $ciUsuario = $esAnonima ? null : ($usuario['ci'] ?? null);
+        $idUsuario = $usuario['id'] ?? null; // Capturamos el ID para la auditoría
 
         $respuestasDetalle = [];
         $sumaCalificaciones = 0;
@@ -692,14 +692,19 @@ class ControladorDashboard extends RutaProtegida
         ];
         
         if ($modelo->guardarRespuestas($data)) {
+            // Auditoría manual con IP y Detalles
+            $modeloAuditoria = new \Modelos\ModeloAuditoria();
+            $detalleAuditoria = $esAnonima ? 'Encuesta interna respondida de forma anónima' : 'Encuesta respondida por CI: ' . $ciUsuario;
+            $modeloAuditoria->registrar('CREAR', 'respuestas_encuesta', $detalleAuditoria, $idUsuario);
+
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'exito', 'mensaje' => 'Encuesta guardada correctamente.']);
         } else {
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al guardar.']);
         }
         
-        // CORRECCIÓN 2: Redirección nativa
         header('Location: /dashboard/encuestas');
         exit;
+        
     }
 
     // ==========================================
