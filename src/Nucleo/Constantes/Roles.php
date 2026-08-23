@@ -96,6 +96,19 @@ final class Roles
                 'permisos'   => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
                 'vehiculos'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
             ],
+            'superadministrativo' => [
+                // Root: TODO true. Cubre traslados, documentos, encuestas,
+                // usuarios, permisos y vehículos. La UI de matriz permite
+                // togglear estas celdas desde BD igual que con cualquier
+                // otro rol; si se apaga una, queda apagada hasta nuevo
+                // toggle.
+                'traslados'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'documentos' => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'encuestas'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'usuarios'   => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'permisos'   => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+                'vehiculos'  => ['ver' => true, 'crear' => true,  'editar' => true,  'eliminar' => true],
+            ],
             'medico' => [
                 'traslados'  => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
                 'documentos' => ['ver' => true, 'crear' => false, 'editar' => false, 'eliminar' => false],
@@ -139,11 +152,12 @@ final class Roles
     public static function labels(): array
     {
         return [
-            'administrador'   => 'Administrador',
-            'medico'          => 'Médico',
-            'enfermero'       => 'Enfermero',
-            'chofer'          => 'Chofer',
-            'soporte_tecnico' => 'Soporte Técnico',
+            'administrador'      => 'Administrador',
+            'superadministrativo' => 'SuperAdministrativo',
+            'medico'             => 'Médico',
+            'enfermero'          => 'Enfermero',
+            'chofer'             => 'Chofer',
+            'soporte_tecnico'    => 'Soporte Técnico',
         ];
     }
 
@@ -222,11 +236,12 @@ final class Roles
      * @var array<string, string>
      */
     public const MAPA_UI_A_ENUM = [
-        'administrador'   => 'ADMINISTRATIVO',
-        'medico'          => 'MEDICO',
-        'enfermero'       => 'ENFERMERO',
-        'chofer'          => 'CHOFER',
-        'soporte_tecnico' => 'SOPORTE_TECNICO',
+        'administrador'      => 'ADMINISTRATIVO',
+        'superadministrativo' => 'SUPERADMINISTRATIVO',
+        'medico'             => 'MEDICO',
+        'enfermero'          => 'ENFERMERO',
+        'chofer'             => 'CHOFER',
+        'soporte_tecnico'    => 'SOPORTE_TECNICO',
     ];
 
     /**
@@ -236,11 +251,12 @@ final class Roles
      * @var array<string, string>
      */
     public const MAPA_ENUM_A_UI = [
-        'ADMINISTRATIVO'  => 'administrador',
-        'MEDICO'          => 'medico',
-        'ENFERMERO'       => 'enfermero',
-        'CHOFER'          => 'chofer',
-        'SOPORTE_TECNICO' => 'soporte_tecnico',
+        'ADMINISTRATIVO'     => 'administrador',
+        'SUPERADMINISTRATIVO' => 'superadministrativo',
+        'MEDICO'             => 'medico',
+        'ENFERMERO'          => 'enfermero',
+        'CHOFER'             => 'chofer',
+        'SOPORTE_TECNICO'    => 'soporte_tecnico',
     ];
 
     /**

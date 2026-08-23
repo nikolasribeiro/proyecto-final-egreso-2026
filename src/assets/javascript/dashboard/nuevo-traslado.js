@@ -286,7 +286,19 @@ document.addEventListener("DOMContentLoaded", function () {
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(5)));
     document
       .getElementById("btn-step-5")
-      ?.addEventListener("click", () => irAPaso(6));
+      ?.addEventListener("click", () => {
+        // Bug # 153: hard-stop por si el botón quedó habilitado por
+        // cache viejo o se forzó el click. El enfermero es obligatorio
+        // si el traslado es crítico o requiere camilla.
+        if (enfermeroEsObligatorio() && !estado.enfermero) {
+          alert(
+            "Los traslados en estado crítico o que requieren camilla deben tener un enfermero asignado. Seleccioná uno antes de continuar.",
+          );
+          if (elementos.enfermeroInput) elementos.enfermeroInput.focus();
+          return;
+        }
+        irAPaso(6);
+      });
     document
       .getElementById("btn-back-6")
       ?.addEventListener("click", () => irAPaso(pasoAnteriorVisible(6)));
@@ -363,6 +375,9 @@ document.addEventListener("DOMContentLoaded", function () {
         estado.estadoCritico = this.checked;
         guardarEstado();
         aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
+        // Bug # 153: si tilda crítico, el enfermero se vuelve obligatorio
+        // y hay que re-evaluar el botón del paso 5.
+        actualizarBotonPaso5();
       });
     }
     if (elementos.requiereCamilla) {
@@ -370,6 +385,9 @@ document.addEventListener("DOMContentLoaded", function () {
         estado.requiereCamilla = this.checked;
         guardarEstado();
         aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
+        // Bug # 153: si tilda camilla, el enfermero se vuelve obligatorio
+        // y hay que re-evaluar el botón del paso 5.
+        actualizarBotonPaso5();
       });
     }
     if (elementos.tipoDiagnostico) {
@@ -544,6 +562,12 @@ document.addEventListener("DOMContentLoaded", function () {
         inputEl.classList.remove("is-invalid");
         // Resetear selección hasta que el usuario elija del dropdown
         selectEl.value = "";
+        // Bug # 153: también resetear el estado en memoria. Si el usuario
+        // eligió una enfermera y después borró el texto, `confirmarTraslado`
+        // seguía mandando el CI anterior porque leía `estado.enfermero`,
+        // no el select del DOM. Con este `onPick(null)` el caller resetea
+        // su estado.
+        if (typeof onPick === "function") onPick(null);
       });
 
       // mousedown (no click) para que dispere antes que el blur del input
@@ -610,6 +634,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         guardarEstado();
         actualizarVisibilidadJerarquia();
+        // Bug # 153: si el enfermero es obligatorio y el usuario lo
+        // acaba de elegir (o lo borró), re-evaluamos el botón del paso 5
+        // para habilitarlo/deshabilitarlo según corresponda.
+        actualizarBotonPaso5();
       },
     );
   }
@@ -788,13 +816,51 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   /**
-   * Actualizar botón del paso 5 (Personal - requiere conductor)
+   * Indica si el paso 5 debe exigir enfermero. Regla: si el traslado es
+   * crítico O requiere camilla, el enfermero pasa de opcional a
+   * obligatorio. Aplica a la deshabilitación del botón Continuar, a la
+   * marca visual del label y a la validación de submit.
+   */
+  function enfermeroEsObligatorio() {
+    return !!(estado.estadoCritico || estado.requiereCamilla);
+  }
+
+  /**
+   * Muestra/oculta el asterisco "(Obligatorio)" en el label del
+   * enfermero según si el traslado lo requiere.
+   */
+  function actualizarVisibilidadObligatoriedadEnfermero() {
+    const label = document.querySelector('label[for="enfermero-input"]');
+    if (!label) return;
+    let badge = label.querySelector(".enfermero-obligatorio-badge");
+    if (enfermeroEsObligatorio()) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "enfermero-obligatorio-badge";
+        badge.textContent = "(Obligatorio)";
+        badge.style.color = "var(--danger-red)";
+        badge.style.fontWeight = "600";
+        badge.style.marginLeft = "var(--space-2)";
+        label.appendChild(badge);
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  /**
+   * Actualizar botón del paso 5 (Personal - requiere conductor y,
+   * si el traslado es crítico o requiere camilla, también enfermero).
    */
   function actualizarBotonPaso5() {
     const btn = document.getElementById("btn-step-5");
     if (btn) {
-      btn.disabled = !estado.conductor;
+      const requiereEnfermero = enfermeroEsObligatorio();
+      const tieneEnfermero = !!estado.enfermero;
+      btn.disabled =
+        !estado.conductor || (requiereEnfermero && !tieneEnfermero);
     }
+    actualizarVisibilidadObligatoriedadEnfermero();
   }
 
   /**
@@ -1216,6 +1282,24 @@ document.addEventListener("DOMContentLoaded", function () {
       vehiculoCard && vehiculoCard.dataset.restringido === "true";
     if (esCamion && estado.tipoTraslado !== "equipamiento") {
       alert("El camión solo está disponible para traslados de equipamiento.");
+      return;
+    }
+
+    // Bug # 153: si el traslado es crítico o requiere camilla, el
+    // enfermero es OBLIGATORIO. La misma validación existe en el backend
+    // (apiCrearTraslado en ControladorDashboard) — esto es solo UX para
+    // no hacer un viaje al servidor si falta.
+    if (
+      (estado.estadoCritico || estado.requiereCamilla) &&
+      !estado.enfermero
+    ) {
+      const motivo = estado.estadoCritico
+        ? "el estado es crítico"
+        : "requiere camilla";
+      alert(
+        `Los traslados donde ${motivo} deben tener un enfermero asignado. Volvé al paso 5 y seleccioná uno.`,
+      );
+      irAPaso(5);
       return;
     }
 

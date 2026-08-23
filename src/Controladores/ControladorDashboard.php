@@ -329,6 +329,21 @@ class ControladorDashboard extends RutaProtegida
             return;
         }
 
+        // Bug # 153: si el traslado es crítico o requiere camilla, el
+        // enfermero es OBLIGATORIO. Misma lógica que el cliente para que
+        // no se pueda bypassear desactivando JS.
+        $estadoCritico   = (bool)($data['estadoCritico'] ?? false);
+        $requiereCamilla = (bool)($data['requiereCamilla'] ?? false);
+        $ciEnfermero     = $data['ci_enfermero'] ?? null;
+        if (($estadoCritico || $requiereCamilla) && empty($ciEnfermero)) {
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Los traslados en estado crítico o que requieren camilla deben tener un enfermero asignado.',
+            ]);
+            return;
+        }
+
         try {
             $user = Sesion::obtener('user');
             $data['ci_administrativo'] = $user['ci'] ?? 11111111; // fallback dev

@@ -260,6 +260,17 @@ ALTER TABLE `roles`
   MODIFY COLUMN `tipo_rol`
   ENUM('ADMINISTRATIVO','MEDICO','CHOFER','ENFERMERO','SOPORTE_TECNICO') NOT NULL;
 
+-- ============================================================
+-- Migración feat/issue-113-rol-superadministrativo
+-- Root del sistema. Tiene todos los permisos sobre todos los recursos
+-- y se saltea las validaciones operativas de emergencia. Convive con
+-- `administrador` (operador del día a día) — son roles distintos con
+-- alcances distintos.
+-- ============================================================
+ALTER TABLE `roles`
+  MODIFY COLUMN `tipo_rol`
+  ENUM('ADMINISTRATIVO','MEDICO','CHOFER','ENFERMERO','SOPORTE_TECNICO','SUPERADMINISTRATIVO') NOT NULL;
+
 -- Fecha de alta automática: la pide el issue para que la tabla muestre
 -- "Fecha de Alta" sin tener que inferirla por orden de id.
 ALTER TABLE `usuarios`

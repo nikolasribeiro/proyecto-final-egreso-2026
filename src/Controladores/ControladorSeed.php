@@ -26,6 +26,35 @@ class ControladorSeed {
         try {
             $db = Conexion::obtenerInstancia();
 
+            // 0. Self-healing idempotente del rol SuperAdministrativo (#113).
+            //    Lo hacemos ANTES del early-return para que, en una BD
+            //    ya sembrada con código viejo, el root quede promovido a
+            //    SUPERADMINISTRATIVO igual. Seguro de correr muchas veces.
+            try {
+                $db->exec("ALTER TABLE `roles`
+                    MODIFY COLUMN `tipo_rol`
+                    ENUM('ADMINISTRATIVO','MEDICO','CHOFER','ENFERMERO','SOPORTE_TECNICO','SUPERADMINISTRATIVO') NOT NULL");
+            } catch (\Throwable $e) {
+                // Si la migración ya estaba aplicada o el usuario no
+                // tiene permisos de ALTER, seguimos. Lo importante es
+                // que el INSERT IGNORE de abajo es defensivo.
+                error_log('Seed: no se pudo aplicar ALTER del enum: ' . $e->getMessage());
+            }
+            $db->exec("INSERT IGNORE INTO roles (descripcion_rol, tipo_rol)
+                VALUES ('Root del sistema', 'SUPERADMINISTRATIVO')");
+            $superId = (int)$db->query(
+                "SELECT id FROM roles WHERE tipo_rol = 'SUPERADMINISTRATIVO' LIMIT 1"
+            )->fetchColumn();
+            $rootId = (int)$db->query(
+                "SELECT id FROM usuarios WHERE ci = 99999999 LIMIT 1"
+            )->fetchColumn();
+            if ($rootId > 0 && $superId > 0) {
+                // Promover root a SuperAdministrativo. Si ya lo tenía,
+                // no hace nada. Si tenía otro rol, conserva ese (la UI
+                // puede mostrar varios roles por usuario).
+                $db->exec("INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES ({$rootId}, {$superId})");
+            }
+
             // 1. Roles — se siembran SIEMPRE que la tabla esté vacía,
             //    independientemente de si hay usuarios o no. El catálogo de
             //    roles es requisito para que el módulo de usuarios funcione
@@ -80,10 +109,12 @@ class ControladorSeed {
             // del enum para que no se rompa si cambian los IDs de seed).
             $db->exec("INSERT INTO usuario_roles (id_usuario, id_rol) VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5)");
 
-            // Root → rol ADMINISTRATIVO (id 1 según init.sql).
-            $rootId = (int)$db->query("SELECT id FROM usuarios WHERE ci = 99999999")->fetchColumn();
-            if ($rootId > 0) {
-                $db->exec("INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES ({$rootId}, 1)");
+            // Root → rol SUPERADMINISTRATIVO (#113). El id lo sacamos por
+            // lookup del enum, no hardcodeado, para sobrevivir inserciones.
+            $rootIdSeed = (int)$db->query("SELECT id FROM usuarios WHERE ci = 99999999")->fetchColumn();
+            $superIdSeed = (int)$db->query("SELECT id FROM roles WHERE tipo_rol = 'SUPERADMINISTRATIVO' LIMIT 1")->fetchColumn();
+            if ($rootIdSeed > 0 && $superIdSeed > 0) {
+                $db->exec("INSERT IGNORE INTO usuario_roles (id_usuario, id_rol) VALUES ({$rootIdSeed}, {$superIdSeed})");
             }
 
             // 3. Categorías de Documentos Médicos (Casos reales del Hospital de Clínicas)

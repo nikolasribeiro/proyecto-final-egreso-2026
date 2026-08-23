@@ -364,11 +364,21 @@ class ModeloTraslado
         // sobrevivir inserciones / cambios en la tabla `roles`. El listado
         // operativo del wizard NO incluye soporte_tecnico: ese rol nunca se
         // mapea a CHOFER ni a ENFERMERO.
+        //
+        // Bug # 153: excluimos choferes que ya estén en un traslado activo
+        // (PENDIENTE = 1 o EN_TRANSITO = 2). Sin esto se podía asignar el
+        // mismo chofer a dos traslados simultáneos.
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido
                 FROM usuarios u
                 JOIN usuario_roles ur ON u.id = ur.id_usuario
                 JOIN roles r ON ur.id_rol = r.id
                 WHERE r.tipo_rol = 'CHOFER' AND u.activo = TRUE
+                  AND u.ci NOT IN (
+                      SELECT st.ci_chofer
+                      FROM solicitud_traslados st
+                      WHERE st.id_estado IN (1, 2)
+                        AND st.ci_chofer IS NOT NULL
+                  )
                 ORDER BY u.nombre, u.apellido";
         return $this->db->query($sql)->fetchAll();
     }
@@ -376,11 +386,19 @@ class ModeloTraslado
     public function obtenerEnfermeros(): array
     {
         // Mismo criterio: filtramos por tipo_rol del catálogo en vez de id_rol.
+        //
+        // Bug # 153: excluimos enfermeros que ya estén en un traslado activo.
         $sql = "SELECT DISTINCT u.ci, u.nombre, u.apellido
                 FROM usuarios u
                 JOIN usuario_roles ur ON u.id = ur.id_usuario
                 JOIN roles r ON ur.id_rol = r.id
                 WHERE r.tipo_rol = 'ENFERMERO' AND u.activo = TRUE
+                  AND u.ci NOT IN (
+                      SELECT st.ci_enfermero
+                      FROM solicitud_traslados st
+                      WHERE st.id_estado IN (1, 2)
+                        AND st.ci_enfermero IS NOT NULL
+                  )
                 ORDER BY u.nombre, u.apellido";
         return $this->db->query($sql)->fetchAll();
     }
