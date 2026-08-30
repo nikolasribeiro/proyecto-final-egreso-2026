@@ -44,6 +44,16 @@ class ControladorDocumentos
                 return;
             }
 
+            // Chequeo de permiso sobre el rol de la sesión. Cubre el caso
+            // de un rol sin permiso 'crear' sobre documentos (incluye la
+            // cuenta sin rol válido que por algún motivo traiga sesión).
+            $rolSesion = $usuarioLogueado['rol'] ?? '';
+            if (!Roles::permiso($rolSesion, 'documentos', 'crear')) {
+                http_response_code(403);
+                echo json_encode(['error' => 'No tiene permisos para subir documentos.']);
+                return;
+            }
+
             if (!isset($_FILES['documento']) || $_FILES['documento']['error'] !== UPLOAD_ERR_OK) {
                 throw new Exception('No se recibió ningún archivo PDF válido.');
             }

@@ -4,6 +4,7 @@ namespace Controladores;
 
 use Modelos\ModeloUsuario;
 use Nucleo\Conexion;
+use Nucleo\Constantes\Roles;
 use Nucleo\Sesion;
 use PDO;
 use Throwable;
@@ -110,11 +111,25 @@ class ControladorAuth
             return;
         }
 
+        // Defensa contra cuentas creadas sin roles asignados en `usuario_roles`.
+        // Las credenciales son válidas, así que NO se cuenta como intento
+        // fallido para el rate-limit (no es una señal de fuerza bruta), pero
+        // sí audita y bloquea el login con un mensaje explícito.
+        if (empty($usuario['roles'])) {
+            $this->registrarAuditoriaLoginFail($identifier, 'sin_rol');
+            Sesion::guardar(
+                'error_login',
+                'Usuario sin rol asignado, contacte al administrador para más información.'
+            );
+            redirigir('/login?error=sin_rol');
+            return;
+        }
+
         // Login OK. Elegimos el rol primario para la sesión: el primero
         // de la lista ordenada alfabéticamente (mismo criterio que ya
-        // usaba la matriz de permisos). Si el usuario no tiene roles
-        // asignados, caemos a 'usuario' genérico.
-        $rol = $usuario['roles'][0] ?? 'usuario';
+        // usaba la matriz de permisos). El array siempre tiene al menos
+        // un elemento porque el bloque anterior lo garantiza.
+        $rol = $usuario['roles'][0];
 
         Sesion::guardar('user', [
             'id'        => (int)$usuario['id'],
@@ -146,6 +161,36 @@ class ControladorAuth
         }
 
         redirigir($this->rutaDashboard);
+    }
+
+    /**
+     * Página "sin acceso": se muestra cuando un usuario logueado no tiene
+     * ningún rol válido (o ninguno asignado). Es la contramedida al caso
+     * "por las dudas": si por algún motivo la sesión quedó abierta para
+     * una cuenta sin rol, igual no puede ver nada de la app — solo un
+     * mensaje y un botón que la cierra y vuelve al login.
+     *
+     * No está protegida por RutaProtegida (para evitar un loop de
+     * redirección). En su lugar, hace sus propios chequeos de entrada.
+     */
+    public function sinAcceso(): void
+    {
+        $usuario = Sesion::obtener('user');
+
+        // Sin sesión → al login.
+        if (!is_array($usuario) || empty($usuario['id'])) {
+            redirigir('/login');
+            return;
+        }
+
+        // Sesión con rol válido → no hay motivo para estar acá.
+        $rolesUsuario = is_array($usuario['roles'] ?? null) ? $usuario['roles'] : [];
+        if (!empty($rolesUsuario) && Roles::esValido($usuario['rol'] ?? '')) {
+            redirigir($this->rutaDashboard);
+            return;
+        }
+
+        vista('auth/sin-acceso');
     }
 
     /**
@@ -365,18 +410,27 @@ class ControladorAuth
      * `id_usuario = NULL` (porque no necesariamente corresponde a nadie).
      * El detalle lleva el identificador que se tipeó, útil para detectar
      * patrones de ataque.
+     *
+     * El parámetro opcional `$motivo` distingue, dentro del enum cerrado
+     * `logs_auditoria.accion`, por qué se rechazó el login sin necesidad
+     * de extender el enum (ej: 'sin_rol' para cuentas válidas sin roles).
      */
-    private function registrarAuditoriaLoginFail(string $identifier): void
+    private function registrarAuditoriaLoginFail(string $identifier, string $motivo = ''): void
     {
         try {
             $db = Conexion::obtenerInstancia();
+            $detalles = ['identifier_tipeado' => $identifier];
+            if ($motivo !== '') {
+                $detalles['motivo'] = $motivo;
+            }
             $stmt = $db->prepare(
                 "INSERT INTO logs_auditoria
                    (id_usuario, accion, tabla_afectada, registro_id, detalles, ip_origen, fecha_hora)
-                 VALUES (NULL, 'LOGIN_FAIL', 'usuarios', NULL, JSON_OBJECT('identifier_tipeado', :id), :ip, NOW())"
+                 VALUES (NULL, 'LOGIN_FAIL', 'usuarios', NULL, JSON_OBJECT('identifier_tipeado', :id, 'motivo', :m), :ip, NOW())"
             );
             $stmt->execute([
                 'id' => $identifier,
+                'm'  => $motivo,
                 'ip' => $_SERVER['REMOTE_ADDR'] ?? null,
             ]);
         } catch (Throwable $e) {

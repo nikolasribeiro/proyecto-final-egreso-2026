@@ -2,6 +2,8 @@
 
 namespace Nucleo;
 
+use Nucleo\Constantes\Roles;
+
 class RutaProtegida
 {
     /**
@@ -26,6 +28,21 @@ class RutaProtegida
             // Web: redirigimos al login como siempre.
             Sesion::guardar('error_login', 'Vuelve a iniciar sesion para continuar');
             redirigir('/login?error=auth');
+        }
+
+        // 1b. Defensa en profundidad: si la sesión existe pero el usuario
+        // no tiene roles asignados (o el rol guardado no es válido en el
+        // catálogo), no dejamos que vea nada de la app. Login debería
+        // haberlo bloqueado ya, pero esto cubre el caso de una sesión
+        // vieja, una cuenta desactivada a posteriori, etc.
+        $rolesUsuario = is_array($usuario['roles'] ?? null) ? $usuario['roles'] : [];
+        if (empty($rolesUsuario) || !Roles::esValido($usuario['rol'] ?? '')) {
+            if ($esApi) {
+                self::responderJson(403, 'forbidden', 'Su cuenta no tiene un rol asignado. Contacte al administrador.');
+                return;
+            }
+            redirigir('/sin-acceso');
+            return;
         }
 
         // 2. Verificamos la autorización de roles (si se especificaron)

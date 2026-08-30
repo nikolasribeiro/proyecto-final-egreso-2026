@@ -20,7 +20,7 @@ $errorMsg = $error_message ?? '';
         <?php componente('auth/login/logo') ?>
 
         <!-- Alerta de error -->
-        <?php componente('auth/login/alerta-error', [$errorMsg])  ?>
+        <?php componente('auth/login/alerta-error', ['error_message' => $errorMsg]) ?>
 
         <!-- Formulario -->
         <form id="auth-form" class="auth-form" action="/login" method="POST" novalidate>

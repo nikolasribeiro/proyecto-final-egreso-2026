@@ -114,7 +114,15 @@ if (urlParams.has("error")) {
     message = "Por favor, completá todos los campos.";
   else if (errorType === "inactive")
     message = "Tu cuenta está inactiva. Contactá al administrador.";
-  showError(message);
+  else if (errorType === "sin_rol")
+    message =
+      "Usuario sin rol asignado, contacte al administrador para más información.";
+
+  // Si el servidor ya renderizó un mensaje (clase .show en #auth-alert),
+  // respetamos su texto y no lo pisamos con el mapa JS.
+  if (!alertError.classList.contains("show")) {
+    showError(message);
+  }
 }
 
 usernameInput.addEventListener("input", hideError);

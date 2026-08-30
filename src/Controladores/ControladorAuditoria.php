@@ -3,15 +3,19 @@
 namespace Controladores;
 
 use Modelos\ModeloAuditoria;
+use Nucleo\RutaProtegida;
 use Nucleo\Sesion;
 
-class ControladorAuditoria
+class ControladorAuditoria extends RutaProtegida
 {
     private string $nombre_usuario;
     private string $rol;
 
     public function __construct()
     {
+        // Hereda el guard de RutaProtegida (sesión activa + roles válidos).
+        parent::__construct();
+
         $usuario = Sesion::obtener('user');
         $this->nombre_usuario = $usuario['nombre'];
         $this->rol = $usuario['rol'];

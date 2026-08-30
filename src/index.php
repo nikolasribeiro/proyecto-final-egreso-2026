@@ -73,6 +73,10 @@ $enrutador->get('/login', [\Controladores\ControladorAuth::class, 'login']);
 $enrutador->post('/login', [\Controladores\ControladorAuth::class, 'autenticar']);
 $enrutador->get('/logout', [\Controladores\ControladorAuth::class, 'logout']);
 
+// Página "sin acceso" para cuentas con sesión pero sin rol válido.
+// Va en ControladorAuth (no protegido) para evitar loop con el guard.
+$enrutador->get('/sin-acceso', [\Controladores\ControladorAuth::class, 'sinAcceso']);
+
 // Cambio de contraseña obligatorio (#40 — usuario root recién creado).
 $enrutador->get('/cambiar-password',  [\Controladores\ControladorAuth::class, 'cambiarPassword']);
 $enrutador->post('/cambiar-password', [\Controladores\ControladorAuth::class, 'cambiarPasswordSubmit']);

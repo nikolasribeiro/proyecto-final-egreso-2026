@@ -34,6 +34,14 @@ $urlsModulos = [
     'vehiculos'  => '/dashboard/vehiculos',
     'auditoria'  => '/dashboard/auditoria',
 ];
+
+// Defensa contra sesión sin rol válido: si llegamos hasta acá (lo cual
+// no debería pasar si RutaProtegida hizo su trabajo), no renderizamos
+// nada. El guard ya redirige a /sin-acceso, así que esto es red de
+// seguridad adicional para el sidebar en cualquier llamada directa.
+if (!Roles::esValido($rol ?? '')) {
+    return;
+}
 ?>
 
 <!-- Sidebar Overlay (Mobile) -->
@@ -53,47 +61,55 @@ $urlsModulos = [
 
     <!-- Navegación -->
     <nav class="sidebar-nav">
-        <p class="nav-section-title">Operaciones</p>
-        <ul class="nav-list">
-            <!-- Trazabilidad / Traslados -->
-            <li class="nav-item">
-                <a
-                    href="<?= e($urlsModulos['traslados']) ?>"
-                    class="nav-link <?= esLinkActivo($urlsModulos['traslados'], $rutaActual) ? 'active' : '' ?>"
-                    data-section="traslados">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
-                    </svg>
-                    Traslados
-                </a>
-            </li>
+        <?php if (Roles::permiso($rol ?? '', 'traslados', 'ver') || Roles::permiso($rol ?? '', 'documentos', 'ver') || Roles::permiso($rol ?? '', 'encuestas', 'ver')): ?>
+            <p class="nav-section-title">Operaciones</p>
+            <ul class="nav-list">
+                <?php if (Roles::permiso($rol ?? '', 'traslados', 'ver')): ?>
+                    <!-- Trazabilidad / Traslados -->
+                    <li class="nav-item">
+                        <a
+                            href="<?= e($urlsModulos['traslados']) ?>"
+                            class="nav-link <?= esLinkActivo($urlsModulos['traslados'], $rutaActual) ? 'active' : '' ?>"
+                            data-section="traslados">
+                            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
+                            </svg>
+                            Traslados
+                        </a>
+                    </li>
+                <?php endif; ?>
 
-            <!-- Documentos -->
-            <li class="nav-item">
-                <a
-                    href="<?= e($urlsModulos['documentos']) ?>"
-                    class="nav-link <?= esLinkActivo($urlsModulos['documentos'], $rutaActual) ? 'active' : '' ?>"
-                    data-section="documentos">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Documentos
-                </a>
-            </li>
+                <?php if (Roles::permiso($rol ?? '', 'documentos', 'ver')): ?>
+                    <!-- Documentos -->
+                    <li class="nav-item">
+                        <a
+                            href="<?= e($urlsModulos['documentos']) ?>"
+                            class="nav-link <?= esLinkActivo($urlsModulos['documentos'], $rutaActual) ? 'active' : '' ?>"
+                            data-section="documentos">
+                            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Documentos
+                        </a>
+                    </li>
+                <?php endif; ?>
 
-            <!-- Encuestas (todos los roles la ven) -->
-            <li class="nav-item">
-                <a
-                    href="<?= e($urlsModulos['encuestas']) ?>"
-                    class="nav-link <?= esLinkActivo($urlsModulos['encuestas'], $rutaActual) ? 'active' : '' ?>"
-                    data-section="encuestas">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                    </svg>
-                    Encuestas
-                </a>
-            </li>
-        </ul>
+                <?php if (Roles::permiso($rol ?? '', 'encuestas', 'ver')): ?>
+                    <!-- Encuestas -->
+                    <li class="nav-item">
+                        <a
+                            href="<?= e($urlsModulos['encuestas']) ?>"
+                            class="nav-link <?= esLinkActivo($urlsModulos['encuestas'], $rutaActual) ? 'active' : '' ?>"
+                            data-section="encuestas">
+                            <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                            </svg>
+                            Encuestas
+                        </a>
+                    </li>
+                <?php endif; ?>
+            </ul>
+        <?php endif; ?>
 
         <?php if (Roles::permiso($rol ?? '', 'usuarios', 'ver') || Roles::permiso($rol ?? '', 'permisos', 'ver') || Roles::permiso($rol ?? '', 'vehiculos', 'ver')): ?>
             <p class="nav-section-title">Administración</p>

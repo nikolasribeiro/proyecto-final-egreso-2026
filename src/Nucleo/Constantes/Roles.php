@@ -288,4 +288,17 @@ final class Roles
     {
         return array_keys(self::MAPA_UI_A_ENUM);
     }
+
+    /**
+     * Indica si una UI key corresponde a un rol válido del catálogo.
+     *
+     * Se usa como guard de "rol utilizable" en el login y en el sidebar:
+     * un usuario sin filas en `usuario_roles` (o con un rol legacy que ya
+     * no existe) cae por acá y se le niega el acceso en lugar de caer
+     * a un fallback fantasma como 'usuario'.
+     */
+    public static function esValido(string $rol): bool
+    {
+        return isset(self::MAPA_UI_A_ENUM[$rol]);
+    }
 }
