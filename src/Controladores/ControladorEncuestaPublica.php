@@ -14,12 +14,18 @@ class ControladorEncuestaPublica {
             echo "El enlace de esta encuesta es inválido o ha caducado.";
             return;
         }
-
-        // CORRECCIÓN: Se llama a la función todas() con paréntesis y minúsculas
-        $plantillas = PlantillasEncuestas::todas(); 
-        
-        // Forzamos la plantilla 'general' para la vista móvil
-        $encuesta['preguntas'] = $plantillas['general']['preguntas'] ?? [];
+         
+        if ($encuesta['id_plantilla'] === 'personalizada') {
+            $preguntasDecodificadas = json_decode($encuesta['preguntas'] ?? '[]', true) ?: [];
+            $preguntasFormateadas = [];
+            foreach ($preguntasDecodificadas as $texto) {
+                $preguntasFormateadas[] = ['texto' => $texto]; // Adaptamos al formato que espera la vista
+            }
+            $encuesta['preguntas'] = $preguntasFormateadas;
+        } else {
+            $plantillas = PlantillasEncuestas::todas(); 
+            $encuesta['preguntas'] = $plantillas[$encuesta['id_plantilla']]['preguntas'] ?? [];
+        }
 
         vista('public/encuesta_mobile', ['encuesta' => $encuesta]);
     }

@@ -642,24 +642,88 @@ class ControladorDashboard extends RutaProtegida
     // ==========================================
 
     /**
-     * Muestra el formulario de encuesta cuantitativa.
+     * Muestra el formulario de encuesta y el listado (CRUD)
      */
     public function encuestas(): void
     {
         $plantillaSeleccionada = $_GET['plantilla'] ?? 'general';
+        $flash = \Nucleo\Sesion::obtener('flash_encuesta');
+        \Nucleo\Sesion::eliminar('flash_encuesta');
 
-        $flash = Sesion::obtener('flash_encuesta');
-        Sesion::eliminar('flash_encuesta');
+        $modelo = new \Modelos\ModeloEncuesta();
 
         vista('modulos/encuestas/inicio', [
             'titulo_pagina' => 'Encuestas de Satisfacción',
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
-            'plantillas' => PlantillasEncuestas::todas(),
+            'plantillas' => \Nucleo\Constantes\PlantillasEncuestas::todas(),
             'plantilla_seleccionada' => $plantillaSeleccionada,
-            'encuesta' => PlantillasEncuestas::obtener($plantillaSeleccionada),
+            'encuesta' => \Nucleo\Constantes\PlantillasEncuestas::obtener($plantillaSeleccionada),
             'flash' => $flash,
+            'lista_encuestas' => $modelo->obtenerTodas(),
+            'lista_categorias' => $modelo->obtenerCategorias() // <- CLAVE PARA EL DESPLEGABLE
         ], 'admin');
+    }
+
+    public function crearEncuesta() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $modelo = new \Modelos\ModeloEncuesta();
+            
+            // Atrapamos la decisión del usuario
+            $idPlantillaSeleccionada = $_POST['id_plantilla'] ?? 'general';
+            $jsonPreguntas = null;
+
+            // Si es dinámica, procesamos el array
+            if ($idPlantillaSeleccionada === 'personalizada') {
+                $arrayPreguntas = array_values(array_filter(array_map('trim', $_POST['preguntas'] ?? [])));
+                $jsonPreguntas = !empty($arrayPreguntas) ? json_encode($arrayPreguntas, JSON_UNESCAPED_UNICODE) : null;
+            }
+            
+            $datos = [
+                'segmento_dirigido' => $_POST['segmento_dirigido'] ?? 'Pacientes',
+                'es_anonima' => isset($_POST['es_anonima']) ? 1 : 0,
+                'token_publico' => bin2hex(random_bytes(16)), 
+                'fecha_vencimiento' => null, 
+                'id_categoria' => !empty($_POST['id_categoria']) ? (int)$_POST['id_categoria'] : null,
+                'id_plantilla' => $idPlantillaSeleccionada,
+                'preguntas' => $jsonPreguntas
+            ];
+            
+            if ($modelo->crear($datos)) {
+                $auditoria = new \Modelos\ModeloAuditoria();
+                $idUsuario = \Nucleo\Sesion::obtener('user')['id'] ?? null;
+                $auditoria->registrar('CREAR', 'encuestas', 'Nueva encuesta creada', $idUsuario);
+                
+                \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'exito', 'mensaje' => 'Encuesta creada correctamente.']);
+            } else {
+                \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al crear la encuesta.']);
+            }
+            
+            header('Location: /dashboard/encuestas');
+            exit;
+        }
+    }
+
+    /**
+     * Elimina encuestas (CRUD - Eliminar)
+     */
+    public function eliminarEncuesta(int $id) {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $modelo = new \Modelos\ModeloEncuesta();
+            
+            if ($modelo->eliminar($id)) {
+                $auditoria = new \Modelos\ModeloAuditoria();
+                $idUsuario = \Nucleo\Sesion::obtener('user')['id'] ?? null;
+                $auditoria->registrar('ELIMINAR', 'encuestas', 'Campaña eliminada ID: ' . $id, $idUsuario);
+                
+                \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'exito', 'mensaje' => 'Campaña eliminada.']);
+            } else {
+                \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al eliminar.']);
+            }
+            
+            header('Location: /dashboard/encuestas');
+            exit;
+        }
     }
 
    /**
@@ -707,6 +771,14 @@ class ControladorDashboard extends RutaProtegida
         ];
         
         if ($modelo->guardarRespuestas($data)) {
+            $modeloAuditoria = new \Modelos\ModeloAuditoria();
+            $detalleAuditoria = $esAnonima ? 'Encuesta interna respondida de forma anónima' : 'Encuesta respondida por CI: ' . $ciUsuario;
+            
+            // ¡EL ARREGLO ESTÁ AQUÍ! Forzamos null en el ID del log si es anónima
+            $idUsuarioAuditoria = $esAnonima ? null : $idUsuario;
+            
+            $modeloAuditoria->registrar('CREAR', 'respuestas_encuesta', $detalleAuditoria, $idUsuarioAuditoria);
+
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'exito', 'mensaje' => 'Encuesta guardada correctamente.']);
         } else {
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al guardar.']);
@@ -715,6 +787,28 @@ class ControladorDashboard extends RutaProtegida
         // CORRECCIÓN 2: Redirección nativa
         header('Location: /dashboard/encuestas');
         exit;
+    }
+
+    public function resultadosEncuesta(int $id) {
+        $modelo = new \Modelos\ModeloEncuesta();
+        $encuesta = $modelo->obtenerPorId($id);
+
+        if (!$encuesta) {
+            \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Encuesta no encontrada.']);
+            header('Location: /dashboard/encuestas');
+            exit;
+        }
+
+        // Llamamos a nuestra nueva función matemática
+        $resultados = $modelo->obtenerResultados($id);
+
+        vista('modulos/encuestas/resultados', [
+            'titulo_pagina' => 'Resultados de Encuesta',
+            'nombre' => $this->nombre_usuario,
+            'rol' => $this->rol,
+            'encuesta' => $encuesta,
+            'resultados' => $resultados
+        ], 'admin');
     }
 
     // ==========================================

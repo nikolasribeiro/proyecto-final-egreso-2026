@@ -88,6 +88,11 @@ $enrutador->get('/dashboard/traslados/{id}', [\Controladores\ControladorDashboar
 // Encuestas
 $enrutador->get('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestas']);
 $enrutador->post('/dashboard/encuestas', [\Controladores\ControladorDashboard::class, 'encuestaSubmit']);
+// 1. Ruta para procesar la creación de una nueva encuesta
+$enrutador->post('/dashboard/encuestas/crear', [\Controladores\ControladorDashboard::class, 'crearEncuesta']);
+// 2. Ruta para procesar la eliminación de una encuesta (recibe el ID dinámicamente)
+$enrutador->post('/dashboard/encuestas/eliminar/{id}', [\Controladores\ControladorDashboard::class, 'eliminarEncuesta']);
+$enrutador->get('/dashboard/encuestas/resultados/{id}', [\Controladores\ControladorDashboard::class, 'resultadosEncuesta']);
 
 // Permisos (matriz)
 $enrutador->get('/dashboard/permisos', [\Controladores\ControladorDashboard::class, 'permisos']);
