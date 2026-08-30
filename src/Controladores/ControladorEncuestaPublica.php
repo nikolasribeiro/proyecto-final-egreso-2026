@@ -2,6 +2,7 @@
 namespace Controladores;
 
 use Modelos\ModeloEncuesta;
+use Modelos\ModeloAuditoria;
 use Nucleo\Constantes\PlantillasEncuestas; 
 
 class ControladorEncuestaPublica {
@@ -60,7 +61,11 @@ class ControladorEncuestaPublica {
                 'respuestas_detalle' => $respuestasDetalle
             ];
 
-            $modelo->guardarRespuestas($data);
+            if ($modelo->guardarRespuestas($data)) {
+                $modeloAuditoria = new ModeloAuditoria();
+                $modeloAuditoria->registrar('CREAR', 'respuestas_encuesta', 'Encuesta pública respondida vía token (Totalmente Anónima)', null);
+            }
+            
             header('Location: /encuesta/gracias');
             exit;
         }

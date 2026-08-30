@@ -732,7 +732,6 @@ class ControladorDashboard extends RutaProtegida
     public function encuestaSubmit() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Método no permitido']);
-            // CORRECCIÓN 1: Redirección nativa
             header('Location: /dashboard/encuestas');
             exit;
         }
@@ -745,6 +744,7 @@ class ControladorDashboard extends RutaProtegida
 
         $usuario = \Nucleo\Sesion::obtener('user');
         $ciUsuario = $esAnonima ? null : ($usuario['ci'] ?? null);
+        $idUsuario = $usuario['id'] ?? null; // Capturamos el ID para la auditoría
 
         $respuestasDetalle = [];
         $sumaCalificaciones = 0;
@@ -784,9 +784,9 @@ class ControladorDashboard extends RutaProtegida
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Error al guardar.']);
         }
         
-        // CORRECCIÓN 2: Redirección nativa
         header('Location: /dashboard/encuestas');
         exit;
+        
     }
 
     public function resultadosEncuesta(int $id) {
