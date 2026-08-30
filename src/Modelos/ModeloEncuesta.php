@@ -23,13 +23,6 @@ class ModeloEncuesta {
                 $stmtDetalle->execute([$idRespuesta, $numeroPregunta, $valor]);
             }
 
-            // Auditoría solo si no es anónima
-            if ($datos['ci_usuario'] !== null) {
-                $idUsuarioAuditoria = $_SESSION['user']['id'] ?? null;
-                $stmtAudit = $this->db->prepare("INSERT INTO logs_auditoria (id_usuario, accion, tabla_afectada, registro_id) VALUES (?, 'CREAR', 'respuestas_encuesta', ?)");
-                $stmtAudit->execute([$idUsuarioAuditoria, $idRespuesta]);
-            }
-
             $this->db->commit();
             return true;
         } catch (\PDOException $e) {

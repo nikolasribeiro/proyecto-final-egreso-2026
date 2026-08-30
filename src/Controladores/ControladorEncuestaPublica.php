@@ -2,6 +2,7 @@
 namespace Controladores;
 
 use Modelos\ModeloEncuesta;
+use Modelos\ModeloAuditoria;
 use Nucleo\Constantes\PlantillasEncuestas; 
 
 class ControladorEncuestaPublica {
@@ -15,10 +16,7 @@ class ControladorEncuestaPublica {
             return;
         }
 
-        // CORRECCIÓN: Se llama a la función todas() con paréntesis y minúsculas
         $plantillas = PlantillasEncuestas::todas(); 
-        
-        // Forzamos la plantilla 'general' para la vista móvil
         $encuesta['preguntas'] = $plantillas['general']['preguntas'] ?? [];
 
         vista('public/encuesta_mobile', ['encuesta' => $encuesta]);
@@ -54,7 +52,11 @@ class ControladorEncuestaPublica {
                 'respuestas_detalle' => $respuestasDetalle
             ];
 
-            $modelo->guardarRespuestas($data);
+            if ($modelo->guardarRespuestas($data)) {
+                $modeloAuditoria = new ModeloAuditoria();
+                $modeloAuditoria->registrar('CREAR', 'respuestas_encuesta', 'Encuesta pública respondida vía token (Totalmente Anónima)', null);
+            }
+            
             header('Location: /encuesta/gracias');
             exit;
         }
