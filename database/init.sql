@@ -344,3 +344,11 @@ CREATE TABLE IF NOT EXISTS `respuestas_encuesta_detalle` (
     `respuesta_valor` INT NOT NULL,
     FOREIGN KEY (`id_respuesta_encuesta`) REFERENCES `respuestas_encuesta`(`id`) ON DELETE CASCADE
 );
+
+ALTER TABLE encuestas 
+ADD COLUMN activa BOOLEAN DEFAULT TRUE,
+ADD COLUMN id_categoria INT NULL,
+ADD CONSTRAINT fk_encuestas_categoria FOREIGN KEY (id_categoria) REFERENCES categorias_documentos(id) ON DELETE SET NULL;
+
+ALTER TABLE encuestas ADD COLUMN preguntas JSON NULL;
+ALTER TABLE encuestas ADD COLUMN id_plantilla VARCHAR(50) NOT NULL DEFAULT 'general';                      
