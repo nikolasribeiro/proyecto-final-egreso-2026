@@ -35,6 +35,8 @@ class ControladorDashboard extends RutaProtegida
      */
     public function documentos(): void
     {
+        requirePermiso('documentos', 'ver');
+
         $modeloDoc = new \Modelos\ModeloDocumento();
         
         // Capturamos el mensaje flash si es que acabamos de crear un documento
@@ -57,6 +59,8 @@ class ControladorDashboard extends RutaProtegida
      */
     public function documentosCategoria(string $slug): void
     {
+        requirePermiso('documentos', 'ver');
+
         $modeloDoc = new \Modelos\ModeloDocumento();
         $documentos = $modeloDoc->obtenerPorSlugCategoria($slug);
 
@@ -148,6 +152,8 @@ class ControladorDashboard extends RutaProtegida
      */
     public function trasladosInicio(): void
     {
+        requirePermiso('traslados', 'ver');
+
         // Filtro via query param: ?filtro=todos|activos|completados.
         // Default 'todos'. Cualquier valor no reconocido cae al default.
         $filtro = $_GET['filtro'] ?? 'todos';
@@ -241,6 +247,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function nuevoTraslado(): void
     {
+        requirePermiso('traslados', 'crear');
+
         $choferes = $this->modelo_traslado->obtenerChoferesDisponibles();
         $enfermeros = $this->modelo_traslado->obtenerEnfermeros();
         $vehiculos  = $this->modelo_traslado->obtenerVehiculosDisponibles();
@@ -260,6 +268,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function detalleTraslado(int $id): void
     {
+        requirePermiso('traslados', 'ver');
+
         $traslado = $id > 0 ? $this->modelo_traslado->obtenerPorId($id) : null;
         if (!$traslado) {
             abortar(404);
@@ -314,8 +324,30 @@ class ControladorDashboard extends RutaProtegida
         return $raw;
     }
 
+    /**
+     * Quita del catálogo de roles los reservados (ej: superadministrativo)
+     * para que no se muestren como checkboxes en los forms de alta /
+     * edición de usuarios.
+     *
+     * Centraliza el filtro para que `usuarioNuevo()` y `usuarioEditar()`
+     * compartan exactamente la misma regla sin duplicar el `array_filter`.
+     *
+     * @param array<int, array<string, mixed>> $catalogo
+     * @return array<int, array<string, mixed>>
+     */
+    private function filtrarCatalogoRolesAsignables(array $catalogo): array
+    {
+        return array_values(array_filter(
+            $catalogo,
+            static fn(array $rol): bool => isset($rol['clave'])
+                && Roles::esAsignable((string)$rol['clave']),
+        ));
+    }
+
     public function apiCrearTraslado(): void
     {
+        requirePermiso('traslados', 'crear');
+
         header('Content-Type: application/json');
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
@@ -397,6 +429,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function apiObtenerTraslado(int $id): void
     {
+        requirePermiso('traslados', 'ver');
+
         header('Content-Type: application/json');
 
         $traslado = $this->modelo_traslado->obtenerPorId($id);
@@ -412,6 +446,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function apiRegistrarArribo(int $id): void
     {
+        requirePermiso('traslados', 'editar');
+
         header('Content-Type: application/json');
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
@@ -433,6 +469,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function apiRegistrarSalida(int $id): void
     {
+        requirePermiso('traslados', 'editar');
+
         header('Content-Type: application/json');
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
@@ -453,6 +491,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function apiCrearReporte(int $id): void
     {
+        requirePermiso('traslados', 'editar');
+
         header('Content-Type: application/json');
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
@@ -475,6 +515,8 @@ class ControladorDashboard extends RutaProtegida
 
     public function apiCancelarTraslado(int $id): void
     {
+        requirePermiso('traslados', 'eliminar');
+
         header('Content-Type: application/json');
         $data = $this->leerBodyConCsrf();
         if ($data === null) return;
@@ -646,6 +688,8 @@ class ControladorDashboard extends RutaProtegida
      */
     public function encuestas(): void
     {
+        requirePermiso('encuestas', 'ver');
+
         $plantillaSeleccionada = $_GET['plantilla'] ?? 'general';
         $flash = \Nucleo\Sesion::obtener('flash_encuesta');
         \Nucleo\Sesion::eliminar('flash_encuesta');
@@ -666,6 +710,8 @@ class ControladorDashboard extends RutaProtegida
     }
 
     public function crearEncuesta() {
+        requirePermiso('encuestas', 'crear');
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $modelo = new \Modelos\ModeloEncuesta();
             
@@ -708,6 +754,8 @@ class ControladorDashboard extends RutaProtegida
      * Elimina encuestas (CRUD - Eliminar)
      */
     public function eliminarEncuesta(int $id) {
+        requirePermiso('encuestas', 'eliminar');
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $modelo = new \Modelos\ModeloEncuesta();
             
@@ -730,6 +778,8 @@ class ControladorDashboard extends RutaProtegida
      * Procesa el envío de una encuesta
      */
     public function encuestaSubmit() {
+        requirePermiso('encuestas', 'crear');
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             \Nucleo\Sesion::guardar('flash_encuesta', ['tipo' => 'error', 'mensaje' => 'Método no permitido']);
             header('Location: /dashboard/encuestas');
@@ -790,6 +840,8 @@ class ControladorDashboard extends RutaProtegida
     }
 
     public function resultadosEncuesta(int $id) {
+        requirePermiso('encuestas', 'ver');
+
         $modelo = new \Modelos\ModeloEncuesta();
         $encuesta = $modelo->obtenerPorId($id);
 
@@ -825,6 +877,17 @@ class ControladorDashboard extends RutaProtegida
             abortar(403);
         }
 
+        // Excluimos roles reservados (ej: `superadministrativo`) tanto
+        // del catálogo que se muestra como de los id_rol que la UI
+        // manda a la API de toggle. El rol sigue existiendo en BD y en
+        // `Roles::matriz()` con todos sus permisos intactos — solo se
+        // oculta de esta pantalla.
+        $rolesVisibles = array_filter(
+            Roles::labels(),
+            static fn(string $uiKey): bool => Roles::esAsignable($uiKey),
+            ARRAY_FILTER_USE_KEY,
+        );
+
         // Resolvemos id_rol (PK numérica de la BD) por cada UI key del
         // catálogo. La API espera id_rol numérico, no la UI key — y
         // del lado JS no queremos ir a buscarlo en cada click (#130).
@@ -832,7 +895,7 @@ class ControladorDashboard extends RutaProtegida
         try {
             $modelo = new \Modelos\ModeloPermiso();
             $rolesBd = $modelo->obtenerRoles(); // [id_rol] => tipo_rol enum
-            foreach (Roles::labels() as $uiKey => $label) {
+            foreach ($rolesVisibles as $uiKey => $label) {
                 $enum = Roles::mapUiToEnum($uiKey);
                 if ($enum === null) continue;
                 $id = array_search($enum, $rolesBd, true);
@@ -852,7 +915,7 @@ class ControladorDashboard extends RutaProtegida
             'matriz' => Roles::matriz(),
             'recursos' => Roles::recursos(),
             'acciones' => Roles::acciones(),
-            'roles' => Roles::labels(),
+            'roles' => $rolesVisibles,
             'id_roles' => $idRoles,
             'puede_editar' => Roles::permiso($this->rol, 'permisos', 'editar'),
             'csrf_token' => \Nucleo\Sesion::generarTokenCsrf(),
@@ -944,7 +1007,12 @@ class ControladorDashboard extends RutaProtegida
             'nombre' => $this->nombre_usuario,
             'rol' => $this->rol,
             'roles' => Roles::labels(),
-            'catalogo_roles' => $this->modelo_usuario->obtenerCatalogoRoles(),
+            // Excluimos roles reservados (ej: superadministrativo) del
+            // catálogo que se muestra en el form. El rol sigue
+            // existiendo en BD; solo no se ofrece como checkbox.
+            'catalogo_roles' => $this->filtrarCatalogoRolesAsignables(
+                $this->modelo_usuario->obtenerCatalogoRoles(),
+            ),
             'flash' => $flash,
             'csrf' => Sesion::generarTokenCsrf(),
         ], 'admin');
@@ -970,6 +1038,14 @@ class ControladorDashboard extends RutaProtegida
             $rolesPost = [];
         }
         $rolesUi = array_values(array_filter(array_map('strval', $rolesPost), 'strlen'));
+
+        // Defensa: descartamos cualquier rol reservado que venga por
+        // POST (ej: `superadministrativo`). El form no lo muestra, pero
+        // un POST armado a mano podría intentar inyectarlo.
+        $rolesUi = array_values(array_filter(
+            $rolesUi,
+            static fn(string $rol): bool => Roles::esAsignable($rol),
+        ));
 
         try {
             $id = $this->modelo_usuario->crear([
@@ -1022,7 +1098,13 @@ class ControladorDashboard extends RutaProtegida
             'rol' => $this->rol,
             'usuario' => $usuario,
             'roles' => Roles::labels(),
-            'catalogo_roles' => $this->modelo_usuario->obtenerCatalogoRoles(),
+            // Mismo filtro que en `usuarioNuevo()`: roles reservados
+            // fuera del catálogo visible. Si el usuario ya tenía
+            // superadministrativo, sigue teniéndolo (lo gestionamos en
+            // `usuarioActualizar()`); acá solo ocultamos el checkbox.
+            'catalogo_roles' => $this->filtrarCatalogoRolesAsignables(
+                $this->modelo_usuario->obtenerCatalogoRoles(),
+            ),
             'flash' => $flash,
             'csrf' => Sesion::generarTokenCsrf(),
         ], 'admin');
@@ -1049,6 +1131,29 @@ class ControladorDashboard extends RutaProtegida
             $rolesPost = [];
         }
         $rolesUi = array_values(array_filter(array_map('strval', $rolesPost), 'strlen'));
+
+        // Defensa: descartamos roles reservados (ej: superadministrativo)
+        // del POST. Para no perderlos en usuarios que ya los tenían
+        // cargados (legítimos, asignados por seed o por un admin antes
+        // de este cambio), los recuperamos de la BD y los mergeamos.
+        $rolesAsignablesPost = array_values(array_filter(
+            $rolesUi,
+            static fn(string $rol): bool => Roles::esAsignable($rol),
+        ));
+
+        $usuarioActual = $this->modelo_usuario->buscarPorId($id);
+        $rolesReservadosExistentes = [];
+        if (is_array($usuarioActual)) {
+            foreach (($usuarioActual['roles'] ?? []) as $rolExistente) {
+                if (is_string($rolExistente) && !Roles::esAsignable($rolExistente)) {
+                    $rolesReservadosExistentes[] = $rolExistente;
+                }
+            }
+        }
+        $rolesUi = array_values(array_unique(array_merge(
+            $rolesAsignablesPost,
+            $rolesReservadosExistentes,
+        )));
 
         try {
             $payload = [

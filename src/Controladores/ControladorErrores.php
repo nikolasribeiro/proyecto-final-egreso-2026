@@ -16,4 +16,11 @@ class ControladorErrores
     {
         vista('errores/error_servidor');
     }
+
+    public function prohibido(): void
+    {
+        vista('errores/prohibido', [
+            "titulo" => "Acceso denegado",
+        ]);
+    }
 }

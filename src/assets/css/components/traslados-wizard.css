@@ -1090,6 +1090,25 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
+/* Cuando el checkbox interno está disabled (caso típico: "Requiere
+   Camilla" bloqueado por "Estado Crítico"), la card se atenúa y
+   pierde el feedback de hover. El label sigue siendo <label>, así
+   que el browser ignora el click cuando el input está disabled. */
+.clinico-card:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.clinico-card:has(input:disabled) .clinico-card-content {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.clinico-card:has(input:disabled):hover .clinico-card-content {
+  border-color: var(--border-gray);
+  transform: none;
+  box-shadow: none;
+}
+
 .clinico-card input:checked + .clinico-card-content {
   border-color: var(--primary-blue);
   background: var(--primary-blue-light);

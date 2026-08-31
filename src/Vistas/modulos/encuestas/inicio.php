@@ -50,10 +50,32 @@
                                 </td>
                                 <td style="padding: 12px 15px; text-align: right;">
                                     <div class="action-buttons" style="display: flex; gap: 8px; justify-content: flex-end;">
-                                        
+
+                                        <?php $tokenPreview = trim((string)($campana['token_publico'] ?? '')); ?>
+                                        <?php if ($tokenPreview !== ''): ?>
+                                            <!-- Abre la vista pública (la misma que ve el paciente al
+                                                 escanear el QR) en una pestaña nueva para previsualizar
+                                                 cómo se muestra la encuesta. `rel="noopener noreferrer"`
+                                                 evita que la pestaña abierta pueda manipular la original.
+                                                 Solo se muestra si la encuesta tiene un token público
+                                                 asignado — sin token, la ruta pública caería a 404. -->
+                                            <a href="/encuesta/<?= htmlspecialchars($tokenPreview) ?>"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="btn btn-outline btn-small"
+                                               style="padding: 4px 8px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px;">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"></path>
+                                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                                </svg>
+                                                Vista Previa
+                                            </a>
+                                        <?php endif; ?>
+
                                         <!-- AQUÍ ENVIAMOS TAMBIÉN EL SEGMENTO DIRIGIDO A LA FUNCIÓN JS -->
                                         <button type="button" class="btn btn-secondary btn-small" style="padding: 4px 8px; font-size: 0.85rem;" onclick="mostrarQREncuesta('<?= htmlspecialchars((string)$campana['token_publico']) ?>', '<?= htmlspecialchars((string)($campana['nombre_categoria'] ?? 'General')) ?>', '<?= htmlspecialchars((string)$campana['segmento_dirigido']) ?>')">Ver QR</button>
-                                        
+
                                         <a href="/dashboard/encuestas/resultados/<?= $campana['id'] ?>" class="btn btn-primary btn-small" style="padding: 4px 8px; font-size: 0.85rem;">Resultados</a>
                                         <form action="/dashboard/encuestas/eliminar/<?= $campana['id'] ?>" method="POST" style="margin: 0;">
                                             <button type="submit" class="btn btn-danger btn-small" style="padding: 4px 8px; font-size: 0.85rem;" onclick="return confirm('¿Dar de baja esta encuesta? Los resultados históricos se conservarán para estadísticas.');">Dar de Baja</button>

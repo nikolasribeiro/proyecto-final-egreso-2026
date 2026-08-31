@@ -67,12 +67,14 @@ class RutaProtegida
      * Devuelve true si la request actual apunta a un endpoint de API
      * (prefijo /api/). Usado para alternar entre respuesta HTML y JSON
      * en errores de autenticación / autorización.
+     *
+     * @deprecated desde la extracción a `requestEsApi()` en
+     * `Nucleo/ayudantes.php`. Se conserva como wrapper para no romper
+     * callers internos que ya lo invocan.
      */
     private static function requestEsApi(): bool
     {
-        $uri = $_SERVER['REQUEST_URI'] ?? '';
-        $path = parse_url($uri, PHP_URL_PATH) ?? '';
-        return str_starts_with($path, '/api/');
+        return \requestEsApi();
     }
 
     /**

@@ -178,6 +178,9 @@ document.addEventListener("DOMContentLoaded", function () {
     if (elementos.requiereCamilla) {
       elementos.requiereCamilla.checked = !!estado.requiereCamilla;
     }
+    // Si el estado restaurado tiene crítico activo, sincronizamos el
+    // checkbox de camilla (queda bloqueado y tildado).
+    sincronizarRequiereCamilla();
     if (elementos.tipoDiagnostico && estado.tipoDiagnostico) {
       elementos.tipoDiagnostico.value = estado.tipoDiagnostico;
     }
@@ -373,6 +376,21 @@ document.addEventListener("DOMContentLoaded", function () {
     if (elementos.estadoCritico) {
       elementos.estadoCritico.addEventListener("change", function () {
         estado.estadoCritico = this.checked;
+        sincronizarRequiereCamilla();
+        // Si el enfermero actual es el mismo que el conductor, lo
+        // limpiamos: crítico obliga a que sean personas distintas.
+        if (
+          estado.estadoCritico &&
+          estado.enfermero &&
+          String(estado.enfermero) === String(estado.conductor)
+        ) {
+          estado.enfermero = null;
+          estado.jerarquiaEnfermero = null;
+          if (elementos.enfermeroInput) elementos.enfermeroInput.value = "";
+          if (elementos.enfermeroSelect) elementos.enfermeroSelect.value = "";
+          if (elementos.jerarquiaSelect) elementos.jerarquiaSelect.value = "";
+          actualizarVisibilidadJerarquia();
+        }
         guardarEstado();
         aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
         // Bug # 153: si tilda crítico, el enfermero se vuelve obligatorio
@@ -382,6 +400,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (elementos.requiereCamilla) {
       elementos.requiereCamilla.addEventListener("change", function () {
+        // Si está bloqueada por crítico, ignoramos el toggle.
+        if (this.disabled) {
+          this.checked = true;
+          return;
+        }
         estado.requiereCamilla = this.checked;
         guardarEstado();
         aplicarRestriccionesVehiculos(); //Se agrega por issue # 145 restriccion autos cuando solicitan camilla o estado critico
@@ -499,7 +522,7 @@ document.addEventListener("DOMContentLoaded", function () {
       );
     };
 
-    const wireCombobox = (inputEl, selectEl, dropdownEl, wrapperEl, onPick) => {
+    const wireCombobox = (inputEl, selectEl, dropdownEl, wrapperEl, onPick, excludeCIsFn) => {
       if (!inputEl || !selectEl || !dropdownEl || !wrapperEl) return;
 
       // Cachear opciones del select oculto
@@ -512,7 +535,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const render = (query) => {
         const q = (query || "").toLowerCase().trim();
-        const matches =
+        let matches =
           q.length === 0
             ? allOptions
             : allOptions.filter(
@@ -520,6 +543,17 @@ document.addEventListener("DOMContentLoaded", function () {
                   o.nombre.toLowerCase().includes(q) ||
                   String(o.ci).includes(q),
               );
+
+        // Filtro dinámico opcional: ocultar CIs que están excluidos por
+        // reglas del wizard (ej: cuando el traslado es crítico, los
+        // choferes no pueden ser enfermeros). Se evalúa en cada render
+        // para reflejar el estado actual sin necesidad de re-bind.
+        if (typeof excludeCIsFn === "function") {
+          const excl = excludeCIsFn();
+          if (excl && excl.size > 0) {
+            matches = matches.filter((o) => !excl.has(String(o.ci)));
+          }
+        }
 
         if (matches.length === 0) {
           dropdownEl.innerHTML =
@@ -639,6 +673,19 @@ document.addEventListener("DOMContentLoaded", function () {
         // para habilitarlo/deshabilitarlo según corresponda.
         actualizarBotonPaso5();
       },
+      // Filtro dinámico: cuando el traslado está catalogado como Crítico,
+      // el chofer NO puede ser seleccionado como enfermero (deben ser
+      // personas distintas). Con camilla sola sí puede coincidir.
+      () => {
+        if (!estado.estadoCritico) return new Set();
+        const cs = elementos.conductorSelect;
+        if (!cs) return new Set();
+        return new Set(
+          Array.from(cs.options)
+            .filter((o) => o.value)
+            .map((o) => String(o.dataset.ci)),
+        );
+      },
     );
   }
 
@@ -731,6 +778,30 @@ document.addEventListener("DOMContentLoaded", function () {
       elementos.jerarquiaGroup.style.display = "flex";
     } else {
       elementos.jerarquiaGroup.style.display = "none";
+    }
+  }
+
+  /**
+   * Sincroniza el checkbox "Requiere Camilla" con el estado crítico:
+   *   - Si el traslado es Crítico: fuerza tildado y bloquea el
+   *     checkbox (no se puede destildar). Un paciente crítico
+   *     necesariamente requiere camilla.
+   *   - Si NO es crítico: libera el checkbox sin tocar su valor
+   *     (el usuario puede dejarlo tildado o destildarlo).
+   *
+   * Se invoca desde el handler de cambio de estado-critico y desde
+   * `cargarEstado()` para mantener la UI consistente al recuperar
+   * el estado desde sessionStorage.
+   */
+  function sincronizarRequiereCamilla() {
+    const cb = elementos.requiereCamilla;
+    if (!cb) return;
+    if (estado.estadoCritico) {
+      cb.checked = true;
+      cb.disabled = true;
+      estado.requiereCamilla = true;
+    } else {
+      cb.disabled = false;
     }
   }
 

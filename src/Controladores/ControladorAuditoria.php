@@ -24,6 +24,8 @@ class ControladorAuditoria extends RutaProtegida
 
     public function inicio()
     {
+        requirePermiso('usuarios', 'ver');
+
         try {
             $modelo = new ModeloAuditoria();
             $logs = $modelo->obtenerLogs();

@@ -30,7 +30,18 @@
     </div>
 
     <?php if (!empty($flash)): ?>
-        <div class="alert alert-<?= e($flash['tipo'] ?? 'info') ?>" role="alert">
+        <?php
+            // Los controladores guardan `tipo => 'error'`, pero la hoja de
+            // estilos solo define `.alert-danger`. Normalizamos acá para
+            // no depender de un alias `.alert-error` que pueda faltar por
+            // caché del navegador.
+            $alertTipo = match ($flash['tipo'] ?? 'info') {
+                'error', 'danger' => 'danger',
+                'exito', 'success' => 'success',
+                default => $flash['tipo'] ?? 'info',
+            };
+        ?>
+        <div class="alert alert-<?= e($alertTipo) ?>" role="alert">
             <?= e($flash['mensaje'] ?? '') ?>
         </div>
     <?php endif; ?>

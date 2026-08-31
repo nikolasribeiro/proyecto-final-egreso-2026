@@ -49,6 +49,20 @@
   color: var(--danger-red);
 }
 
+/* Error — alias de `.alert-danger`. Los controladores setean
+   `flash_*.tipo = 'error'` (módulo usuarios, vehículos, documentos,
+   encuestas) y las vistas renderizan `alert alert-{tipo}`. Sin esta
+   variante, el alert cae al estilo base (sin fondo ni borde) y el
+   mensaje aparece como texto plano. */
+.alert-error {
+  background: var(--danger-red-light);
+  border: 1px solid var(--danger-red);
+}
+
+.alert-error .alert-icon {
+  color: var(--danger-red);
+}
+
 /* Info */
 .alert-info {
   background: var(--primary-blue-light);

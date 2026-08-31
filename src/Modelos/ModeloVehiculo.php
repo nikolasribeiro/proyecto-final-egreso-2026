@@ -139,6 +139,13 @@ class ModeloVehiculo
      * garantiza que el CRUD funcione aunque el `init.sql` original no
      * se haya ejecutado en la BD actual (issue #131).
      *
+     * `descripcion` NO tiene constraint UNIQUE en `tipo_vehiculo`, así
+     * que la tabla puede contener duplicados si el seed se corrió más
+     * de una vez sin limpiar. Aquí deduplicamos en lectura tomando el
+     * `MIN(id)` por descripción para mantener el id "canónico" (el
+     * primer AUTO_INCREMENT), que es al que apuntan los `vehiculos`
+     * existentes vía FK.
+     *
      * @return array<int, array{id: int, descripcion: string}>
      */
     public function obtenerTiposVehiculo(): array
@@ -148,7 +155,15 @@ class ModeloVehiculo
             return $cache;
         }
 
-        $stmt = $this->db->query('SELECT id, descripcion FROM tipo_vehiculo ORDER BY descripcion');
+        // Dedupe por descripción eligiendo el id más bajo. Mantiene la
+        // cantidad de tipos correcta en el select aunque la tabla tenga
+        // duplicados históricos.
+        $stmt = $this->db->query(
+            'SELECT MIN(id) AS id, descripcion
+             FROM tipo_vehiculo
+             GROUP BY descripcion
+             ORDER BY descripcion'
+        );
         $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // Auto-seed defensivo: si la tabla está vacía, INSERT IGNORE
@@ -161,7 +176,12 @@ class ModeloVehiculo
                      ('Camión'),
                      ('Otro')"
                 );
-                $stmt = $this->db->query('SELECT id, descripcion FROM tipo_vehiculo ORDER BY descripcion');
+                $stmt = $this->db->query(
+                    'SELECT MIN(id) AS id, descripcion
+                     FROM tipo_vehiculo
+                     GROUP BY descripcion
+                     ORDER BY descripcion'
+                );
                 $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 

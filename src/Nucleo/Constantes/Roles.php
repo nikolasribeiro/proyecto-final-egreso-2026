@@ -301,4 +301,57 @@ final class Roles
     {
         return isset(self::MAPA_UI_A_ENUM[$rol]);
     }
+
+    /**
+     * Roles "reservados" que NO se pueden asignar desde la pantalla de
+     * usuarios ni aparecen como toggleable en la matriz de permisos.
+     *
+     * El único rol reservado hoy es `superadministrativo` — el root del
+     * sistema. Solo se asigna por seed / script de bootstrap; el resto
+     * del tiempo debe seguir existiendo en `roles` y `permisos_rol` con
+     * todos sus permisos, pero oculto de la UI para que ningún admin
+     * pueda promoverse a sí mismo ni promover a otros desde la app.
+     *
+     * Si en el futuro se reserva otro rol, agregar la UI key a este array.
+     *
+     * @var array<int, string>
+     */
+    public const ROLES_RESERVADOS = [
+        'superadministrativo',
+    ];
+
+    /**
+     * Lista de UI keys que pueden asignarse desde la UI (crear / editar
+     * usuarios, matriz de permisos).
+     *
+     * Es el subconjunto de `MAPA_UI_A_ENUM` que NO está en
+     * `ROLES_RESERVADOS`. La fuente de verdad única del filtro es esta
+     * constante — el resto de los lugares (controladores, vistas,
+     * componentes) la consumen vía `rolesAsignables()` /
+     * `esAsignable()` en lugar de hardcodear el nombre del rol.
+     *
+     * @return array<int, string>
+     */
+    public static function rolesAsignables(): array
+    {
+        return array_values(array_filter(
+            array_keys(self::MAPA_UI_A_ENUM),
+            static fn(string $uiKey): bool => !in_array($uiKey, self::ROLES_RESERVADOS, true),
+        ));
+    }
+
+    /**
+     * Indica si una UI key puede asignarse desde la UI. Devuelve `false`
+     * para roles reservados (ej: `superadministrativo`) y para keys que
+     * no existen en el catálogo.
+     *
+     * Útil como guard server-side para descartar silenciosamente un
+     * `roles[]` que venga por POST en `usuarioCrear()` /
+     * `usuarioActualizar()` aunque el campo del form esté oculto.
+     */
+    public static function esAsignable(string $rol): bool
+    {
+        return isset(self::MAPA_UI_A_ENUM[$rol])
+            && !in_array($rol, self::ROLES_RESERVADOS, true);
+    }
 }
