@@ -77,11 +77,10 @@
             <h3 style="margin:0; font-size: 1.1rem; color: #333;">Realizar Encuesta Interna</h3>
         </div>
         
-        <div style="padding: 15px;">
-            <div class="form-group" style="margin-bottom: 20px;">
-                <label class="form-label">Seleccione la encuesta activa a responder:</label>
-                <select id="selector-encuesta-activa" class="form-control" onchange="cambiarEncuestaInterna(this)">
-                    <option value="">-- Seleccione una encuesta del listado --</option>
+        <div class="form-group" style="margin-bottom: 20px;">
+                <label class="form-label" style="font-weight: 600;">Seleccione la encuesta activa a responder:</label>
+                <select id="selector-encuesta-activa" class="form-select" onchange="cambiarEncuestaInterna(this)" style="margin-bottom: 20px;">
+                    <option value=""> Seleccione una encuesta del listado </option>
                     
                     <!-- 1. PLANTILLAS FIJAS (SIEMPRE DISPONIBLES) -->
                     <optgroup label="Plantillas Fijas (Oficiales)">
@@ -206,34 +205,37 @@
 
 <!-- MODAL CREACIÓN -->
 <div id="modal-crear-encuesta" class="modal-overlay hidden">
-    <div class="modal-content card" style="max-width: 500px;">
+    <div class="modal-content card modal-encuesta-content">
+        
         <div class="modal-header">
             <h3>Crear Nueva Encuesta</h3>
-            <button class="close-btn" onclick="closeModal('modal-crear-encuesta')">&times;</button>
+            <button type="button" class="close-btn" onclick="closeModal('modal-crear-encuesta')">&times;</button>
         </div>
-        <form action="/dashboard/encuestas/crear" method="POST" style="padding: 15px;">
-            <div class="form-group" style="margin-bottom: 15px;">
+        
+        <form action="/dashboard/encuestas/crear" method="POST" class="encuesta-modal-body">
+            <div class="form-group">
                 <label class="form-label">Servicio o Categoría a Evaluar</label>
-                <select name="id_categoria" class="form-control" required>
-                    <option value="">-- Seleccione una categoría --</option>
+                <select name="id_categoria" class="form-select" required>
+                    <option value=""> Seleccione una categoría </option>
                     <?php if(!empty($lista_categorias)): foreach ($lista_categorias as $cat): ?>
                         <option value="<?= $cat['id'] ?>"><?= htmlspecialchars((string)$cat['nombre_categoria']) ?></option>
                     <?php endforeach; endif; ?>
                 </select>
             </div>
-            <div class="form-group" style="margin-bottom: 15px;">
+            
+            <div class="form-group">
                 <label class="form-label">Público Objetivo</label>
-                <select name="segmento_dirigido" id="segmento-dirigido" class="form-control" onchange="verificarAnonimato()" required>
-                    <option value="">-- Seleccione --</option>
+                <select name="segmento_dirigido" id="segmento-dirigido" class="form-select" onchange="verificarAnonimato()" required>
+                    <option value=""> Seleccione publico</option>
                     <option value="Pacientes">Pacientes</option>
                     <option value="Funcionarios">Funcionarios (Equipo de Salud)</option>
                 </select>
             </div>
 
-            <div class="form-group" style="margin-bottom: 15px;">
+            <div class="form-group">
                 <label class="form-label">Plantilla a Utilizar</label>
-                <select name="id_plantilla" id="selector-plantilla" class="form-control" onchange="togglePreguntasDinamicas()" required>
-                    <option value="">-- Seleccione --</option>
+                <select name="id_plantilla" id="selector-plantilla" class="form-select" onchange="togglePreguntasDinamicas()" required>
+                    <option value=""> Seleccione plantilla</option>
                     <optgroup label="Plantillas Oficiales (FNR)">
                         <?php foreach ($plantillas as $key => $tpl): ?>
                             <option value="<?= htmlspecialchars((string)$key) ?>"><?= htmlspecialchars((string)$tpl['nombre']) ?></option>
@@ -245,25 +247,25 @@
                 </select>
             </div>
 
-            <div class="form-group" id="contenedor-preguntas-dinamicas" style="display: none; margin-bottom: 15px; padding: 10px; border: 1px dashed #ccc; border-radius: 5px;">
+            <div id="contenedor-preguntas-dinamicas" class="form-group hidden">
                 <label class="form-label">Redacte sus preguntas</label>
                 <div id="contenedor-preguntas">
-                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <div class="encuesta-flex-input">
                         <input type="text" name="preguntas[]" class="form-control" placeholder="Ej: ¿Cómo califica la atención?">
                         <button type="button" class="btn btn-secondary btn-small" onclick="agregarPregunta()">+</button>
                     </div>
                 </div>
             </div>
-            <div class="form-group" style="margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 0;">
-                    <input type="checkbox" name="es_anonima" id="es-anonima" value="1">
-                    Encuesta 100% Anónima
-                </label>
-                <small id="aviso-anonimato" style="display: none; color: #dc3545; font-size: 0.8rem; margin-top: 5px; margin-left: 23px;">
-                    * Obligatorio por protección de datos del paciente.
-                </small>
+            
+            <div class="encuesta-anonimo-box">
+                <input type="checkbox" name="es_anonima" id="es-anonima" value="1">
+                <label for="es-anonima" class="encuesta-label-pointer">Encuesta 100% Anónima</label>
             </div>
-            <div class="form-actions" style="margin-top: 25px; display: flex; justify-content: flex-end; gap: 10px;">
+            <small id="aviso-anonimato" class="hidden encuesta-text-danger">
+                * Obligatorio por protección de datos del paciente.
+            </small>
+            
+            <div class="form-group encuesta-form-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeModal('modal-crear-encuesta')">Cancelar</button>
                 <button type="submit" class="btn btn-primary">Crear Encuesta</button>
             </div>
@@ -273,41 +275,35 @@
 
 <!-- MODAL VISOR DE QR -->
 <div id="modal-qr-encuesta" class="modal-overlay hidden">
-    <!-- Se ajustó el max-width a 450px para dar mayor margen a la botonera -->
-    <div class="modal-content card" style="text-align: center; max-width: 450px; border-radius: 12px; width: 90%;">
+    <div class="modal-content card modal-qr-content">
         
-        <div class="modal-header" style="border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="font-size: 1.1rem; color: #1e293b; margin: 0;">Código QR de la Encuesta</h3>
-            <button type="button" onclick="closeModal('modal-qr-encuesta')" style="background: #f1f5f9; border: none; border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: #64748b; cursor: pointer; transition: background 0.2s;">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
-            </button>
+        <div class="modal-header encuesta-header-clean">
+            <h3>Código QR</h3>
+            <button type="button" class="close-btn" onclick="closeModal('modal-qr-encuesta')">&times;</button>
         </div>
         
-        <div style="padding: 20px;">
-            <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; display: inline-block; margin-bottom: 15px;">
-                <img id="qr-encuesta-img" src="" alt="Código QR" style="width: 200px; height: 200px; display: block;">
+        <div class="encuesta-qr-body">
+            <div class="encuesta-qr-box">
+                <img id="qr-encuesta-img" src="" alt="Código QR">
             </div>
             
-            <h4 id="qr-encuesta-titulo" style="margin: 0 0 15px 0; font-size: 1rem; color: #1e293b; font-weight: 600;"></h4>
+            <h4 id="qr-encuesta-titulo" class="encuesta-mb-15"></h4>
             
-            <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 15px;">
+            <p class="encuesta-text-desc">
                 Escanee este código para acceder a la encuesta.
             </p>
             
-            <div style="margin-bottom: 25px; padding: 0 10px;">
-                <span id="qr-encuesta-url-text" style="background-color: #f1f5f9; color: #64748b; padding: 8px 16px; border-radius: 20px; font-family: monospace; font-size: 0.85rem; display: inline-block; width: 100%; word-break: break-all; box-sizing: border-box;"></span>
+            <div class="form-group">
+                <span id="qr-encuesta-url-text" class="encuesta-qr-pill"></span>
             </div>
 
-            <!-- Se agregó flex-wrap: wrap para adaptar los botones sin romper el diseño -->
-            <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid #e2e8f0; padding-top: 20px;">
-                <button type="button" class="btn btn-secondary" style="background: white; border: 1px solid #0d6efd; color: #0d6efd;" onclick="closeModal('modal-qr-encuesta')">
-                    Cerrar
-                </button>
-                <button type="button" class="btn btn-secondary" style="background: white; border: 1px solid #cbd5e1; color: #475569; display: flex; align-items: center; gap: 5px;" onclick="printQR()">
+            <div class="encuesta-actions-flex">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-qr-encuesta')">Cerrar</button>
+                <button type="button" class="btn btn-secondary encuesta-btn-icon" onclick="printQR()">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"></path></svg>
                     Imprimir
                 </button>
-                <button type="button" class="btn btn-primary" style="display: flex; align-items: center; gap: 5px;" onclick="downloadQR()">
+                <button type="button" class="btn btn-primary encuesta-btn-icon" onclick="downloadQR()">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-3 3m0 0l-3-3m3 3V4"></path></svg>
                     Descargar
                 </button>
@@ -315,5 +311,4 @@
         </div>
     </div>
 </div>
-
 <script src="/assets/javascript/dashboard/encuestas.js"></script>
