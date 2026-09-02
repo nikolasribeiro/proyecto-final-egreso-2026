@@ -132,3 +132,122 @@
   padding-top: 1.5rem;
   margin-top: 0.5rem;
 }
+
+/* Caja gris del checkbox de anonimato */
+.encuesta-anonimo-box {
+  background: var(--background-gray, #f8f9fa);
+  padding: 10px;
+  border-radius: var(--radius-md, 6px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+/* Contenedor del código QR */
+.encuesta-qr-box {
+  border: 1px solid var(--border-gray, #e2e8f0);
+  border-radius: var(--radius-lg, 12px);
+  padding: 1.5rem;
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
+.encuesta-qr-box img {
+  width: 200px;
+  height: 200px;
+  display: block;
+}
+
+/* Píldora de la URL que evita el desbordamiento */
+.encuesta-qr-pill {
+  background-color: var(--background-gray, #f1f5f9);
+  color: var(--secondary-gray, #64748b);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  display: inline-block;
+  width: 100%;
+  word-break: break-all;
+  box-sizing: border-box;
+}
+
+.encuesta-actions-flex {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid var(--border-gray, #e2e8f0);
+  padding-top: 1.5rem;
+}
+
+/* Modificadores de Modales de Encuestas */
+.modal-encuesta-content {
+  max-width: 500px;
+}
+
+.modal-qr-content {
+  max-width: 450px;
+  text-align: center;
+}
+
+.encuesta-modal-body {
+  padding: 15px;
+}
+
+.encuesta-qr-body {
+  padding: 0 20px 20px 20px;
+}
+
+.encuesta-header-clean {
+  border-bottom: none;
+}
+
+/* Utilidades de espaciado y texto específicas del módulo */
+.encuesta-mb-15 {
+  margin-bottom: 15px;
+}
+
+.encuesta-mt-20 {
+  margin-top: 20px;
+}
+
+.encuesta-text-desc {
+  color: var(--secondary-gray, #64748b);
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+}
+
+.encuesta-text-danger {
+  color: var(--danger-red, #dc3545);
+}
+
+/* Utilidades Flexbox específicas */
+.encuesta-flex-input {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.encuesta-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.encuesta-btn-icon {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.encuesta-label-pointer {
+  margin: 0;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
