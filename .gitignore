@@ -13,3 +13,5 @@ scripts/.cache/
 scripts/state/
 *.bak
 *.orig
+
+infraestructura/
