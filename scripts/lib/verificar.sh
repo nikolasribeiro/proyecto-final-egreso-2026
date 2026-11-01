@@ -23,11 +23,15 @@ sb_verificar_paths() {
     ENV_FILE="${SB_REPO_DIR}/.env"
 }
 
-# Resultado del check: $1=numero, $2=etiqueta, $3=0=ok, $4=detalle
+# Resultado del check: $1=numero, $2=etiqueta, $3=0=ok, $4=detalle,
+#                     $5=nota informativa (solo se muestra si el check pasa)
 _record() {
-    local n="$1" label="$2" code="$3" detail="${4:-}"
+    local n="$1" label="$2" code="$3" detail="${4:-}" note="${5:-}"
     if [[ "$code" -eq 0 ]]; then
         printf '  %s[ OK ]%s  %2d. %s\n' "$C_GREEN" "$C_RESET" "$n" "$label" >&2
+        if [[ -n "$note" ]]; then
+            printf '         └─ %s\n' "$note" >&2
+        fi
     else
         printf '  %s[FAIL]%s  %2d. %s — %s\n' "$C_RED" "$C_RESET" "$n" "$label" "$detail" >&2
         SB_FAIL_COUNT=$((SB_FAIL_COUNT + 1))
@@ -52,7 +56,7 @@ _db_query_with_header() {
 }
 
 mod_verificar_run() {
-    logger_section "Smoke test (21 checks)"
+    logger_section "Smoke test (22 checks)"
 
     sb_verificar_paths
 
@@ -78,11 +82,32 @@ mod_verificar_run() {
     # ================================================================
 
     # 1. SSH endurecido
+    #    `sshd -T` imprime la configuracion EFECTIVA (la que el servidor really
+    #    usa). Se captura la salida y el error por separado: si `sshd -T` falla
+    #    (p.ej. por permisos, por un `Match` que requiere -C, o porque la
+    #    configuracion tiene una opcion no soportada por la version instalada)
+    #    el check lo DICE en vez de un "no reporta" genérico, y se verifica
+    #    el drop-in del operador como alternativa.
     if command -v sshd >/dev/null 2>&1; then
-        if sshd -T 2>/dev/null | grep -qE '^permitrootlogin no$'; then
-            _record 1 "PermitRootLogin no" 0
+        local sshd_out sshd_err
+        sshd_out="$(sshd -T 2>/tmp/songbird-sshd-t.err || true)"
+        sshd_err="$(head -n 2 /tmp/songbird-sshd-t.err 2>/dev/null | tr '\n' ' ' || true)"
+        rm -f /tmp/songbird-sshd-t.err 2>/dev/null || true
+
+        if [[ -n "$sshd_out" ]]; then
+            local efectivo
+            efectivo="$(printf '%s\n' "$sshd_out" | grep -iE '^permitrootlogin' | head -n1)"
+            if printf '%s\n' "$sshd_out" | grep -qE '^permitrootlogin no$'; then
+                _record 1 "PermitRootLogin no" 0
+            else
+                _record 1 "PermitRootLogin no" 1 "valor efectivo: ${efectivo:-desconocido}"
+            fi
+        elif grep -qiE '^[[:space:]]*PermitRootLogin[[:space:]]+no([[:space:]]|$)' \
+            /etc/ssh/sshd_config.d/00-songbird-hardening.conf 2>/dev/null; then
+            _record 1 "PermitRootLogin no" 0 "" \
+                "sshd -T no disponible (${sshd_err:-sin error}); verificado en el drop-in"
         else
-            _record 1 "PermitRootLogin no" 1 "sshd no reporta permitrootlogin=no"
+            _record 1 "PermitRootLogin no" 1 "sshd -T fallo: ${sshd_err:-sin error}"
         fi
     else
         _record 1 "PermitRootLogin no" 1 "sshd no instalado"
@@ -334,13 +359,25 @@ mod_verificar_run() {
         _record 21 "Split read/write activo" 1 "DB_READ_REPLICA_ENABLED=${read_replica:-unset} DB_SLAVE_HOST=${db_slave_host:-unset}"
     fi
 
+    # 22. Log del operador disponible y con contenido
+    if [[ -f "$SB_LOG_FILE" && -r "$SB_LOG_FILE" ]]; then
+        local log_size
+        log_size="$(stat -c '%s' "$SB_LOG_FILE" 2>/dev/null || echo 0)"
+        _record 22 "Log del operador disponible" 0 "" \
+            "$SB_LOG_FILE ($(numfmt --to=iec --suffix=B "$log_size" 2>/dev/null || echo "${log_size} B"))"
+    else
+        _record 22 "Log del operador disponible" 1 "$SB_LOG_FILE no existe o no es legible"
+    fi
+
     # --- Resumen -------------------------------------------------------
     printf '\n' >&2
     if [[ $SB_FAIL_COUNT -eq 0 ]]; then
-        logger_ok "Smoke test: 21/21 OK"
+        logger_ok "Smoke test: 22/22 OK"
+        logger_info "Log completo del operador: $SB_LOG_FILE"
         return 0
     fi
-    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 21"
+    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 22"
+    logger_info "Log completo del operador: $SB_LOG_FILE"
     return "$SB_FAIL_COUNT"
 }
 

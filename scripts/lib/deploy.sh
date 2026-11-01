@@ -51,11 +51,15 @@ readonly SB_DEFAULT_REPL_USER="repl"
 
 # Genera un secreto solo si el valor actual esta vacio o es un placeholder.
 # Devuelve 0 si genero el valor, 1 si ya existia.
+#
+# IMPORTANTE: solo se rellenan valores VACIOS. Un valor que el operador ya
+# cargo a mano NUNCA se pisa.
 sb_env_ensure_secret() {
     local file="$1" key="$2" current
     current="$(sb_env_get "$file" "$key" 2>/dev/null || true)"
     if [[ -z "$current" || "$current" == "cambiar_en_produccion" || "$current" == "CHANGE_ME" || "$current" == "change_me" ]]; then
         sb_env_set "$file" "$key" "$(sb_gen_password)"
+        logger_info ".env: $key = <generado>   (estaba vacio)"
         return 0
     fi
     return 1
@@ -68,6 +72,7 @@ sb_env_ensure_value() {
     current="$(sb_env_get "$file" "$key" 2>/dev/null || true)"
     if [[ -z "$current" ]]; then
         sb_env_set "$file" "$key" "$fallback"
+        logger_info ".env: $key = $fallback   (estaba vacio)"
     fi
 }
 
@@ -162,11 +167,11 @@ mod_deploy_run() {
     # configuraste a mano.
     if [[ "$SB_ENVIRONMENT_EXPLICIT" == "true" ]]; then
         sb_env_set "$ENV_FILE" APP_ENVIRONMENT "$SB_ENVIRONMENT"
-        logger_info "APP_ENVIRONMENT forzado a '$SB_ENVIRONMENT' (--environment)"
+        logger_info ".env: APP_ENVIRONMENT = $SB_ENVIRONMENT   (forzado por --environment)"
     fi
     if [[ "$SB_APP_PORT_EXPLICIT" == "true" ]]; then
         sb_env_set "$ENV_FILE" APP_PORT "${SB_APP_PORT}"
-        logger_info "APP_PORT forzado a ${SB_APP_PORT} (--app-port)"
+        logger_info ".env: APP_PORT = ${SB_APP_PORT}   (forzado por --app-port)"
     fi
 
     # --- 6. Permisos del .env ------------------------------------------
@@ -177,6 +182,7 @@ mod_deploy_run() {
 
     sb_kv ".env" "$ENV_FILE (600)"
     sb_kv "Secretos generados" "$generated"
+    logger_info "El deploy NO modifica scripts ni código: solo completa el .env y escribe /opt/songbird-operator/credentials.env"
 
     # --- 7. Volumenes de datos preexistentes ---------------------------
     local vol

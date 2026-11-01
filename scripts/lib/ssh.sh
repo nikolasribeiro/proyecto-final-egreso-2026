@@ -63,15 +63,44 @@ mod_ssh_run() {
     fi
 
     # 7. Validacion post-aplicacion (best effort)
+    #    La prueba se hace COMO el usuario admin y con SU llave: si la
+    #    hicieramos como root, el cliente usaria /root/.ssh/ y no encontraria
+    #    la llave del admin (siempre fallaria).
     logger_info "Validando acceso al puerto ${SB_SSH_PORT}..."
     sleep 2
     if command -v ssh >/dev/null 2>&1; then
-        if ssh -p "${SB_SSH_PORT}" -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-            "${SB_ADMIN_USER}@localhost" echo "OK" >/dev/null 2>&1; then
-            logger_ok "Conexion SSH:${SB_SSH_PORT} verificada"
+        local admin_home
+        admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
+        [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+
+        local -a ssh_opts=(
+            -p "${SB_SSH_PORT}"
+            -o BatchMode=yes
+            -o ConnectTimeout=5
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+        )
+        if [[ -f "${admin_home}/.ssh/id_ed25519" ]]; then
+            ssh_opts+=(-i "${admin_home}/.ssh/id_ed25519")
+        fi
+
+        local ssh_ok="false"
+        if command -v runuser >/dev/null 2>&1; then
+            if runuser -u "$SB_ADMIN_USER" -- ssh "${ssh_opts[@]}" \
+                "${SB_ADMIN_USER}@localhost" true >/dev/null 2>&1; then
+                ssh_ok="true"
+            fi
+        fi
+
+        if [[ "$ssh_ok" == "true" ]]; then
+            logger_ok "Conexion SSH:${SB_SSH_PORT} verificada (como ${SB_ADMIN_USER})"
+        elif [[ -f "${admin_home}/.ssh/id_ed25519" ]]; then
+            logger_warn "Conexion SSH:${SB_SSH_PORT} no respondio usando la llave generada"
         else
-            logger_warn "Conexion SSH:${SB_SSH_PORT} no respondio (probable: clave publica no copiada aun)"
-            logger_warn "Recordá: copiá tu clave a /home/${SB_ADMIN_USER}/.ssh/authorized_keys"
+            logger_warn "Conexion SSH:${SB_SSH_PORT} no verificable desde el servidor"
+            logger_warn "(normal si la llave privada esta en tu maquina y no en el servidor)"
         fi
     fi
 

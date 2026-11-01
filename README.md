@@ -98,11 +98,17 @@ Para detener los contenedores (sin perder los datos de la base de datos), ejecut
 
 ## Despliegue automatizado (`scripts/operator.sh`)
 
-`scripts/operator.sh` toma una **Debian 12 limpia** y la deja con el stack
-corriendo: SSH endurecido, UFW, usuarios, Docker, backups, logrotate y el
-proyecto desplegado.
+`scripts/operator.sh` toma una **Debian 13 (trixie) limpia** y la deja con el
+stack corriendo: SSH endurecido, UFW, usuarios, Docker, backups, logrotate y
+el proyecto desplegado.
 
 ```bash
+# ── Primera vez, como root (si no tenés sudo instalado) ───────────────
+su -
+apt-get update && apt-get install -y sudo git
+exit
+
+# ── Con sudo disponible ───────────────────────────────────────────────
 # 1. Clonás el proyecto (el operador NO clona)
 git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git ~/proyecto
 cd ~/proyecto
@@ -116,6 +122,9 @@ sudo scripts/operator.sh --all
 # 4. Smoke test (21 checks)
 sudo scripts/operator.sh --module verificar
 ```
+
+> La primera ejecución va como root (`su -`) porque el operador necesita root
+> y, sin `sudo` instalado, no hay forma de obtenerlo ni de instalarlo solo.
 
 El operador trabaja **in-place** sobre el repo donde vive el script y
 **respeta tu `.env`**: solo rellena lo que está vacío. Detalle completo en

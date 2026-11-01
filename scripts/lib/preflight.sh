@@ -10,7 +10,7 @@ mod_preflight_run() {
     logger_section "Módulo preflight"
 
     if module_skip_if_done preflight \
-        '[[ "$(. /etc/os-release && echo "$ID")" == "debian" ]] && [[ "$(. /etc/os-release && echo "$VERSION_ID")" == "12" ]] && [[ "$(id -u)" == "0" ]]'; then
+        '[[ "$(. /etc/os-release && echo "$ID")" == "debian" ]] && [[ "$(. /etc/os-release && echo "$VERSION_ID")" == "13" || "$(. /etc/os-release && echo "$VERSION_ID")" == "12" ]] && [[ "$(id -u)" == "0" ]]'; then
         return 0
     fi
 
@@ -25,9 +25,19 @@ mod_preflight_run() {
             logger_error "OS no soportado: $ID (esperado debian)"
             failures=$((failures + 1))
         fi
-        if [[ "$VERSION_ID" != "12" && "$VERSION_ID" != "12."* ]]; then
-            logger_warn "OS version es $VERSION_ID (recomendado 12). Continuando..."
-        fi
+        # 13 (trixie) es el objetivo; 12 (bookworm) sigue soportado.
+        case "$VERSION_ID" in
+            13|13.*)
+                sb_kv "Version soportada" "$VERSION_ID (trixie) — objetivo"
+                ;;
+            12|12.*)
+                logger_warn "OS version es $VERSION_ID (bookworm). El objetivo es 13 (trixie). Continuando..."
+                ;;
+            *)
+                logger_error "OS version no soportada: $VERSION_ID (esperado 13/trixie o 12/bookworm)"
+                failures=$((failures + 1))
+                ;;
+        esac
     else
         logger_error "/etc/os-release no existe"
         failures=$((failures + 1))
@@ -37,15 +47,20 @@ mod_preflight_run() {
     sb_kv "Usuario actual" "$(id -un) (uid=$(id -u))"
     if [[ "$(id -u)" -ne 0 ]]; then
         logger_error "No se está ejecutando como root"
+        logger_error "El operador necesita root (systemctl, ufw, apt, docker)."
+        logger_error "Corrólo como root con 'su -' o con 'sudo scripts/operator.sh --all'."
         failures=$((failures + 1))
     fi
 
     # 3. sudo disponible
+    #    OJO: `sudo` NO se usa para instalar sudo (obvio). Se instala para que
+    #    el usuario songbird_admin pueda usar su sudoers scoped, y para que
+    #    las ejecuciones siguientes del operador no requieran `su -`.
     if command -v sudo >/dev/null 2>&1; then
         sb_kv "sudo" "disponible"
     else
         sb_kv "sudo" "NO DISPONIBLE"
-        logger_warn "sudo no está instalado. El operador se puede ejecutar como root (su -) sin problema."
+        logger_warn "sudo no está instalado: el módulo 'deps' lo instala (el usuario songbird_admin lo necesita para su sudoers scoped)."
     fi
 
     # 4. apt-get y systemctl

@@ -4,17 +4,17 @@
 > **Materia**: Administración de Sistemas Operativos (UTU ISBO)
 > **Milestone**: Segunda Entrega Oficial
 
-Script bash modular e idempotente que toma un **Debian 12 (bookworm) limpio** y
+Script bash modular e idempotente que toma un **Debian 13 (trixie) limpio** y
 lo deja con: SSH endurecido, UFW activo, usuarios con sudoers scoped, Docker
 Engine + compose plugin, cliente MariaDB, backups automáticos vía `cron.d`,
-logrotate, journal persistente y el **stack del proyecto corriendo** (PHP 8.2
-+ MariaDB 10.11 **master/slave** + Zabbix 7.0) vía `docker-compose.yml`.
+logrotate, journal persistente y el **stack del proyecto corriendo** (PHP 8.2 + MariaDB 10.11 **master/slave** + Zabbix 7.0) vía `docker-compose.yml`.
 
 ---
 
 ## Requisitos
 
-- **OS**: Debian 12 (bookworm) — el script aborta en otras distros.
+- **OS**: Debian 13 (trixie) — el objetivo de despliegue. Debian 12 (bookworm)
+  también está soportado; otras distros abortan.
 - **Acceso root** (o `sudo` para el operador).
 - **Conectividad a internet** durante el primer `apt update` y para los `docker pull`.
 - **Un checkout del repo** (tú lo clonás; el operador no clona).
@@ -24,9 +24,15 @@ logrotate, journal persistente y el **stack del proyecto corriendo** (PHP 8.2
 ## Quickstart
 
 ```bash
-# En una VM Debian 12 recién instalada
-sudo apt update && sudo apt install -y git
+# ── PASO 1 (solo la primera vez): como root ───────────────────────────
+# El operador necesita root, y para llegar a root hace falta `sudo`.
+# Si `sudo` no está instalado, el propio operador no puede instalarlo
+# (instalar paquetes requiere root). Por eso la primera ejecución es `su -`:
+su -
+apt-get update && apt-get install -y sudo git
+exit
 
+# ── PASO 2: con sudo ya disponible ────────────────────────────────────
 # 1. Clonás el proyecto (el operador NO lo hace)
 git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git ~/proyecto
 cd ~/proyecto
@@ -42,6 +48,15 @@ sudo scripts/operator.sh --all
 sudo scripts/operator.sh --module verificar
 ```
 
+> **¿Por qué el primer paso es como root?** El operador configura el host
+> (`systemctl`, `ufw`, `apt`, `docker`), así que necesita privilegios de root.
+> Para obtenerlos usa `sudo`… y si `sudo` no está instalado no hay forma de
+> llegar a root, ni de instalar `sudo` a mano. La primera ejecución se hace
+> entonces con `su -`. A partir de ahí el módulo `deps` deja `sudo`
+> instalado y todas las ejecuciones siguientes son `sudo scripts/operator.sh --all`.
+>
+> Si ya tenés `sudo` (casi todos los escritorios), el paso 1 se saltea.
+
 > **El operador trabaja in-place**: usa el repo donde vive el script.
 > Si lo clonás en `~/proyecto`, despliega desde `~/proyecto`.
 > `/opt/songbird-app` es la **convención documentada** de despliegue
@@ -54,38 +69,38 @@ Tiempo total aproximado: **8–12 minutos** en una VM con red decente.
 
 ## Orden de los módulos
 
-| # | Módulo | Qué hace | Idempotente |
-|---|---|---|---|
-| 1 | `deps` | Instala la toolchain base del host | sí |
-| 2 | `preflight` | Valida OS, root, DNS, puertos, binarios | sí |
-| 3 | `repo` | Verifica el proyecto (y sincroniza si usás `--repo-dir`) | sí |
-| 4 | `usuarios` | Crea `songbird_admin`, `songbird_app`, `songbird_backup`, `songbird_zbx` | sí |
-| 5 | `grupos` | Crea grupos `docker`, `backup`, `songbird-ops` + sudoers scoped | sí |
-| 6 | `ssh` | Instala `openssh-server` y endurece con drop-in | sí (re-aplica si cambia el puerto) |
-| 7 | `red` | Documenta red; opcionalmente cambia hostname | sí |
-| 8 | `firewall` | UFW con default deny + reglas SSH/app/Zabbix | sí (reset controlado) |
-| 9 | `docker` | Instala Docker Engine + compose plugin desde el repo oficial | sí |
-| 10 | `bd` | Instala `mariadb-client` | sí |
-| 11 | `logs` | Logrotate + journal persistente | sí |
-| 12 | `backups` | `cron.d` + script de `mysqldump` + tar + rotación 7d | sí |
-| 13 | `deploy` | Completa el `.env` (solo huecos) + `docker compose up -d` | sí (skip si healthy) |
-| 14 | `verificar` | Smoke test de 21 checks | re-ejecutable |
+| #   | Módulo      | Qué hace                                                                 | Idempotente                        |
+| --- | ----------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| 1   | `deps`      | Instala la toolchain base del host                                       | sí                                 |
+| 2   | `preflight` | Valida OS, root, DNS, puertos, binarios                                  | sí                                 |
+| 3   | `repo`      | Verifica el proyecto (y sincroniza si usás `--repo-dir`)                 | sí                                 |
+| 4   | `usuarios`  | Crea `songbird_admin`, `songbird_app`, `songbird_backup`, `songbird_zbx` | sí                                 |
+| 5   | `grupos`    | Crea grupos `docker`, `backup`, `songbird-ops` + sudoers scoped          | sí                                 |
+| 6   | `ssh`       | Instala `openssh-server` y endurece con drop-in                          | sí (re-aplica si cambia el puerto) |
+| 7   | `red`       | Documenta red; opcionalmente cambia hostname                             | sí                                 |
+| 8   | `firewall`  | UFW con default deny + reglas SSH/app/Zabbix                             | sí (reset controlado)              |
+| 9   | `docker`    | Instala Docker Engine + compose plugin desde el repo oficial             | sí                                 |
+| 10  | `bd`        | Instala `mariadb-client`                                                 | sí                                 |
+| 11  | `logs`      | Logrotate + journal persistente                                          | sí                                 |
+| 12  | `backups`   | `cron.d` + script de `mysqldump` + tar + rotación 7d                     | sí                                 |
+| 13  | `deploy`    | Completa el `.env` (solo huecos) + `docker compose up -d`                | sí (skip si healthy)               |
+| 14  | `verificar` | Smoke test de 21 checks                                                  | re-ejecutable                      |
 
 ### Por qué `deps` va primero
 
-En una Debian 12 mínima (imagen `genericcloud`) **no vienen** `jq`, `git`,
+En una Debian 13 mínima (imagen `genericcloud`) **no vienen** `jq`, `git`,
 `curl`, `openssl`, `rsync`, `logrotate` ni `sudo`. El operador los necesita:
 
-| Paquete | Para qué |
-|---|---|
-| `jq` | Persistencia del estado (idempotencia) |
-| `git` | Clonar el repo si no hay checkout local |
-| `curl` | Healthchecks HTTP del smoke test |
-| `openssl` | Generación de passwords en `deploy` |
-| `rsync` | Sincronización del repo (módulo `repo`) y backups |
-| `logrotate` | Módulo `logs` |
-| `iproute2` | `ss`, usado por `preflight` y `verificar` |
-| `sudo` | Permite re-elevar el operador en el futuro |
+| Paquete     | Para qué                                          |
+| ----------- | ------------------------------------------------- |
+| `jq`        | Persistencia del estado (idempotencia)            |
+| `git`       | Clonar el repo si no hay checkout local           |
+| `curl`      | Healthchecks HTTP del smoke test                  |
+| `openssl`   | Generación de passwords en `deploy`               |
+| `rsync`     | Sincronización del repo (módulo `repo`) y backups |
+| `logrotate` | Módulo `logs`                                     |
+| `iproute2`  | `ss`, usado por `preflight` y `verificar`         |
+| `sudo`      | Permite re-elevar el operador en el futuro        |
 
 Sin el módulo `deps`, el operador abortaba en el primer módulo que tocaba `jq`.
 
@@ -97,21 +112,22 @@ Sin el módulo `deps`, el operador abortaba en el primer módulo que tocaba `jq`
 sudo scripts/operator.sh --module <nombre> [opciones]
 ```
 
-| Flag | Descripción |
-|---|---|
-| `--all` | Ejecuta los 14 módulos en orden |
-| `--module <nombre>` | Ejecuta solo un módulo |
-| `--uninstall` | Reversa los módulos (orden inverso, requiere `--interactive`) |
-| `--hostname <fqdn>` | Cambia el hostname del host |
-| `--ssh-port <N>` | Puerto SSH (default: 2222) |
-| `--app-port <N>` | **Fuerza** `APP_PORT` en el `.env`. Si no lo pasás, tu `APP_PORT` del `.env` se respeta |
-| `--environment <nombre>` | **Fuerza** `APP_ENVIRONMENT` (`development` / `production`). Si no lo pasás, se respeta el del `.env` |
-| `--repo-dir <path>` | Despliega en otro directorio (sincroniza el checkout, **incluido tu `.env`**) |
-| `--expose-zabbix-web` | Abre el puerto 8080 en UFW para la UI de Zabbix |
-| `--reset-volumes` | Borra los volúmenes de datos (DESTRUCTIVO, requiere `--interactive`) |
-| `--interactive` / `--non-interactive` | Prompts de confirmación (default: no interactivo) |
-| `--dry-run` | Muestra los comandos sin ejecutarlos |
-| `--help` / `--version` | Ayuda / versión |
+| Flag                                  | Descripción                                                                                           |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `--all`                               | Ejecuta los 14 módulos en orden                                                                       |
+| `--module <nombre>`                   | Ejecuta solo un módulo                                                                                |
+| `--uninstall`                         | Reversa los módulos (orden inverso, requiere `--interactive`)                                         |
+| `--hostname <fqdn>`                   | Cambia el hostname del host                                                                           |
+| `--ssh-port <N>`                      | Puerto SSH (default: 2222)                                                                            |
+| `--app-port <N>`                      | **Fuerza** `APP_PORT` en el `.env`. Si no lo pasás, tu `APP_PORT` del `.env` se respeta               |
+| `--environment <nombre>`              | **Fuerza** `APP_ENVIRONMENT` (`development` / `production`). Si no lo pasás, se respeta el del `.env` |
+| `--repo-dir <path>`                   | Despliega en otro directorio (sincroniza el checkout, **incluido tu `.env`**)                         |
+| `--ssh-key <archivo.pub>`             | Llave pública a instalar para el admin (default: usa la tuya si existe, o genera una)                 |
+| `--expose-zabbix-web`                 | Abre el puerto 8080 en UFW para la UI de Zabbix                                                       |
+| `--reset-volumes`                     | Borra los volúmenes de datos (DESTRUCTIVO, requiere `--interactive`)                                  |
+| `--interactive` / `--non-interactive` | Prompts de confirmación (default: no interactivo)                                                     |
+| `--dry-run`                           | Muestra los comandos sin ejecutarlos                                                                  |
+| `--help` / `--version`                | Ayuda / versión                                                                                       |
 
 > **El `.env` es tuyo.** El operador solo rellena lo que está vacío y solo
 > pisa `APP_PORT` / `APP_ENVIRONMENT` si los pedís por flag.
@@ -120,15 +136,15 @@ sudo scripts/operator.sh --module <nombre> [opciones]
 
 Equivalentes a los flags, con prioridad baja.
 
-| Var | Default | Flag |
-|---|---|---|
-| `SIGSM_SSH_PORT`        | `2222`                    | `--ssh-port` |
-| `SIGSM_APP_PORT`        | valor del `.env` o `8000` | `--app-port` |
-| `SIGSM_REPO_DIR`        | el checkout del script    | `--repo-dir` |
-| `SIGSM_ADMIN_USER`      | `songbird_admin`          | — |
-| `SIGSM_EXPOSE_ZABBIX_WEB` | `false`                 | `--expose-zabbix-web` |
-| `SIGSM_DRY_RUN`         | `false`                   | `--dry-run` |
-| `SIGSM_INTERACTIVE`     | `false`                   | `--interactive` |
+| Var                       | Default                   | Flag                  |
+| ------------------------- | ------------------------- | --------------------- |
+| `SIGSM_SSH_PORT`          | `2222`                    | `--ssh-port`          |
+| `SIGSM_APP_PORT`          | valor del `.env` o `8000` | `--app-port`          |
+| `SIGSM_REPO_DIR`          | el checkout del script    | `--repo-dir`          |
+| `SIGSM_ADMIN_USER`        | `songbird_admin`          | —                     |
+| `SIGSM_EXPOSE_ZABBIX_WEB` | `false`                   | `--expose-zabbix-web` |
+| `SIGSM_DRY_RUN`           | `false`                   | `--dry-run`           |
+| `SIGSM_INTERACTIVE`       | `false`                   | `--interactive`       |
 
 ---
 
@@ -155,12 +171,14 @@ sudo rm /var/lib/songbird-operator/state.json   # nuclear: resetea toda la idemp
 ## Lo que hace cada módulo (resumen)
 
 ### `deps`
+
 - Instala la toolchain base (`SB_BASE_PACKAGES` en `scripts/lib/deps.sh`).
 - Es idempotente: si los paquetes ya están, no toca apt.
 - Verifica post-install que los binarios críticos estén en el PATH.
 
 ### `preflight`
-- Chequea `ID=debian` + `VERSION_ID=12`.
+
+- Chequea `ID=debian` + `VERSION_ID` (13/trixie u objetivo; 12/bookworm soportado).
 - `EUID==0` (auto-eleva con `sudo` si no).
 - `apt-get`, `systemctl`, `ss` disponibles.
 - DNS resuelve `deb.debian.org`.
@@ -169,6 +187,7 @@ sudo rm /var/lib/songbird-operator/state.json   # nuclear: resetea toda la idemp
 - Detecta el checkout origen y avisa si no parece el proyecto.
 
 ### `repo`
+
 Verifica el proyecto del despliegue. **No clona ni copia nada.**
 
 1. Detecta el checkout por la **ubicación de los scripts** (`scripts/lib/../..`),
@@ -180,6 +199,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
    destino **incluyendo tu `.env`** (para no perder tus variables).
 
 ### `ssh` (hardening)
+
 - Drop-in `/etc/ssh/sshd_config.d/00-songbird-hardening.conf`:
   - `Port {{SSH_PORT}}` (default 2222)
   - `PermitRootLogin no`
@@ -194,6 +214,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 - Backup automático del drop-in previo a `*.bak-<timestamp>`.
 
 ### `firewall`
+
 - `ufw --force reset` → `default deny incoming` + `allow outgoing`.
 - Permite: `SSH_PORT/tcp`, `APP_PORT/tcp`, `10050/tcp` (zabbix agent),
   `10051/tcp` (zabbix server).
@@ -203,6 +224,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 - `--expose-zabbix-web` agrega `8080/tcp` para la UI.
 
 ### `docker`
+
 - Repo oficial de Docker (NO `docker.io`).
 - Engine + CLI + containerd + buildx + compose plugin.
 - `systemctl enable --now docker`.
@@ -212,9 +234,11 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
   `pull --ignore-buildable`).
 
 ### `bd`
+
 - `mariadb-client` (compatible con `mariadb-dump` que usan los healthchecks).
 
 ### `backups`
+
 - `/var/backups/songbird/` (chmod 700).
 - `/usr/local/sbin/songbird-backup.sh` (template):
   - `mariadb-dump` del contenedor **master** (`songbird_db_master`).
@@ -225,11 +249,13 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 - `/etc/cron.d/songbird-backup` con schedule `30 2 * * *` (02:30 AM diario).
 
 ### `logs`
+
 - `/var/log/journal/` (journal persistente) + restart `systemd-journald`.
 - `/etc/logrotate.d/songbird` (daily, 14 rotations, compress).
 - Logs en `/var/log/songbird/songbird-operator.log` (chmod 640, root:adm).
 
 ### `deploy`
+
 - Usa el compose file **único** `docker-compose.yml` (dev y producción).
 - **No sobreescribe tu `.env`.** Solo rellena lo que está vacío:
   - `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_REPLICATION_USER`, `PMA_USER`,
@@ -253,34 +279,69 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 
 ### `verificar` (smoke test, 21 checks)
 
-| # | Check | Esperado |
-|---|---|---|
-| 1  | `sshd -T \| grep permitrootlogin` | `no` |
-| 2  | `ss -ltn sport = :${SSH_PORT}` | LISTEN |
-| 3  | `ufw status` | active |
-| 4  | `ufw status` contiene SSH+APP rules | match |
-| 5  | `systemctl is-active docker` | active |
-| 6  | `id songbird_app` | miembro de `docker` |
-| 7  | `docker compose version` | exit 0 |
-| 8  | `docker compose ps` | todos healthy (o one-shot exit 0) |
-| 9  | `curl http://localhost:${APP_PORT}/` | 2xx/3xx |
-| 10 | `curl http://localhost:${APP_PORT}/zabbix/` | 2xx/3xx |
-| 11 | ping del contenedor **master** | OK |
-| 12 | ping de la BD de Zabbix | OK |
-| 13 | `/etc/cron.d/songbird-backup` existe | OK |
-| 14 | `logrotate -d` sin errores | OK |
-| 15 | `stat -c '%a' .env` | `600` |
-| 16 | Master: `@@log_bin=1` y `@@server_id=1` | OK |
-| 17 | Slave: `@@read_only=1` y `@@server_id=2` | OK |
-| 18 | `SHOW GLOBAL STATUS LIKE 'Slave_running'` | `ON` |
-| 19 | `SHOW SLAVE STATUS` sin `Last_IO_Error`/`Last_SQL_Error` | vacío |
-| 20 | GTID del slave ≥ GTID del master | sin lag |
-| 21 | Split read/write activo en el `.env` | `true` |
+| #   | Check                                                    | Esperado                          |
+| --- | -------------------------------------------------------- | --------------------------------- |
+| 1   | `sshd -T \| grep permitrootlogin`                        | `no`                              |
+| 2   | `ss -ltn sport = :${SSH_PORT}`                           | LISTEN                            |
+| 3   | `ufw status`                                             | active                            |
+| 4   | `ufw status` contiene SSH+APP rules                      | match                             |
+| 5   | `systemctl is-active docker`                             | active                            |
+| 6   | `id songbird_app`                                        | miembro de `docker`               |
+| 7   | `docker compose version`                                 | exit 0                            |
+| 8   | `docker compose ps`                                      | todos healthy (o one-shot exit 0) |
+| 9   | `curl http://localhost:${APP_PORT}/`                     | 2xx/3xx                           |
+| 10  | `curl http://localhost:${APP_PORT}/zabbix/`              | 2xx/3xx                           |
+| 11  | ping del contenedor **master**                           | OK                                |
+| 12  | ping de la BD de Zabbix                                  | OK                                |
+| 13  | `/etc/cron.d/songbird-backup` existe                     | OK                                |
+| 14  | `logrotate -d` sin errores                               | OK                                |
+| 15  | `stat -c '%a' .env`                                      | `600`                             |
+| 16  | Master: `@@log_bin=1` y `@@server_id=1`                  | OK                                |
+| 17  | Slave: `@@read_only=1` y `@@server_id=2`                 | OK                                |
+| 18  | `SHOW GLOBAL STATUS LIKE 'Slave_running'`                | `ON`                              |
+| 19  | `SHOW SLAVE STATUS` sin `Last_IO_Error`/`Last_SQL_Error` | vacío                             |
+| 20  | GTID del slave ≥ GTID del master                         | sin lag                           |
+| 21  | Split read/write activo en el `.env`                     | `true`                            |
+| 22  | Log del operador disponible y con contenido              | legible                           |
 
 **Exit codes**: `0` = todo OK · `1..N` = N checks fallidos · `64` = config inválida · `70` = error interno.
 
 > Los nombres de contenedor **no están hardcodeados**: se resuelven desde el
 > compose file, así que el smoke test sobrevive a los renombres.
+
+---
+
+## Logs
+
+Toda la salida del operador (INFO/OK/WARN/ERROR) queda en:
+
+```
+/var/log/songbird/songbird-operator.log
+```
+
+- Es **append-only**: cada ejecución agrega al final.
+- Sin colores (a diferencia de la consola) → fácil de grepear.
+- Rotado por `/etc/logrotate.d/songbird` (daily, 14 rotaciones, comprimido).
+- La ruta también aparece en el banner de cada ejecución y en el resumen del
+  smoke test.
+
+```bash
+# Últimas líneas, en vivo
+sudo tail -f /var/log/songbird/songbird-operator.log
+
+# Solo errores y warnings
+sudo grep -E "ERROR|WARN" /var/log/songbird/songbird-operator.log | tail -n 20
+
+# Cuándo se ejecutó un módulo
+sudo grep "Ejecutando modulo: deploy" /var/log/songbird/songbird-operator.log
+```
+
+Los logs de los contenedores van aparte (los maneja Docker):
+
+```bash
+docker compose logs -f db-master db-slave
+docker compose logs -f db-replication-init    # el que configura la replicación
+```
 
 ---
 
@@ -310,19 +371,23 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 ## Troubleshooting
 
 ### "Repo no encontrado en /opt/songbird-app"
+
 Esa ruta ya no es obligatoria. El operador trabaja in-place sobre el repo
 donde vive el script. Si el error aparece, es que el checkout no tiene
 `docker-compose.yml` ni `.env.example`:
+
 ```bash
 git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git ~/proyecto
 cd ~/proyecto && sudo scripts/operator.sh --all
 ```
 
 ### "No se encontró <repo>/docker-compose.yml"
+
 El checkout no tiene el compose file. Verificá que clonaste el repo completo
 y que no estás en un subdirectorio.
 
 ### "PermitRootLogin no" o "PasswordAuthentication no" bloqueó el acceso
+
 ```bash
 ls /etc/ssh/sshd_config.d/00-songbird-hardening.conf.bak-*
 sudo mv /etc/ssh/sshd_config.d/00-songbird-hardening.conf.bak-<ts> /etc/ssh/sshd_config.d/00-songbird-hardening.conf
@@ -330,32 +395,40 @@ sudo sshd -t && sudo systemctl reload ssh
 ```
 
 ### La replicación no arranca
+
 ```bash
 docker compose logs db-replication-init
 docker compose exec db-slave mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW SLAVE STATUS\G"
 docker compose logs db-slave
 ```
+
 Causas frecuentes:
+
 - `MYSQL_REPLICATION_PASSWORD` vacía o distinta en master y slave.
 - Volumen `mariadb_slave_data` con datos viejos → `docker compose down -v`
   y volver a levantar.
 
 ### Healthcheck de Zabbix no pasa
+
 ```bash
 docker logs songbird_zabbix_server 2>&1 | tail -50
 ```
+
 Causa común: credenciales MySQL mal configuradas en `.env`.
 
 ### DNS no resuelve `deb.debian.org`
+
 `preflight` aborta. Verificá `/etc/resolv.conf`.
 
 ### Puertos 2222 / 8000 ocupados
+
 ```bash
 sudo ss -ltnp | grep -E ':(2222|8000)\b'
 sudo scripts/operator.sh --all --ssh-port 22022 --app-port 80
 ```
 
 ### Logs del operador
+
 ```bash
 sudo tail -f /var/log/songbird/songbird-operator.log
 sudo journalctl -u docker
@@ -383,7 +456,7 @@ sudo journalctl -u docker
 /etc/docker/daemon.json                                   # docker log driver
 /var/backups/songbird/                                    # dumps + snapshots (chmod 700)
 /var/log/songbird/                                        # logs de la app
-/var/log/songbird-operator.log                            # log del operador
+/var/log/songbird/songbird-operator.log                 # log del operador
 /var/log/journal/                                         # journal persistente
 /var/lib/songbird-operator/state.json                     # estado de idempotencia
 /opt/songbird-operator/credentials.env                    # passwords generados (chmod 600)

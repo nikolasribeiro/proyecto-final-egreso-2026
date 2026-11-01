@@ -59,6 +59,9 @@ SB_REPO_DIR_EXPLICIT="${SB_REPO_DIR_EXPLICIT:-false}"
 SB_APP_PORT_EXPLICIT="${SB_APP_PORT_EXPLICIT:-false}"
 SB_ENVIRONMENT="${SB_ENVIRONMENT:-}"
 SB_ENVIRONMENT_EXPLICIT="${SB_ENVIRONMENT_EXPLICIT:-false}"
+# Ruta a una llave publica (.pub) para instalar en el authorized_keys del
+# administrador. Vacio = deteccion automatica.
+SB_SSH_KEY_PATH="${SB_SSH_KEY_PATH:-}"
 
 # ----------------------------------------------------------------------------
 # Colores (solo si stdout es TTY)
@@ -548,30 +551,47 @@ sb_compose_file() {
     printf '%s/%s' "${SB_REPO_DIR}" "${SB_COMPOSE_FILE_NAME}"
 }
 
-# `docker compose ps --format json`.
+# `docker compose ps -a --format json`.
+#
+# El `-a` es IMPRESCINDIBLE: sin el, `docker compose ps` solo lista los
+# contenedores CORRIENTES, y los contenedores one-shot (que ya terminaron,
+# como el inicializador de replicacion) NUNCA aparecen. Como el chequeo de
+# servicios pendientes compara contra `config --services` (que si lista el
+# servicio), el one-shot quedaba como "pendiente" para siempre y el deploy
+# esperaba el timeout completo.
+#
 # Compose >= 2.21 devuelve un ARRAY JSON; versiones anteriores devolvian un
 # objeto JSON por linea. El helper normaliza a un stream de objetos.
 sb_compose_ps_json() {
     local compose_file="$1" env_file="$2"
     docker compose -f "$compose_file" --env-file "$env_file" \
-        ps --format json 2>/dev/null
+        ps -a --format json 2>/dev/null
 }
 
 # Servicios del proyecto que ya estan en un estado terminal aceptable:
 #   - running + healthy (o sin healthcheck definido)
 #   - exited con codigo 0 (contenedores one-shot, p.ej. el init de replicacion)
+#
+# Si hay varios contenedores para el mismo servicio (p.ej. uno viejo que
+# quedo exited y el nuevo), se toma el MAS RECIENTE (CreatedAt) para no dar
+# por bueno un contenedor que ya fue reemplazado.
 sb_compose_services_ok() {
     local compose_file="$1" env_file="$2"
     sb_compose_ps_json "$compose_file" "$env_file" | jq -r '
-        (if type == "array" then .[] else . end)
-        | select(
-              (((.State // "") == "running")
-               and (((.Health // "") == "healthy") or ((.Health // "") == "")))
-              or
-              (((.State // "") == "exited")
-               and ((((.ExitCode // 0) | tostring) == "0")))
-          )
-        | .Service
+        [ (if type == "array" then .[] else . end) ]
+        | group_by(.Service)
+        | map(max_by(.CreatedAt // ""))
+        | map(
+              select(
+                    (((.State // "") == "running")
+                     and (((.Health // "") == "healthy") or ((.Health // "") == "")))
+                    or
+                    (((.State // "") == "exited")
+                     and ((((.ExitCode // 0) | tostring) == "0")))
+              )
+            )
+        | map(.Service)
+        | .[]
     ' 2>/dev/null | sort -u
 }
 
@@ -713,6 +733,216 @@ sb_selfcheck() {
         return 0
     fi
     return 0
+}
+
+
+# ----------------------------------------------------------------------------
+# Llave SSH del usuario administrador
+# ----------------------------------------------------------------------------
+# Estrategia (en este orden):
+#   1. Si se paso --ssh-key <archivo.pub>, se instala esa.
+#   2. Si el usuario que invoco el operador ($SUDO_USER) tiene una llave
+#      publica, se instala esa: la PRIVADA nunca toca el servidor.
+#   3. Si no hay ninguna, se genera un par ed25519 EN EL SERVIDOR, dentro del
+#      home del admin. El resumen final explica como traerla y borrarla.
+# En cualquier caso queda registrada en <state>/ssh_key_origin para que el
+# resumen final sepa que hacer.
+sb_ssh_key_setup() {
+    local admin_home="$1"
+    local ssh_dir="${admin_home}/.ssh"
+    local authorized="${ssh_dir}/authorized_keys"
+    local origen=""
+    local pub_key=""
+
+    # --- 1) Llave indicada por el operador ----------------------------
+    if [[ -n "${SB_SSH_KEY_PATH:-}" && -f "${SB_SSH_KEY_PATH}" ]]; then
+        pub_key="$(head -n1 "${SB_SSH_KEY_PATH}" 2>/dev/null || true)"
+        origen="${SB_SSH_KEY_PATH}"
+    fi
+
+    # --- 2) Llave publica del usuario que invoco el operador ----------
+    if [[ -z "$pub_key" ]]; then
+        local invocador="${SUDO_USER:-}"
+        if [[ -n "$invocador" && "$invocador" != "root" ]] && id "$invocador" >/dev/null 2>&1; then
+            local home_inv
+            home_inv="$(getent passwd "$invocador" | cut -d: -f6)"
+            local k
+            for k in id_ed25519.pub id_ecdsa.pub id_rsa.pub; do
+                if [[ -f "${home_inv}/.ssh/${k}" ]]; then
+                    pub_key="$(head -n1 "${home_inv}/.ssh/${k}" 2>/dev/null || true)"
+                    if [[ -n "$pub_key" ]]; then
+                        origen="${home_inv}/.ssh/${k}"
+                        break
+                    fi
+                fi
+            done
+        fi
+    fi
+
+    # --- 3) Generar el par en el servidor -----------------------------
+    if [[ -z "$pub_key" ]]; then
+        if [[ -f "${ssh_dir}/id_ed25519.pub" ]]; then
+            # Ya existia de una corrida anterior: se reutiliza.
+            pub_key="$(head -n1 "${ssh_dir}/id_ed25519.pub" 2>/dev/null || true)"
+            origen="servidor"
+        elif command -v ssh-keygen >/dev/null 2>&1; then
+            logger_info "Generando par de llaves ed25519 para $SB_ADMIN_USER en ${ssh_dir}"
+            run_cmd ssh-keygen -t ed25519 -f "${ssh_dir}/id_ed25519" -N "" \
+                -C "${SB_ADMIN_USER}@$(hostname)"
+            pub_key="$(head -n1 "${ssh_dir}/id_ed25519.pub" 2>/dev/null || true)"
+            origen="servidor"
+        else
+            logger_warn "ssh-keygen no está disponible: no se puede generar la llave"
+            return 1
+        fi
+    fi
+
+    if [[ -z "$pub_key" ]]; then
+        logger_warn "No se pudo obtener una llave pública para $SB_ADMIN_USER"
+        return 1
+    fi
+
+    # --- Instalar en authorized_keys (idempotente) ---------------------
+    if [[ -f "$authorized" ]] && grep -qxF "$pub_key" "$authorized" 2>/dev/null; then
+        logger_ok "Llave pública ya instalada en ${authorized}"
+    else
+        printf '%s\n' "$pub_key" >> "$authorized"
+        logger_ok "Llave pública instalada en ${authorized}"
+    fi
+
+    # `|| true`: un chmod/chown fallido no debe abortar el operador entero.
+    run_cmd chmod 700 "$ssh_dir" || true
+    run_cmd chmod 600 "$authorized" || true
+    if [[ -f "${ssh_dir}/id_ed25519" ]]; then
+        run_cmd chmod 600 "${ssh_dir}/id_ed25519" || true
+    fi
+    run_cmd chown -R "${SB_ADMIN_USER}:${SB_ADMIN_USER}" "$ssh_dir" || true
+
+    # Registrar el origen para el resumen final
+    if [[ "$SB_DRY_RUN" != "true" ]]; then
+        install -d -m 755 "$SB_STATE_DIR" 2>/dev/null || true
+        printf '%s\n' "$origen" > "${SB_STATE_DIR}/ssh_key_origin" 2>/dev/null || true
+    fi
+
+    sb_kv "Llave pública" "${authorized}"
+    sb_kv "Origen" "$origen"
+    return 0
+}
+
+
+# ----------------------------------------------------------------------------
+# Resumen final del despliegue
+# ----------------------------------------------------------------------------
+# Al terminar el operador se imprime esto: accesos, dónde están las llaves SSH,
+# estado de la replicación, rutas importantes y los próximos pasos. Sin esto el
+# final del run es un "listo" sin contexto.
+sb_print_resumen() {
+    local compose_file env_file host_ip
+    compose_file="$(sb_compose_file)"
+    env_file="${SB_REPO_DIR}/.env"
+
+    host_ip="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | head -n1 | cut -d/ -f1)"
+    if [[ -z "$host_ip" ]]; then
+        host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    fi
+    [[ -z "$host_ip" ]] && host_ip="<ip-del-host>"
+
+    local admin_home
+    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
+    [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+
+    printf '\n%s%s══════════════════════════════════════════════════════════════════════%s\n' \
+        "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
+    printf '%s%s  RESUMEN DEL DESPLIEGUE — %s v%s%s\n' \
+        "$C_BOLD" "$C_CYAN" "$SB_NAME" "$SB_VERSION" "$C_RESET" >&2
+    printf '%s%s══════════════════════════════════════════════════════════════════════%s\n' \
+        "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
+
+    # --- ACCESO ---------------------------------------------------------
+    printf '\n%sACCESO%s\n' "$C_BOLD" "$C_RESET" >&2
+    printf '  Aplicación       http://%s:%s/\n' "$host_ip" "$SB_APP_PORT" >&2
+    printf '  Zabbix           http://%s:%s/zabbix/\n' "$host_ip" "$SB_APP_PORT" >&2
+    printf '  SSH              ssh -p %s %s@%s\n' "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" >&2
+
+    # --- LLAVES SSH -----------------------------------------------------
+    printf '\n%sLLAVES SSH%s\n' "$C_BOLD" "$C_RESET" >&2
+    local origen_llave=""
+    [[ -f "${SB_STATE_DIR}/ssh_key_origin" ]] && origen_llave="$(cat "${SB_STATE_DIR}/ssh_key_origin" 2>/dev/null || true)"
+    if [[ -f "${admin_home}/.ssh/id_ed25519" && "$origen_llave" == "servidor" ]]; then
+        printf '  Se GENERO un par de llaves en ESTE servidor.\n' >&2
+        printf '  Privada          %s/.ssh/id_ed25519\n' "$admin_home" >&2
+        printf '  Publica          %s/.ssh/id_ed25519.pub\n' "$admin_home" >&2
+        printf '  Traela a tu maquina:\n' >&2
+        printf '    scp -P %s %s@%s:%s/.ssh/id_ed25519 ~/.ssh/songbird_admin_ed25519\n' \
+            "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" "$admin_home" >&2
+        printf '  Y BORRALA del servidor (la privada no debe quedar ahi):\n' >&2
+        printf '    ssh -p %s %s@%s "rm -f %s/.ssh/id_ed25519"\n' \
+            "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" "$admin_home" >&2
+    elif [[ -n "$origen_llave" ]]; then
+        printf '  Llave publica instalada en %s/.ssh/authorized_keys\n' "$admin_home" >&2
+        printf '  Origen           %s\n' "$origen_llave" >&2
+        printf '  La llave PRIVADA nunca estuvo en este servidor.\n' >&2
+    else
+        printf '  No se genero ninguna llave en esta corrida.\n' >&2
+        printf '  Revisa: %s/.ssh/authorized_keys\n' "$admin_home" >&2
+    fi
+
+    # --- BASE DE DATOS ---------------------------------------------------
+    printf '\n%sBASE DE DATOS (master-slave)%s\n' "$C_BOLD" "$C_RESET" >&2
+    local c_master c_slave estado_repl="?"
+    c_master="$(sb_compose_container_of_service "$compose_file" "$env_file" db-master)"
+    c_slave="$(sb_compose_container_of_service "$compose_file" "$env_file" db-slave)"
+    local root_pwd
+    root_pwd="$(sb_env_get "$env_file" MYSQL_ROOT_PASSWORD 2>/dev/null || true)"
+    local master_vivo="false"
+    if [[ -n "$c_master" ]] && docker inspect "$c_master" >/dev/null 2>&1; then
+        master_vivo="true"
+        if [[ -n "$root_pwd" ]]; then
+            estado_repl="$(docker exec "$c_master" \
+                mariadb -uroot -p"$root_pwd" --protocol=tcp -h 127.0.0.1 -N -B \
+                -e "SHOW GLOBAL STATUS LIKE 'Slave_running';" 2>/dev/null | cut -f2 || true)"
+        fi
+    fi
+    printf '  Master (escritura)  %s\n' "${c_master:-db-master}" >&2
+    printf '  Slave  (lectura)    %s\n' "${c_slave:-db-slave}" >&2
+    if [[ "$estado_repl" == "ON" ]]; then
+        printf '  Replicación         %sACTIVA%s (hilos IO y SQL corriendo)\n' "$C_GREEN" "$C_RESET" >&2
+    elif [[ "$master_vivo" == "true" ]]; then
+        printf '  Replicación         %sNO ACTIVA%s (Slave_running=%s)\n' "$C_RED" "$C_RESET" "${estado_repl:-?}" >&2
+    else
+        printf '  Replicación         %sno verificable%s (el contenedor master no está corriendo)\n' "$C_YELLOW" "$C_RESET" >&2
+    fi
+    printf '  Verificar el estado:\n' >&2
+    printf '    docker compose -f %s exec db-slave mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW SLAVE STATUS\\G"\n' \
+        "$compose_file" >&2
+
+    # --- RUTAS -----------------------------------------------------------
+    printf '\n%sRUTAS%s\n' "$C_BOLD" "$C_RESET" >&2
+    printf '  Proyecto        %s\n' "$SB_REPO_DIR" >&2
+    printf '  Compose file    %s\n' "$compose_file" >&2
+    printf '  Variables       %s (600)\n' "$env_file" >&2
+    printf '  Credenciales    %s (600)\n' "$SB_CRED_FILE" >&2
+    printf '  Log operador    %s\n' "$SB_LOG_FILE" >&2
+    printf '  Backups         /var/backups/songbird/\n' >&2
+    printf '  Estado (json)   %s\n' "$SB_STATE_FILE" >&2
+
+    # --- PROXIMOS PASOS --------------------------------------------------
+    printf '\n%sPROXIMOS PASOS%s\n' "$C_BOLD" "$C_RESET" >&2
+    local paso=1
+    if [[ -f "${admin_home}/.ssh/id_ed25519" && "$origen_llave" == "servidor" ]]; then
+        printf '  %s. Traé la llave privada SSH del servidor y borrala de ahí.\n' "$paso" >&2
+        paso=$((paso + 1))
+    fi
+    printf '  %s. Entrá a la app: http://%s:%s/\n' "$paso" "$host_ip" "$SB_APP_PORT" >&2
+    paso=$((paso + 1))
+    printf '  %s. Cambiá el password de Admin/zabbix en la UI de Zabbix.\n' "$paso" >&2
+    paso=$((paso + 1))
+    printf '  %s. Vincular los hosts en Zabbix (proxy, web, db, db_slave).\n' "$paso" >&2
+    paso=$((paso + 1))
+    printf '  %s. Probá el backup: sudo /usr/local/sbin/songbird-backup.sh\n' "$paso" >&2
+    printf '\n  Log en vivo:  sudo tail -f %s\n' "$SB_LOG_FILE" >&2
+    printf '  Smoke test:   sudo scripts/operator.sh --module verificar\n' >&2
+    printf '\n' >&2
 }
 
 # ----------------------------------------------------------------------------

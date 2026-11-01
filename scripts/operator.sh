@@ -24,13 +24,43 @@ SCRIPT_LIB_DIR="${SCRIPT_DIR}/lib"
 # ----------------------------------------------------------------------------
 # Auto-elevacion a root
 # ----------------------------------------------------------------------------
+# NOTA (el "problema del huevo y la gallina"):
+#   El operador necesita root para hacer su trabajo (systemctl, ufw, apt,
+#   docker). Si no sos root, se auto-eleva con sudo. Pero si `sudo` NO esta
+#   instalado, el operador NO PUEDE instalarlo: hace falta root para instalar
+#   paquetes, y hace falta sudo para llegar a root.
+#
+#   Por eso la PRIMERA ejecucion tiene que ser como root (tipicamente con
+#   `su -`). A partir de ahi, el modulo `deps` instala sudo y las ejecuciones
+#   siguientes si pueden ser `sudo scripts/operator.sh --all`.
+#
 if [[ "$(id -u)" -ne 0 ]]; then
-    if command -v sudo >/dev/null 2>&1; then
-        exec sudo -E "$0" "$@"
-    else
-        echo "[FATAL] Este script requiere root (o sudo disponible)" >&2
+    if ! command -v sudo >/dev/null 2>&1; then
+        cat >&2 <<'EOF'
+[FATAL] Este script necesita privilegios de root y 'sudo' no esta instalado.
+
+        No puede auto-elevarse: sin 'sudo' no hay forma de llegar a root, y
+        sin root no puede instalar 'sudo'. La PRIMERA ejecucion tiene que
+        hacerse como root:
+
+            su -
+            apt-get update && apt-get install -y sudo git
+            exit
+
+        Y despues, desde tu checkout:
+
+            cd <tu checkout> && sudo scripts/operator.sh --all
+EOF
         exit 64
     fi
+
+    # `sudo -E` preserva el entorno (SIGSM_*), pero algunos hosts lo bloquean
+    # (requiere el tag SETENV). Se prueba de forma no interactiva y, si no
+    # se puede, se reintenta sin preservar el entorno.
+    if sudo -n -E true >/dev/null 2>&1; then
+        exec sudo -E "$0" "$@"
+    fi
+    exec sudo "$0" "$@"
 fi
 
 # ----------------------------------------------------------------------------
@@ -82,7 +112,7 @@ usage() {
     cat <<EOF
 ${C_BOLD}${SB_NAME} v${SB_VERSION}${C_RESET}
 
-Script bash modular para configurar un servidor Debian 12 con SSH endurecido,
+Script bash modular para configurar un servidor Debian 13 (trixie) con SSH endurecido,
 UFW, usuarios, Docker, backups, logs y el stack del proyecto (PHP + MariaDB
 master/slave + Zabbix) corriendo.
 
@@ -107,6 +137,8 @@ ${C_BOLD}OPCIONES${C_RESET}
     --app-port <N>             Fuerza APP_PORT en el .env (default: NO se toca)
     --environment <nombre>     Fuerza APP_ENVIRONMENT (dev|production)
     --repo-dir <path>          Desplegar en otro directorio (default: el checkout)
+    --ssh-key <archivo.pub>    Llave publica a instalar para el admin
+                               (default: usa la tuya o genera una)
     --expose-zabbix-web        Abre puerto 8080 en UFW para UI Zabbix
     --reset-volumes            Borra volumenes Docker antes de deploy (DESTRUCTIVO)
     --interactive              Activa prompts de confirmacion (default: no)
@@ -182,6 +214,11 @@ parse_cli() {
                 [[ $# -ge 2 ]] || { logger_error "--environment requiere un argumento"; exit 64; }
                 SB_ENVIRONMENT="$2"
                 SB_ENVIRONMENT_EXPLICIT="true"
+                shift 2
+                ;;
+            --ssh-key)
+                [[ $# -ge 2 ]] || { logger_error "--ssh-key requiere un argumento"; exit 64; }
+                SB_SSH_KEY_PATH="$2"
                 shift 2
                 ;;
             --repo-dir)
@@ -332,6 +369,7 @@ print_banner() {
     sb_kv "Dry-run"         "$SB_DRY_RUN"
     sb_kv "Interactive"     "$SB_INTERACTIVE"
     sb_kv "Repo (templates)" "$SB_TEMPLATES_DIR"
+    sb_kv "Log" "$SB_LOG_FILE"
     printf '\n' >&2
 }
 
@@ -356,6 +394,7 @@ main() {
     # Export para subshells (ej. docker exec)
     export SB_DRY_RUN SB_SSH_PORT SB_APP_PORT SB_REPO_DIR SB_ADMIN_USER
     export SB_APP_PORT_EXPLICIT SB_ENVIRONMENT SB_ENVIRONMENT_EXPLICIT SB_REPO_DIR_EXPLICIT
+    export SB_SSH_KEY_PATH
 
     # Aplicar hostname si se pidio
     if [[ -n "$SB_HOSTNAME" ]]; then
@@ -407,6 +446,9 @@ main() {
     if [[ "$SB_MODE" == "single" ]]; then
         run_module "$SB_MODULE"
         logger_ok "Modulo $SB_MODULE finalizado"
+        if [[ "$SB_MODULE" == "deploy" || "$SB_MODULE" == "verificar" ]]; then
+            sb_print_resumen
+        fi
         exit 0
     fi
 
@@ -414,7 +456,9 @@ main() {
         for mod in "${SB_MODULES[@]}"; do
             run_module "$mod"
         done
-        logger_ok "Songbird-operator v${SB_SHOW_VERSION} finalizado"
+        logger_ok "Songbird-operator v${SB_VERSION} finalizado"
+        # Resumen final: accesos, llaves SSH, estado de la replicacion, rutas.
+        sb_print_resumen
         exit 0
     fi
 

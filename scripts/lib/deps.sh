@@ -3,9 +3,9 @@
 # Instalacion de la toolchain base del host.
 # Modulo: deps
 #
-# Este modulo es el PRIMERO del pipeline. Motivo: en una Debian 12 limpia
-# (imagen genericcloud / instalacion minima) NO vienen `jq`, `git`, `curl`,
-# `openssl`, `rsync` ni `logrotate`, y el operador los necesita:
+# Este modulo es el PRIMERO del pipeline. Motivo: en una Debian 13 (trixie)
+# limpia (imagen genericcloud / instalacion minima) NO vienen `jq`, `git`,
+# `curl`, `openssl`, `rsync` ni `logrotate`, y el operador los necesita:
 #
 #   jq        -> persistencia de estado (idempotencia)
 #   git       -> clonar el repo si no hay checkout local
@@ -14,7 +14,10 @@
 #   rsync     -> sincronizacion del repo (modulo `repo`) y backups
 #   logrotate -> modulo `logs`
 #   iproute2  -> `ss`, usado por preflight y verificar
-#   sudo      -> permite que el operador se re-eleve en el futuro
+#   sudo      -> NO es para elevar la PRIMERA ejecucion (imposible: sin root
+#                no se instalan paquetes). Es para que el usuario
+#                songbird_admin pueda usar su sudoers scoped, y para que las
+#                ejecuciones siguientes no requieran `su -`.
 #
 # Sin este modulo, el operador abortaba en el primer modulo que tocaba `jq`.
 
@@ -34,6 +37,10 @@ readonly SB_BASE_PACKAGES=(
     logrotate
     iproute2
     sudo
+    # ssh-keygen: lo usa el modulo `usuarios` para generar el par de llaves
+    # del administrador. El modulo `ssh` instala openssh-server (que lo trae
+    # como dependencia), pero `usuarios` corre ANTES que `ssh`.
+    openssh-client
 )
 
 # Binarios que el operador necesita para funcionar (verificacion post-install).
@@ -46,6 +53,7 @@ readonly SB_REQUIRED_BINARIES=(
     logrotate
     ss
     apt-get
+    ssh-keygen
 )
 
 sb_deps_missing_packages() {

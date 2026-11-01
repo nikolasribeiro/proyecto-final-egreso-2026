@@ -9,8 +9,17 @@ IFS=$'\n\t'
 mod_usuarios_run() {
     logger_section "Módulo usuarios"
 
-    if module_skip_if_done usuarios \
-        'id songbird_admin && id songbird_app && id songbird_backup && id songbird_zbx'; then
+    # Home del admin (puede no existir todavia en la primera corrida).
+    local admin_home
+    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
+    [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+
+    # La precondicion incluye la llave: si el usuario existe pero la llave
+    # falta (p.ej. se borro el authorized_keys), el modulo se re-aplica.
+    local precond
+    precond="id ${SB_ADMIN_USER} && id songbird_app && id songbird_backup && id songbird_zbx"
+    precond+=" && [[ -s '${admin_home}/.ssh/authorized_keys' ]]"
+    if module_skip_if_done usuarios "$precond"; then
         return 0
     fi
 
@@ -47,12 +56,23 @@ mod_usuarios_run() {
     fi
 
     # 5. .ssh para el admin (key-only auth)
-    local admin_home
-    admin_home="$(getent passwd "$SB_ADMIN_USER" | cut -d: -f6)"
     run_cmd install -d -m 700 -o "$SB_ADMIN_USER" -g "$SB_ADMIN_USER" "$admin_home/.ssh"
     if [[ ! -f "$admin_home/.ssh/authorized_keys" ]]; then
         run_cmd install -m 600 -o "$SB_ADMIN_USER" -g "$SB_ADMIN_USER" /dev/null "$admin_home/.ssh/authorized_keys"
-        logger_warn "Recordá: copiá tu clave pública a ${admin_home}/.ssh/authorized_keys antes de cerrar la sesión actual"
+    fi
+
+    # 5.b Llave SSH del admin: se instala la del operador si existe, o se
+    #     genera un par ed25519 en el servidor. Asi el modulo `ssh` puede
+    #     validar la conexion de verdad.
+    logger_section "Llave SSH de ${SB_ADMIN_USER}"
+    if sb_ssh_key_setup "$admin_home"; then
+        if [[ -f "${admin_home}/.ssh/id_ed25519" ]]; then
+            logger_warn "La llave privada quedó en el servidor. Traela y borrala (ver el resumen final)."
+        else
+            logger_ok "Llave pública lista: la privada nunca sale de tu máquina"
+        fi
+    else
+        logger_warn "No se pudo configurar la llave SSH: copiala a mano en ${admin_home}/.ssh/authorized_keys"
     fi
 
     # 6. Lockear password del admin (solo key-based via SSH)
