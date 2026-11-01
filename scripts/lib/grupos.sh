@@ -36,7 +36,8 @@ mod_grupos_run() {
     deploy_template \
         "${SB_TEMPLATES_DIR}/sudoers_songbird_admin.tpl" \
         "$sudoers_file" \
-        "ADMIN_USER=${SB_ADMIN_USER}"
+        "ADMIN_USER=${SB_ADMIN_USER}" \
+        "REPO_DIR=${SB_REPO_DIR}"
 
     run_cmd chmod 440 "$sudoers_file"
 

@@ -45,6 +45,7 @@ mod_preflight_run() {
         sb_kv "sudo" "disponible"
     else
         sb_kv "sudo" "NO DISPONIBLE"
+        logger_warn "sudo no está instalado. El operador se puede ejecutar como root (su -) sin problema."
     fi
 
     # 4. apt-get y systemctl
@@ -57,7 +58,22 @@ mod_preflight_run() {
         fi
     done
 
-    # 5. DNS
+    # 5. Toolchain base (la instala el modulo `deps`, que corre antes).
+    #    Si algo falta aca, es que `deps` no se ejecuto o fallo.
+    local tool
+    local tools_ok=true
+    for tool in jq git rsync curl openssl logrotate; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            logger_error "Falta la toolchain base: $tool (ejecutá: sudo scripts/operator.sh --module deps)"
+            tools_ok=false
+            failures=$((failures + 1))
+        fi
+    done
+    if [[ "$tools_ok" == "true" ]]; then
+        sb_kv "Toolchain base" "jq git rsync curl openssl logrotate — OK"
+    fi
+
+    # 6. DNS
     if getent hosts deb.debian.org >/dev/null 2>&1; then
         sb_kv "DNS deb.debian.org" "OK"
     else
@@ -65,14 +81,14 @@ mod_preflight_run() {
         failures=$((failures + 1))
     fi
 
-    # 6. Hostname, IP
+    # 7. Hostname, IP
     sb_kv "Hostname" "$(hostname)"
     sb_kv "FQDN" "$(hostname -f 2>/dev/null || echo 'n/a')"
     local ip
     ip="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | head -n1 || echo 'n/a')"
     sb_kv "IPv4 principal" "$ip"
 
-    # 7. Puertos objetivo
+    # 8. Puertos objetivo
     for port in "${SB_SSH_PORT}" "${SB_APP_PORT}"; do
         if ss -ltn "sport = :$port" 2>/dev/null | grep -q ":$port"; then
             logger_warn "Puerto $port ya está en uso (alguien escucha ahí)"
@@ -81,10 +97,19 @@ mod_preflight_run() {
         fi
     done
 
-    # 8. Paths host
+    # 9. Origen del proyecto: el checkout donde vive el script.
+    if sb_is_project_dir "$SB_SOURCE_DIR"; then
+        sb_kv "Checkout" "$SB_SOURCE_DIR (proyecto detectado)"
+    else
+        logger_error "El checkout ($SB_SOURCE_DIR) no tiene ${SB_COMPOSE_FILE_NAME} ni .env.example."
+        logger_error "El operador NO clona: cloná el proyecto y corré el operador desde el checkout."
+        failures=$((failures + 1))
+    fi
+    sb_kv "Directorio deploy" "$SB_REPO_DIR"
+
+    # 10. Paths host
     sb_kv "State file" "$SB_STATE_FILE"
     sb_kv "Log file" "$SB_LOG_FILE"
-    sb_kv "Repo dir" "$SB_REPO_DIR"
 
     if [[ $failures -gt 0 ]]; then
         logger_error "Preflight falló con $failures errores"

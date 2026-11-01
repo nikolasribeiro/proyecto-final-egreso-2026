@@ -96,6 +96,33 @@ Para detener los contenedores (sin perder los datos de la base de datos), ejecut
 
 ---
 
+## Despliegue automatizado (`scripts/operator.sh`)
+
+`scripts/operator.sh` toma una **Debian 12 limpia** y la deja con el stack
+corriendo: SSH endurecido, UFW, usuarios, Docker, backups, logrotate y el
+proyecto desplegado.
+
+```bash
+# 1. Clonás el proyecto (el operador NO clona)
+git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git ~/proyecto
+cd ~/proyecto
+
+# 2. Cargás tus variables
+cp .env.example .env && nano .env
+
+# 3. Corrés el operador desde el checkout
+sudo scripts/operator.sh --all
+
+# 4. Smoke test (21 checks)
+sudo scripts/operator.sh --module verificar
+```
+
+El operador trabaja **in-place** sobre el repo donde vive el script y
+**respeta tu `.env`**: solo rellena lo que está vacío. Detalle completo en
+[`scripts/README.md`](scripts/README.md).
+
+---
+
 ## Monitoreo (Zabbix)
 
 El proyecto incluye **Zabbix 7.0** para monitorear los servicios `proxy`, `web` y `db` mediante agentes sidecar. El stack de Zabbix (server, web, su base MySQL y los 3 agentes) forma parte del arranque normal tanto en desarrollo como en producción. No se requiere ningún `--profile`.
@@ -114,11 +141,66 @@ Este comando inicia la aplicación, MariaDB, phpMyAdmin, Zabbix Server, Zabbix W
 
 ### Levantar el stack de producción
 
+El proyecto usa **un único `docker-compose.yml`** para desarrollo y producción.
+Lo que cambia es el `.env` (`APP_ENVIRONMENT`, credenciales, `APP_PORT`):
+
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env up -d
+docker compose --env-file .env up -d
 ```
 
 > Asegurate de que tu `.env` tenga todas las variables del bloque `MONITOREO (Zabbix)` definidas en `.env.example`.
+> Para producción, `APP_ENVIRONMENT=production` y credenciales propias.
+
+### Base de datos: estrategia Master-Slave
+
+La base de datos opera con **replicación master-slave** (MariaDB 10.11):
+
+| Nodo | Servicio | Rol | Puerto |
+|---|---|---|---|
+| **Master** | `db-master` | **Escritura** (alias de red `db`) | interno |
+| **Slave** | `db-slave` | **Lectura** (réplica, `read_only`) | interno |
+| Init | `db-replication-init` | Configura la replicación (one-shot) | — |
+
+- Las **escrituras** (`INSERT`/`UPDATE`/`DELETE`/DDL) van siempre al **master**.
+- Las **lecturas** (`SELECT`/`SHOW`) van al **slave**.
+- La aplicación enruta de forma transparente: `Nucleo\Conexion` devuelve un
+  `PDO` que decide el servidor según el tipo de sentencia. **No hace falta
+  cambiar el código de los modelos.**
+- Si el slave no está disponible, la app **cae al master** (fail-open): nunca
+  se queda sin base de datos por un fallo de la réplica.
+- Tras cada escritura, la app espera (con timeout acotado) a que la réplica
+  aplique el cambio: garantiza *leer lo que escribí* entre requests.
+
+Configuración **declarativa**: cada nodo declara sus parámetros en el
+`command:` del `docker-compose.yml` (con el "por qué" de cada setting en los
+comentarios). La única lógica —el `CHANGE MASTER TO`— vive en un único script:
+
+```
+database/replication/init-replication.sh   # CHANGE MASTER TO + START SLAVE
+```
+
+Variables de entorno (`.env`):
+
+```text
+DB_HOST=db-master                    # escritura
+DB_SLAVE_HOST=db-slave              # lectura
+DB_READ_REPLICA_ENABLED=true         # activa el split read/write
+DB_REPLICA_WAIT_AFTER_WRITE=true     # espera a la réplica tras escribir
+DB_REPLICA_WAIT_TIMEOUT_MS=2000
+MYSQL_REPLICATION_USER=repl
+MYSQL_REPLICATION_PASSWORD=          # la genera el operador si está vacía
+```
+
+Verificar el estado de la replicación:
+
+```bash
+docker compose exec db-slave mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SHOW SLAVE STATUS\G"
+```
+
+> La imagen oficial de MariaDB **no** trae el plugin de replicación
+> semi-síncrona (`semisync_master.so` no existe en `mariadb:10.11`), por eso la
+> consistencia de lectura se garantiza en la capa de aplicación comparando el
+> GTID del master con el del slave.
 
 ### Verificación de arranque
 
@@ -133,7 +215,7 @@ docker compose ps
 Todos los servicios deben figurar como `Up ... (healthy)`. Para producción:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env ps
+docker compose --env-file .env ps
 ```
 
 Probá los dos accesos publicados:
@@ -162,7 +244,8 @@ Tras el primer arranque (esperá ~60 segundos a que el server inicialice la BD):
 2. Crear 3 hosts con estos datos:
    - `songbird_proxy` — interface: IP del contenedor `zabbix-agent-proxy`, port `10050`.
    - `songbird_web` — interface: IP del contenedor `zabbix-agent-web`, port `10050`.
-   - `songbird_db` — interface: IP del contenedor `zabbix-agent-db`, port `10050`.
+   - `songbird_db` — interface: IP del contenedor `songbird_zabbix_agent_db`, port `10050`.
+   - `songbird_db_slave` — interface: IP del contenedor `songbird_zabbix_agent_db_slave`, port `10050` (réplica).
 3. Asignar el template **`Linux by Zabbix agent 2`** a cada host.
 4. Esperar 1–2 minutos y verificar en **Monitoring → Latest data** que aparezcan métricas (CPU, memoria, red, filesystem).
 
@@ -175,19 +258,18 @@ Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bl
 - **"Connection refused" al agregar un host:** verificá que el contenedor `zabbix-agent-*` correspondiente está corriendo y pertenece a la red `songbird_network`:
   ```bash
   docker compose ps
-  docker compose -f docker-compose.prod.yml ps
+  docker compose ps
   ```
 - **El server de Zabbix no arranca:** revisá los logs:
   ```bash
   docker compose logs zabbix-server
-  docker compose -f docker-compose.prod.yml logs zabbix-server
+  docker compose logs zabbix-server
   ```
   Causa común: credenciales MySQL mal configuradas en `.env` (variables `ZABBIX_DB_PASSWORD` y `ZABBIX_DB_ROOT_PASSWORD`).
 - **Un servicio queda `(unhealthy)` tras `up -d`:** esperá un minuto y revisá los logs del servicio (`docker compose logs <servicio>`). El `start_period` cubre la inicialización; si supera ese margen suele haber credenciales mal o el upstream no responde.
 - **Resetear la contraseña del admin de Zabbix:**
   ```bash
-  docker exec -u root zabbix-web-dev bash -c "supervisorctl restart zabbix"
-  docker exec -u root zabbix-web-prod bash -c "supervisorctl restart zabbix"
+  docker exec -u root songbird_zabbix_web bash -c "supervisorctl restart zabbix"
   ```
 
 ### Notas de seguridad

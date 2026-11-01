@@ -43,7 +43,9 @@ source "${SCRIPT_LIB_DIR}/_lib.sh"
 # Constantes adicionales del entry point
 # ----------------------------------------------------------------------------
 readonly SB_MODULES=(
+    deps
     preflight
+    repo
     usuarios
     grupos
     ssh
@@ -69,28 +71,42 @@ SB_HELP="false"
 SB_SHOW_VERSION="false"
 
 usage() {
+    # `IFS` del proyecto es $'\n\t' (sin espacio), así que "${SB_MODULES[*]}"
+    # se imprimiría en varias líneas. Se arma la lista a mano.
+    local modules_list=""
+    local m
+    for m in "${SB_MODULES[@]}"; do
+        modules_list+="${modules_list:+, }${m}"
+    done
+
     cat <<EOF
-${C_BOLD}${SB_NAME} v${SB_SHOW_VERSION}${C_RESET}
+${C_BOLD}${SB_NAME} v${SB_VERSION}${C_RESET}
 
 Script bash modular para configurar un servidor Debian 12 con SSH endurecido,
-UFW, usuarios, Docker, backups, logs y el stack del proyecto (PHP + MariaDB +
-Zabbix) corriendo.
+UFW, usuarios, Docker, backups, logs y el stack del proyecto (PHP + MariaDB
+master/slave + Zabbix) corriendo.
 
 ${C_BOLD}USO${C_RESET}
     sudo scripts/operator.sh --all [opciones]
     sudo scripts/operator.sh --module <nombre> [opciones]
     sudo scripts/operator.sh --help | --version
 
+${C_BOLD}FLUJO${C_RESET}
+    El operador trabaja IN-PLACE sobre el repo donde vive el script.
+    No clona ni copia nada: cloná el proyecto, configurá tu .env y corré
+    el operador desde el checkout.
+
 ${C_BOLD}MODOS${C_RESET}
-    --all                      Ejecuta los 12 modulos en orden
-    --module <nombre>          Ejecuta solo un modulo (${SB_MODULES[*]})
+    --all                      Ejecuta los ${#SB_MODULES[@]} modulos en orden
+    --module <nombre>          Ejecuta solo un modulo (${modules_list})
     --uninstall                Reversa los modulos (orden inverso)
 
 ${C_BOLD}OPCIONES${C_RESET}
     --hostname <fqdn>          Cambiar hostname del host
     --ssh-port <N>             Puerto SSH (default: ${SB_SSH_PORT_DEFAULT})
-    --app-port <N>             APP_PORT publicado en host (default: ${SB_APP_PORT_DEFAULT})
-    --repo-dir <path>          Path al repo (default: ${SB_REPO_DIR_DEFAULT})
+    --app-port <N>             Fuerza APP_PORT en el .env (default: NO se toca)
+    --environment <nombre>     Fuerza APP_ENVIRONMENT (dev|production)
+    --repo-dir <path>          Desplegar en otro directorio (default: el checkout)
     --expose-zabbix-web        Abre puerto 8080 en UFW para UI Zabbix
     --reset-volumes            Borra volumenes Docker antes de deploy (DESTRUCTIVO)
     --interactive              Activa prompts de confirmacion (default: no)
@@ -103,7 +119,10 @@ ${C_BOLD}VARIABLES DE ENTORNO${C_RESET}
     SIGSM_EXPOSE_ZABBIX_WEB, SIGSM_DRY_RUN, SIGSM_INTERACTIVE
 
 ${C_BOLD}EJEMPLOS${C_RESET}
-    # Run completo (modo no-interactive, default)
+    # Run completo desde el checkout (modo no-interactive, default)
+    git clone https://github.com/nikolasribeiro/proyecto-final-egreso-2026.git
+    cd proyecto-final-egreso-2026
+    nano .env                   # <- tus variables
     sudo scripts/operator.sh --all
 
     # Solo el modulo ssh
@@ -112,10 +131,13 @@ ${C_BOLD}EJEMPLOS${C_RESET}
     # Cambiar puerto SSH y APP_PORT
     sudo scripts/operator.sh --all --ssh-port 22022 --app-port 80
 
+    # Desplegar en otra ruta (sincroniza el checkout, incluido tu .env)
+    sudo scripts/operator.sh --all --repo-dir /opt/songbird-app
+
     # Dry-run para ver que haria sin tocar nada
     sudo scripts/operator.sh --all --dry-run
 
-    # Smoke test (15 checks)
+    # Smoke test
     sudo scripts/operator.sh --module verificar
 
 ${C_BOLD}MAS INFORMACION${C_RESET}
@@ -153,11 +175,19 @@ parse_cli() {
             --app-port)
                 [[ $# -ge 2 ]] || { logger_error "--app-port requiere un argumento"; exit 64; }
                 SB_APP_PORT="$2"
+                SB_APP_PORT_EXPLICIT="true"
+                shift 2
+                ;;
+            --environment)
+                [[ $# -ge 2 ]] || { logger_error "--environment requiere un argumento"; exit 64; }
+                SB_ENVIRONMENT="$2"
+                SB_ENVIRONMENT_EXPLICIT="true"
                 shift 2
                 ;;
             --repo-dir)
                 [[ $# -ge 2 ]] || { logger_error "--repo-dir requiere un argumento"; exit 64; }
                 SB_REPO_DIR="$2"
+                SB_REPO_DIR_EXPLICIT="true"
                 shift 2
                 ;;
             --expose-zabbix-web)
@@ -234,7 +264,7 @@ validate_args() {
         exit 0
     fi
     if [[ "$SB_SHOW_VERSION" == "true" ]]; then
-        printf '%s %s\n' "$SB_NAME" "$SB_SHOW_VERSION"
+        printf '%s %s\n' "$SB_NAME" "$SB_VERSION"
         exit 0
     fi
 
@@ -284,7 +314,7 @@ print_banner() {
     printf '%s%s═══════════════════════════════════════════════%s\n' \
         "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
     printf '%s%s  %s v%s%s\n' \
-        "$C_BOLD" "$C_CYAN" "$SB_NAME" "$SB_SHOW_VERSION" "$C_RESET" >&2
+        "$C_BOLD" "$C_CYAN" "$SB_NAME" "$SB_VERSION" "$C_RESET" >&2
     printf '%s%s═══════════════════════════════════════════════%s\n\n' \
         "$C_BOLD" "$C_CYAN" "$C_RESET" >&2
 
@@ -292,8 +322,11 @@ print_banner() {
     sb_kv "Modulo"          "${SB_MODULE:-<all>}"
     sb_kv "Hostname"        "${SB_HOSTNAME:-$(hostname)}"
     sb_kv "SSH port"        "$SB_SSH_PORT"
-    sb_kv "APP_PORT"        "$SB_APP_PORT"
-    sb_kv "Repo dir"        "$SB_REPO_DIR"
+    sb_kv "APP_PORT"        "${SB_APP_PORT}${SB_APP_PORT_EXPLICIT:+ (--app-port)}"
+    sb_kv "Checkout"        "$SB_SOURCE_DIR"
+    sb_kv "Directorio deploy" "$SB_REPO_DIR${SB_REPO_DIR_EXPLICIT:+ (--repo-dir)}"
+    sb_kv "Compose file"    "${SB_REPO_DIR}/${SB_COMPOSE_FILE_NAME}"
+    sb_kv "Environment"     "${SB_ENVIRONMENT:-<del .env>}"
     sb_kv "Expose Zabbix"   "$SB_EXPOSE_ZABBIX_WEB"
     sb_kv "Reset volumes"   "$SB_RESET_VOLUMES"
     sb_kv "Dry-run"         "$SB_DRY_RUN"
@@ -308,6 +341,11 @@ print_banner() {
 main() {
     parse_cli "$@"
     validate_args
+
+    # Resolver el APP_PORT efectivo antes del banner y de los módulos:
+    # si el usuario configuró APP_PORT en su .env, ese valor manda.
+    SB_APP_PORT="$(sb_resolve_app_port)"
+
     print_banner
 
     # Init paths + traps
@@ -317,22 +355,35 @@ main() {
 
     # Export para subshells (ej. docker exec)
     export SB_DRY_RUN SB_SSH_PORT SB_APP_PORT SB_REPO_DIR SB_ADMIN_USER
+    export SB_APP_PORT_EXPLICIT SB_ENVIRONMENT SB_ENVIRONMENT_EXPLICIT SB_REPO_DIR_EXPLICIT
 
     # Aplicar hostname si se pidio
     if [[ -n "$SB_HOSTNAME" ]]; then
         export RED_NEW_HOSTNAME="$SB_HOSTNAME"
     fi
 
-    # Si el operador quiere reset de volumenes (interactivo), hacerlo
+    # Si el operador quiere reset de volumenes (interactivo), hacerlo.
+    # Se borran TODOS los volumenes de datos del proyecto (master, slave y
+    # zabbix). Un volumen de BD con schema viejo es la causa #1 de healthchecks
+    # que no pasan.
     if [[ "$SB_RESET_VOLUMES" == "true" ]]; then
-        logger_warn "BORRANDO VOLUMENES (mariadb_data, zabbix-db-data) — accion destructiva"
-        if [[ "$SB_DRY_RUN" != "true" ]]; then
-            docker volume rm mariadb_data 2>/dev/null || true
-            docker volume rm zabbix-db-data 2>/dev/null || true
-        else
-            logger_dry "docker volume rm mariadb_data"
-            logger_dry "docker volume rm zabbix-db-data"
-        fi
+        logger_warn "BORRANDO VOLUMENES DE DATOS (mariadb_*, zabbix-db-data) — accion destructiva"
+        local -a volumes=(
+            mariadb_master_data
+            mariadb_slave_data
+            mariadb_data
+            zabbix-db-data
+        )
+        local vol
+        for vol in "${volumes[@]}"; do
+            if docker volume inspect "$vol" >/dev/null 2>&1; then
+                if [[ "$SB_DRY_RUN" != "true" ]]; then
+                    docker volume rm "$vol" >/dev/null 2>&1 || true
+                else
+                    logger_dry "docker volume rm $vol"
+                fi
+            fi
+        done
     fi
 
     if [[ "$SB_UNINSTALL" == "true" ]]; then
