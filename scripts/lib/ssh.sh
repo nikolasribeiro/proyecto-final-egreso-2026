@@ -17,12 +17,39 @@ mod_ssh_run() {
     fi
 
     # 1. Instalar openssh-server si falta
-    if ! dpkg -l openssh-server >/dev/null 2>&1; then
+    #    `dpkg -l` devuelve 0 incluso para estados "un"/"rc" (desinstalado con
+    #    config residual). `dpkg-query -f='${Status}'` si distingue.
+    if ! dpkg-query -W -f='${Status}' openssh-server 2>/dev/null | grep -q "install ok installed"; then
         logger_info "Instalando openssh-server"
         run_cmd apt-get update -qq
         run_cmd apt-get install -y -qq openssh-server
     else
         logger_ok "openssh-server ya instalado"
+    fi
+
+    # 1.b Asegurar que existan las llaves de HOST.
+    #
+    #     `sshd -t` aborta con "no hostkeys available -- exiting" si no
+    #     encuentra ninguna llave de host en el disco. Es un caso real: un
+    #     sshd YA CORRIENDO sigue vivo (las llaves estan en memoria) aunque los
+    #     archivos falten, asi que el puerto 2222 contesta pero el reload
+    #     habria fallado.
+    #
+    #     Causas: instalacion del paquete con el postinst omitido (imagenes de
+    #     contenedor, policy-rc.d), o llaves borradas por un cleanup.
+    #
+    #     `ssh-keygen -A` genera las que falten y es idempotente.
+    local host_keys
+    host_keys="$(ls /etc/ssh/ssh_host_*_key 2>/dev/null || true)"
+    if [[ -z "$host_keys" ]]; then
+        logger_warn "No hay llaves de host en /etc/ssh: se generan con ssh-keygen -A"
+        if ! run_cmd ssh-keygen -A; then
+            logger_error "No se pudieron generar las llaves de host"
+            return 70
+        fi
+        logger_ok "Llaves de host generadas: $(ls /etc/ssh/ssh_host_*_key 2>/dev/null | tr '\n' ' ')"
+    else
+        sb_kv "Llaves de host" "$(printf '%s\n' "$host_keys" | wc -l) encontradas"
     fi
 
     # 2. Backup del drop-in actual
@@ -46,7 +73,11 @@ mod_ssh_run() {
 
     # 5. Validar con sshd -t
     if ! run_cmd sshd -t; then
-        logger_error "sshd -t falló, restaurando backup"
+        # Se muestra el error real de sshd: sin esto solo se ve
+        # "sshd -t fallo" y no se sabe por que.
+        logger_error "sshd -t falló. Diagnóstico:"
+        sshd -t 2>&1 | head -n 5 | sed 's/^/    /' >&2 || true
+        logger_error "Se restaura el drop-in anterior (el servidor sigue como estaba)"
         sb_ssh_rollback_if_needed
         return 70
     fi

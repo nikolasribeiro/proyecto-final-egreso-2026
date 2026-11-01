@@ -56,7 +56,7 @@ _db_query_with_header() {
 }
 
 mod_verificar_run() {
-    logger_section "Smoke test (22 checks)"
+    logger_section "Smoke test (23 checks)"
 
     sb_verificar_paths
 
@@ -371,14 +371,27 @@ mod_verificar_run() {
         _record 22 "Log del operador disponible" 1 "$SB_LOG_FILE no existe o no es legible"
     fi
 
+    # 23. Llaves de host de SSH presentes en disco
+    #     Un sshd corriendo puede seguir vivo con las llaves en memoria
+    #     aunque los archivos falten: el puerto contesta pero un reload
+    #     fallaria con "no hostkeys available -- exiting".
+    local host_keys
+    host_keys="$(ls /etc/ssh/ssh_host_*_key 2>/dev/null || true)"
+    if [[ -n "$host_keys" ]]; then
+        _record 23 "Llaves de host de SSH presentes" 0 "" \
+            "$(printf '%s\n' "$host_keys" | wc -l) en /etc/ssh"
+    else
+        _record 23 "Llaves de host de SSH presentes" 1 "no hay /etc/ssh/ssh_host_*_key (ssh-keygen -A las genera)"
+    fi
+
     # --- Resumen -------------------------------------------------------
     printf '\n' >&2
     if [[ $SB_FAIL_COUNT -eq 0 ]]; then
-        logger_ok "Smoke test: 22/22 OK"
+        logger_ok "Smoke test: 23/23 OK"
         logger_info "Log completo del operador: $SB_LOG_FILE"
         return 0
     fi
-    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 22"
+    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 23"
     logger_info "Log completo del operador: $SB_LOG_FILE"
     return "$SB_FAIL_COUNT"
 }

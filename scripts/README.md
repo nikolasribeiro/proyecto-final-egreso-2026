@@ -303,6 +303,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 | 20  | GTID del slave ≥ GTID del master                         | sin lag                           |
 | 21  | Split read/write activo en el `.env`                     | `true`                            |
 | 22  | Log del operador disponible y con contenido              | legible                           |
+| 23  | Llaves de host de SSH presentes en `/etc/ssh`              | al menos una                       |
 
 **Exit codes**: `0` = todo OK · `1..N` = N checks fallidos · `64` = config inválida · `70` = error interno.
 
