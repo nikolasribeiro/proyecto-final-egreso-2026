@@ -51,7 +51,7 @@ mod_logs_run() {
     fi
 
     local boot_count
-    boot_count="$(journalctl --list-boots 2>/dev/null | wc -l)"
+    boot_count="$(journalctl --list-boots 2>/dev/null | wc -l || echo 0)"
     sb_kv "Journal boots" "$boot_count"
 
     state_set_module_completed logs \

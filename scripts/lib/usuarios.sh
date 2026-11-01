@@ -10,9 +10,16 @@ mod_usuarios_run() {
     logger_section "Módulo usuarios"
 
     # Home del admin (puede no existir todavia en la primera corrida).
+    #
+    # `getent` devuelve EXIT CODE 2 cuando la clave no existe. Con
+    # `set -o pipefail` ese codigo se propaga a la asignacion y `set -e`
+    # aborta TODO el operador. Por eso el `|| true` es OBLIGATORIO: el
+    # "usuario no existe" es un caso normal en la primera corrida, no un error.
     local admin_home
-    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
-    [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6 || true)"
+    if [[ -z "$admin_home" ]]; then
+        admin_home="/home/${SB_ADMIN_USER}"
+    fi
 
     # La precondicion incluye la llave: si el usuario existe pero la llave
     # falta (p.ej. se borro el authorized_keys), el modulo se re-aplica.
@@ -84,13 +91,13 @@ mod_usuarios_run() {
     for u in "$SB_ADMIN_USER" songbird_app songbird_backup songbird_zbx; do
         if id "$u" >/dev/null 2>&1; then
             local info
-            info="$(getent passwd "$u")"
+            info="$(getent passwd "$u" 2>/dev/null || true)"
             local uid shell home
             uid="$(echo "$info" | cut -d: -f3)"
             shell="$(echo "$info" | cut -d: -f7)"
             home="$(echo "$info" | cut -d: -f6)"
             local groups
-            groups="$(id -nG "$u" | tr ' ' ',')"
+            groups="$(id -nG "$u" 2>/dev/null | tr ' ' ',' || true)"
             sb_kv "  $u" "$uid | $shell | $groups | $home"
         fi
     done

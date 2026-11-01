@@ -311,6 +311,34 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 
 ---
 
+## Lint de `pipefail` (`scripts/lint-pipefail.sh`)
+
+Todos los módulos corren con `set -euo pipefail`. Eso significa que **cualquier**
+comando dentro de una sustitución de comandos que devuelva `!= 0` aborta todo
+el operador. Y varios devuelven `!= 0` en situaciones normales:
+
+| Comando | Devuelve != 0 cuando... |
+|---|---|
+| `getent passwd <user>` | el usuario no existe (→ **exit 2**) |
+| `grep <patron> <archivo>` | no hay coincidencias (→ exit 1) |
+| `stat <archivo>` | el archivo no existe |
+| `id <user>` | el usuario no existe |
+
+Ese `getent` rompió un despliegue real: en la primera corrida el usuario admin
+todavía no existía, `getent` devolvió 2, `pipefail` lo propago y el operador
+murió con un `exit code 2` y un error genérico.
+
+```bash
+bash scripts/lint-pipefail.sh
+# OK: ninguna asignacion desprotegida contra set -euo pipefail
+```
+
+El lint recorre `scripts/lib/*.sh` y `scripts/operator.sh`, une las asignaciones
+multi-línea y reporta las que no están protegidas con `|| true` (o que no
+manejan el valor vacío).
+
+---
+
 ## Logs
 
 Toda la salida del operador (INFO/OK/WARN/ERROR) queda en:

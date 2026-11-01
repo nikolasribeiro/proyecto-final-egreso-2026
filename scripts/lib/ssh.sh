@@ -70,8 +70,11 @@ mod_ssh_run() {
     sleep 2
     if command -v ssh >/dev/null 2>&1; then
         local admin_home
-        admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
-        [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+        # `|| true`: getent devuelve 2 si el usuario no existe.
+        admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6 || true)"
+        if [[ -z "$admin_home" ]]; then
+            admin_home="/home/${SB_ADMIN_USER}"
+        fi
 
         local -a ssh_opts=(
             -p "${SB_SSH_PORT}"

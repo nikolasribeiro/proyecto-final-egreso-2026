@@ -600,9 +600,11 @@ sb_compose_pending_services() {
     local compose_file="$1" env_file="$2"
 
     local all_services ok_services
+    # `|| true`: si docker falla, la lista queda vacia y el modulo lo reporta
+    # como error claro en vez de abortar con un error generico.
     all_services="$(docker compose -f "$compose_file" --env-file "$env_file" \
-        config --services 2>/dev/null | sort -u)"
-    ok_services="$(sb_compose_services_ok "$compose_file" "$env_file")"
+        config --services 2>/dev/null | sort -u || true)"
+    ok_services="$(sb_compose_services_ok "$compose_file" "$env_file" || true)"
 
     if [[ -z "$all_services" ]]; then
         printf '(no se pudo leer el compose file)\n'
@@ -625,12 +627,12 @@ sb_compose_container_of_service() {
         (if type == "array" then .[] else . end)
         | select(.Service == $s)
         | .Name
-    ' 2>/dev/null | head -n1)"
+    ' 2>/dev/null | head -n1 || true)"
 
     if [[ -z "$name" ]]; then
         name="$(docker compose -f "$compose_file" --env-file "$env_file" \
             config --format json 2>/dev/null | jq -r --arg s "$service" \
-            '.services[$s].container_name // empty' 2>/dev/null | head -n1)"
+            '.services[$s].container_name // empty' 2>/dev/null | head -n1 || true)"
     fi
 
     printf '%s' "$name"
@@ -663,7 +665,7 @@ sb_compose_wait_healthy() {
 sb_compose_version_at_least() {
     local min="$1"
     local current
-    current="$(docker compose version --short 2>/dev/null | head -n1 | tr -d 'v')"
+    current="$(docker compose version --short 2>/dev/null | head -n1 | tr -d 'v' || true)"
     [[ -z "$current" ]] && return 1
     # compara semver simple: mayor, igual o menor
     local IFS=.
@@ -765,7 +767,8 @@ sb_ssh_key_setup() {
         local invocador="${SUDO_USER:-}"
         if [[ -n "$invocador" && "$invocador" != "root" ]] && id "$invocador" >/dev/null 2>&1; then
             local home_inv
-            home_inv="$(getent passwd "$invocador" | cut -d: -f6)"
+            # `|| true`: getent devuelve 2 si el usuario no existe.
+            home_inv="$(getent passwd "$invocador" 2>/dev/null | cut -d: -f6 || true)"
             local k
             for k in id_ed25519.pub id_ecdsa.pub id_rsa.pub; do
                 if [[ -f "${home_inv}/.ssh/${k}" ]]; then
@@ -841,15 +844,18 @@ sb_print_resumen() {
     compose_file="$(sb_compose_file)"
     env_file="${SB_REPO_DIR}/.env"
 
-    host_ip="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | head -n1 | cut -d/ -f1)"
+    host_ip="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | head -n1 | cut -d/ -f1 || true)"
     if [[ -z "$host_ip" ]]; then
-        host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        host_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
     fi
     [[ -z "$host_ip" ]] && host_ip="<ip-del-host>"
 
     local admin_home
-    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6)"
-    [[ -z "$admin_home" ]] && admin_home="/home/${SB_ADMIN_USER}"
+    # `|| true`: getent devuelve 2 si el usuario no existe.
+    admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6 || true)"
+    if [[ -z "$admin_home" ]]; then
+        admin_home="/home/${SB_ADMIN_USER}"
+    fi
 
     printf '\n%s%s══════════════════════════════════════════════════════════════════════%s\n' \
         "$C_BOLD" "$C_CYAN" "$C_RESET" >&2

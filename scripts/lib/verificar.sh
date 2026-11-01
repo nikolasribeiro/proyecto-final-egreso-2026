@@ -66,9 +66,11 @@ mod_verificar_run() {
     local mysql_root_pwd zbx_root_pwd
     if [[ -f "$ENV_FILE" ]]; then
         # shellcheck disable=SC1090
-        mysql_root_pwd="$(grep '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" | tail -n1 | cut -d= -f2-)"
+        # `|| true`: si la clave no existe, grep devuelve 1 y con pipefail
+        # abortaria el smoke test en vez de reportar el fallo.
+        mysql_root_pwd="$(grep '^MYSQL_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
         # shellcheck disable=SC1090
-        zbx_root_pwd="$(grep '^ZABBIX_DB_ROOT_PASSWORD=' "$ENV_FILE" | tail -n1 | cut -d= -f2-)"
+        zbx_root_pwd="$(grep '^ZABBIX_DB_ROOT_PASSWORD=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- || true)"
     fi
 
     # --- Contenedores resueltos desde el compose file ------------------

@@ -228,7 +228,7 @@ mod_deploy_run() {
 
     # --- 11. Estado final ----------------------------------------------
     local total pending_now
-    total="$(docker compose -f "$compose_file" --env-file "$ENV_FILE" config --services 2>/dev/null | wc -l)"
+    total="$(docker compose -f "$compose_file" --env-file "$ENV_FILE" config --services 2>/dev/null | wc -l || echo 0)"
     pending_now="$(sb_compose_pending_services "$compose_file" "$ENV_FILE" || true)"
 
     sb_kv "Servicios declarados" "$total"
