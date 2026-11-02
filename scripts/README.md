@@ -203,6 +203,28 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 - Crea `songbird_admin`, `songbird_app`, `songbird_backup`, `songbird_zbx`.
 - Crea `/home/songbird_admin/.ssh/` (700) y `authorized_keys` (600).
 - **Configura la llave SSH del administrador** (ver abajo).
+- **Modo demo**: desbloquea la cuenta del administrador y le asigna como password
+  su propio nombre de usuario. Con los valores por defecto:
+
+  | Usuario   | Password         | Puerto |
+  |-----------|------------------|--------|
+  | `songbird_admin` | `songbird_admin` | 2222   |
+
+  ```bash
+  ssh -p 2222 songbird_admin@<host>
+  # password: songbird_admin
+  ```
+
+  > **Esto es solo para la demo.** La password es igual al nombre de usuario y
+  > queda escrita en texto plano en el log del operador
+  > (`/var/log/songbird/songbird-operator.log`). Antes de desplegar en
+  > producción, volvé a `PasswordAuthentication no` en
+  > `scripts/templates/sshd_config.tpl`, sacá el `chpasswd` del módulo
+  > `usuarios` y usá la llave SSH.
+
+  Si el administrador quedó bloqueado (`passwd -S` devuelve `L`) de una corrida
+  previa, el módulo `usuarios` se re-aplica solo en el siguiente run y le
+  reactiva la password.
 
 ### Llaves SSH del administrador
 
@@ -243,7 +265,7 @@ llave. Antes la prueba corría como `root`, que buscaba la clave en
 - Drop-in `/etc/ssh/sshd_config.d/00-songbird-hardening.conf`:
   - `Port {{SSH_PORT}}` (default 2222)
   - `PermitRootLogin no`
-  - `PasswordAuthentication no`
+  - `PasswordAuthentication yes` (modo demo — ver abajo)
   - `ChallengeResponseAuthentication no`
   - `PubkeyAuthentication yes`
   - `AllowUsers {{ADMIN_USER}}`
@@ -396,6 +418,8 @@ ACCESO
   Aplicación       http://<ip>:8000/
   Zabbix           http://<ip>:8000/zabbix/
   SSH              ssh -p 2222 songbird_admin@<ip>
+  Usuario / Password: songbird_admin / songbird_admin
+  (MODO DEMO: el drop-in de SSH habilita PasswordAuthentication)
 
 LLAVES SSH
   Se GENERO un par de llaves en ESTE servidor.
@@ -504,12 +528,20 @@ cd ~/proyecto && sudo scripts/operator.sh --all
 El checkout no tiene el compose file. Verificá que clonaste el repo completo
 y que no estás en un subdirectorio.
 
-### "PermitRootLogin no" o "PasswordAuthentication no" bloqueó el acceso
+### "PermitRootLogin no" bloqueó el acceso
 
 ```bash
 ls /etc/ssh/sshd_config.d/00-songbird-hardening.conf.bak-*
 sudo mv /etc/ssh/sshd_config.d/00-songbird-hardening.conf.bak-<ts> /etc/ssh/sshd_config.d/00-songbird-hardening.conf
 sudo sshd -t && sudo systemctl reload ssh
+```
+
+Si lo que se rompió fue el acceso por **password** (modo demo), verificá que el
+drop-in tenga `PasswordAuthentication yes` y que la cuenta no esté bloqueada:
+
+```bash
+grep PasswordAuthentication /etc/ssh/sshd_config.d/00-songbird-hardening.conf
+passwd -S songbird_admin     # debe devolver "P" (no "L" = bloqueado)
 ```
 
 ### La replicación no arranca
@@ -559,7 +591,9 @@ sudo journalctl -u docker
 - **Nunca commitear** `.env`, `credentials.env`, `state.json` ni archivos `.bak`.
 - El archivo `/opt/songbird-operator/credentials.env` (chmod 600) contiene los
   passwords generados — accesible solo por root.
-- El `sshd_config.d/00-songbird-hardening.conf` rechaza passwords: solo key-based.
+- El `sshd_config.d/00-songbird-hardening.conf` **habilita passwords a efectos de
+  demo** (`PasswordAuthentication yes`). Antes de producción, volvé a `no` y
+  usá únicamente la llave SSH.
 
 ---
 

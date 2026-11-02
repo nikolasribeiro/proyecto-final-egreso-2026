@@ -872,6 +872,8 @@ sb_print_resumen() {
     printf '  Aplicación       http://%s:%s/\n' "$host_ip" "$SB_APP_PORT" >&2
     printf '  Zabbix           http://%s:%s/zabbix/\n' "$host_ip" "$SB_APP_PORT" >&2
     printf '  SSH              ssh -p %s %s@%s\n' "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" >&2
+    printf '  Usuario / Password: %s / %s\n' "$SB_ADMIN_USER" "$SB_ADMIN_USER" >&2
+    printf '  (MODO DEMO: el drop-in de SSH habilita PasswordAuthentication)\n' >&2
     if [[ -n "${SB_EXTRA_ALLOW_USERS// /}" ]]; then
         printf '  OJO: por SSH solo entran %s y%s (AllowUsers). Con la consola del\n' \
             "$SB_ADMIN_USER" "$SB_EXTRA_ALLOW_USERS" >&2

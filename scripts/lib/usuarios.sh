@@ -23,9 +23,15 @@ mod_usuarios_run() {
 
     # La precondicion incluye la llave: si el usuario existe pero la llave
     # falta (p.ej. se borro el authorized_keys), el modulo se re-aplica.
+    #
+    # Tambien incluye el estado de la password (`passwd -S`): si el admin
+    # quedo bloqueado ("L") de una corrida previa, el modulo se re-aplica
+    # solo y le reactiva la password. Sin esto, el hardening anterior
+    # (passwd -l) dejaba la cuenta bloqueada para siempre.
     local precond
     precond="id ${SB_ADMIN_USER} && id songbird_app && id songbird_backup && id songbird_zbx"
     precond+=" && [[ -s '${admin_home}/.ssh/authorized_keys' ]]"
+    precond+=" && passwd -S '${SB_ADMIN_USER}' 2>/dev/null | awk '{print \$2}' | grep -qx 'P'"
     if module_skip_if_done usuarios "$precond"; then
         return 0
     fi
@@ -62,7 +68,8 @@ mod_usuarios_run() {
         logger_ok "Usuario songbird_zbx creado"
     fi
 
-    # 5. .ssh para el admin (key-only auth)
+    # 5. .ssh para el admin (la llave sigue siendo el metodo principal;
+    #    la password es el metodo de DEMO)
     run_cmd install -d -m 700 -o "$SB_ADMIN_USER" -g "$SB_ADMIN_USER" "$admin_home/.ssh"
     if [[ ! -f "$admin_home/.ssh/authorized_keys" ]]; then
         run_cmd install -m 600 -o "$SB_ADMIN_USER" -g "$SB_ADMIN_USER" /dev/null "$admin_home/.ssh/authorized_keys"
@@ -82,8 +89,21 @@ mod_usuarios_run() {
         logger_warn "No se pudo configurar la llave SSH: copiala a mano en ${admin_home}/.ssh/authorized_keys"
     fi
 
-    # 6. Lockear password del admin (solo key-based via SSH)
-    run_cmd passwd -l "$SB_ADMIN_USER" >/dev/null 2>&1 || true
+    # 6. Password del admin (modo DEMO): la password es igual al usuario.
+    #    Primero se desbloquea la cuenta (por si venia bloqueada de una
+    #    corrida previa con `passwd -l`) y despues se asigna la password
+    #    de forma no interactiva con `chpasswd`.
+    #
+    #    `|| true` / `|| logger_warn`: con `set -euo pipefail` un fallo
+    #    abortaria TODO el operador. Acá solo se avisa: el modulo sigue
+    #    y el resumen final muestra como entrar.
+    run_cmd usermod -U "$SB_ADMIN_USER" 2>/dev/null || true
+    if [[ "$SB_DRY_RUN" == "true" ]]; then
+        logger_dry "chpasswd ${SB_ADMIN_USER}:<mismo_nombre>"
+    else
+        printf '%s:%s\n' "$SB_ADMIN_USER" "$SB_ADMIN_USER" | chpasswd \
+            || logger_warn "No se pudo fijar la password de ${SB_ADMIN_USER} con chpasswd"
+    fi
 
     # Tabla resumen
     printf '\n' >&2

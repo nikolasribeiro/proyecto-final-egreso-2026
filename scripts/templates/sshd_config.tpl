@@ -6,8 +6,10 @@
 Port {{SSH_PORT}}
 
 # Autenticacion
+# PasswordAuthentication yes: modo DEMO, para poder entrar con usuario/password.
+# En produccion deberia volver a "no" (key-only).
 PermitRootLogin no
-PasswordAuthentication no
+PasswordAuthentication yes
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 UsePAM yes

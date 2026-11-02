@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/lib/ssh.sh
-# Hardening del servicio SSH: puerto custom, sin root, sin password, key-only.
+# Hardening del servicio SSH: puerto custom, sin root, password habilitada (demo).
 # Modulo: ssh
 
 set -euo pipefail
@@ -11,8 +11,11 @@ SSH_DROP_IN="/etc/ssh/sshd_config.d/00-songbird-hardening.conf"
 mod_ssh_run() {
     logger_section "Módulo ssh (hardening)"
 
+    # El grep de PasswordAuthentication detecta el cambio de Politica: si el
+    # drop-in anterior tenia "PasswordAuthentication no", la precondicion
+    # falla y el modulo se re-aplica con el template nuevo.
     if module_skip_if_done ssh \
-        '[[ -f '"${SSH_DROP_IN}"' ]] && grep -q "^Port ${SB_SSH_PORT}"'" ${SSH_DROP_IN}"' && sshd -t 2>/dev/null'; then
+        '[[ -f '"${SSH_DROP_IN}"' ]] && grep -q "^Port ${SB_SSH_PORT}"'" ${SSH_DROP_IN}"' && grep -q "^PasswordAuthentication yes" '"${SSH_DROP_IN}"' && sshd -t 2>/dev/null'; then
         return 0
     fi
 
@@ -154,7 +157,7 @@ mod_ssh_run() {
     # Output
     sb_kv "Puerto SSH" "${SB_SSH_PORT}"
     sb_kv "PermitRootLogin" "no"
-    sb_kv "PasswordAuthentication" "no"
+    sb_kv "PasswordAuthentication" "yes"
     sb_kv "AllowUsers" "${SB_ADMIN_USER}"
 
     state_set_module_completed ssh \
