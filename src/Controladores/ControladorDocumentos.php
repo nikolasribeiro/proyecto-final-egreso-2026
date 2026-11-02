@@ -54,7 +54,19 @@ class ControladorDocumentos
                 return;
             }
 
-            if (!isset($_FILES['documento']) || $_FILES['documento']['error'] !== UPLOAD_ERR_OK) {
+            if (!isset($_FILES['documento'])) {
+                throw new Exception('No se recibió ningún archivo PDF válido.');
+            }
+
+            // PHP descarta el archivo ANTES de que el controller lo vea si
+            // excede `upload_max_filesize`. Sin este caso, el usuario
+            // recibiría el genérico "No se recibió ningún archivo PDF válido"
+            // y no sabría que el problema es el tamaño.
+            $errorArchivo = (int)($_FILES['documento']['error'] ?? UPLOAD_ERR_NO_FILE);
+            if ($errorArchivo === UPLOAD_ERR_INI_SIZE || $errorArchivo === UPLOAD_ERR_FORM_SIZE) {
+                throw new Exception(self::mensajeArchivoDemasiadoGrande());
+            }
+            if ($errorArchivo !== UPLOAD_ERR_OK) {
                 throw new Exception('No se recibió ningún archivo PDF válido.');
             }
 
@@ -124,6 +136,16 @@ class ControladorDocumentos
                 'archivo'      => $_FILES['documento'] ?? null,
             ];
 
+            // Mismo caso que en `subir()`: si PHP descartó el archivo por
+            // exceder el límite, el mensaje tiene que decirlo (si no, el
+            // usuario ve el error genérico del modelo).
+            if (isset($_FILES['documento'])) {
+                $errorArchivo = (int)($_FILES['documento']['error'] ?? UPLOAD_ERR_NO_FILE);
+                if ($errorArchivo === UPLOAD_ERR_INI_SIZE || $errorArchivo === UPLOAD_ERR_FORM_SIZE) {
+                    throw new Exception(self::mensajeArchivoDemasiadoGrande());
+                }
+            }
+
             $resultado = $this->modelo->actualizarDocumento($idInt, $datos);
 
             http_response_code(200);
@@ -144,8 +166,7 @@ class ControladorDocumentos
     /**
      * POST /api/documentos/{id}/eliminar
      * Soft delete: marca documento_activo = FALSE. Se conserva el archivo.
-     */
-    public function eliminar(string $id)
+     */    public function eliminar(string $id)
     {
         header('Content-Type: application/json');
 
@@ -189,5 +210,21 @@ class ControladorDocumentos
             http_response_code(400);
             echo json_encode(['exito' => false, 'mensaje' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Mensaje para el usuario cuando el archivo excede el límite del
+     * servidor. Sin detalles técnicos (códigos HTTP, nombres de servidor):
+     * solo el límite y qué hacer.
+     */
+    private static function mensajeArchivoDemasiadoGrande(): string
+    {
+        $max = formatear_tamano(tamano_maximo_subida());
+
+        if ($max === '') {
+            return 'El archivo supera el tamaño máximo permitido. Reducí el tamaño del PDF e intentá de nuevo.';
+        }
+
+        return "El archivo supera el tamaño máximo permitido ({$max}). Reducí el tamaño del PDF e intentá de nuevo.";
     }
 }

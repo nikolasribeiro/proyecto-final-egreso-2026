@@ -12,6 +12,11 @@ $csrfToken = Sesion::generarTokenCsrf();
  *                         (viene de ModeloDocumento::obtenerCategorias()).
  */
 $categorias = $categorias ?? [];
+
+// Límite real de subida (ver src/Nucleo/ayudantes.php). Se lo pasamos al JS
+// para que valide el tamaño del PDF de reemplazo antes de enviarlo.
+$maxBytes = tamano_maximo_subida();
+$maxTexto = formatear_tamano($maxBytes);
 ?>
 
 <div
@@ -81,10 +86,11 @@ $categorias = $categorias ?? [];
                         id="editarDocumentoArchivo"
                         name="documento"
                         class="form-input"
-                        accept="application/pdf">
+                        accept="application/pdf"
+                        data-max-bytes="<?= e((string)$maxBytes) ?>">
                     <p class="form-hint">
                         Si no seleccionás un archivo, se conserva el PDF actual.
-                        Solo se permiten archivos PDF.
+                        Solo se permiten archivos PDF<?= $maxTexto !== '' ? ' de hasta ' . e($maxTexto) : '' ?>.
                     </p>
                 </div>
             </form>

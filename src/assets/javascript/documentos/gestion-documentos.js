@@ -118,6 +118,20 @@
           mostrarFeedback(feedback, "El archivo debe ser un PDF.", "error");
           return;
         }
+        // El limite lo impone el servidor (nginx + PHP) y el backend lo pasa
+        // en data-max-bytes. Validamos antes de subir para no gastar una
+        // subida que el servidor va a rechazar con 413.
+        const maxBytes = window.LimiteSubida
+          ? window.LimiteSubida.leerBytes(inputArchivo)
+          : 0;
+        if (window.LimiteSubida && window.LimiteSubida.excede(file, maxBytes)) {
+          mostrarFeedback(
+            feedback,
+            window.LimiteSubida.mensajeExceso(maxBytes),
+            "error",
+          );
+          return;
+        }
       }
 
       const formData = new FormData(form);
@@ -142,6 +156,12 @@
         const data = await safeJson(response);
 
         if (!response.ok || !data || data.exito === false) {
+          // 413 = el archivo excede el limite del servidor (lo corta nginx
+          // antes de llegar a PHP, asi que la respuesta no es JSON).
+          if (response.status === 413 && window.LimiteSubida) {
+            const maxBytes = window.LimiteSubida.leerBytes(inputArchivo);
+            throw new Error(window.LimiteSubida.mensajeExceso(maxBytes));
+          }
           throw new Error((data && data.mensaje) || "Error al actualizar el documento.");
         }
 

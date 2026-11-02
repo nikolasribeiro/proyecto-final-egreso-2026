@@ -112,6 +112,72 @@ function requestEsApi(): bool
 }
 
 /**
+ * Devuelve el peso máximo (en bytes) que acepta el servidor para un archivo
+ * subido, según la configuración de PHP (`upload_max_filesize`).
+ *
+ * Se usa para dos cosas:
+ *   1. Pintar el límite en el modal de subida (el usuario ve el límite antes
+ *      de elegir el archivo, no después de que el servidor lo rechace).
+ *   2. Que el frontend valide el tamaño ANTES de subir: si el archivo ya
+ *      excede el límite, se avisa al instante y no se desperdicia una
+ *      subida que el servidor va a rechazar con 413.
+ *
+ * El valor se lee del `php.ini` real (el `Dockerfile` lo fija en 50M), así
+ * que no hay que mantener un número duplicado en el JS.
+ *
+ * @return int Bytes; 0 si PHP no reporta un valor utilizable.
+ */
+function tamano_maximo_subida(): int
+{
+    $raw = (string)ini_get('upload_max_filesize');
+    if ($raw === '') {
+        return 0;
+    }
+
+    $raw = trim($raw);
+    $multiplicador = 1;
+
+    // PHP acepta sufijos: K, M, G (y los variantes binarios KB/MB/GB).
+    $ultimo = strtoupper(substr($raw, -1));
+    if ($ultimo === 'K') {
+        $multiplicador = 1024;
+    } elseif ($ultimo === 'M') {
+        $multiplicador = 1024 * 1024;
+    } elseif ($ultimo === 'G') {
+        $multiplicador = 1024 * 1024 * 1024;
+    }
+
+    $numero = (float)preg_replace('/[^0-9.]/', '', $raw);
+
+    if ($numero <= 0) {
+        return 0;
+    }
+
+    return (int)($numero * $multiplicador);
+}
+
+/**
+ * Formatea un tamaño en bytes como texto legible ("50 MB", "1.5 MB").
+ *
+ * @param int $bytes
+ * @return string
+ */
+function formatear_tamano(int $bytes): string
+{
+    if ($bytes <= 0) {
+        return '';
+    }
+
+    $mb = $bytes / (1024 * 1024);
+
+    if ($mb >= 1 && fmod($mb, 1.0) === 0.0) {
+        return (string)(int)$mb . ' MB';
+    }
+
+    return number_format($mb, 1, ',', '.') . ' MB';
+}
+
+/**
  * Guard server-side de permisos a nivel de método.
  *
  * Cierra el agujero de autorización por el que un usuario con sesión

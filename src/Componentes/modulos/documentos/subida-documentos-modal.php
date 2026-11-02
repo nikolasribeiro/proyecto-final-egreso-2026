@@ -4,6 +4,12 @@ use Nucleo\Sesion;
 
 // La sesión ya está iniciada en src/index.php vía Sesion::iniciar().
 $csrfToken = Sesion::generarTokenCsrf();
+
+// Límite real de subida que impone el servidor. Se lo pasamos al JS para que
+// valide el tamaño ANTES de subir (y no después de un 413) y para que el
+// usuario lo vea de antemano. Ver src/Nucleo/ayudantes.php.
+$maxBytes = tamano_maximo_subida();
+$maxTexto = formatear_tamano($maxBytes);
 ?>
 
 <div
@@ -57,7 +63,18 @@ $csrfToken = Sesion::generarTokenCsrf();
             </div>
 
             <!-- Input invisible para seleccionar archivo -->
-            <input type="file" id="inputDocumento" accept="application/pdf" style="display: none;">
+            <input
+                type="file"
+                id="inputDocumento"
+                accept="application/pdf"
+                data-max-bytes="<?= e((string)$maxBytes) ?>"
+                style="display: none;">
+
+            <?php if ($maxTexto !== ''): ?>
+                <p class="form-hint" style="margin-top: 0.5rem;">
+                    Solo archivos PDF de hasta <?= e($maxTexto) ?>.
+                </p>
+            <?php endif; ?>
 
             <!-- Selector de Categoría (si existen en la vista) -->
             <?php if (isset($categorias) && !empty($categorias)): ?>

@@ -132,6 +132,14 @@ El operador trabaja **in-place** sobre el repo donde vive el script y
 
 ### Permisos de `uploads/` (subida de documentos)
 
+> **Límite de tamaño**: los PDFs pueden pesar hasta **50 MB**. El límite lo
+> imponen tres lugares que tienen que coincidir: `client_max_body_size` en
+> `nginx/default.conf` (52M, incluye el overhead del POST), `upload_max_filesize`
+> y `post_max_size` en el `Dockerfile` (50M / 52M). El frontend lo conoce sin
+> duplicar el número: el backend lo lee del `php.ini` y lo pasa en
+> `data-max-bytes` (`src/Nucleo/ayudantes.php` → `tamano_maximo_subida()`).
+> Si un archivo excede el límite, la UI lo avisa **antes** de subirlo.
+
 `src/uploads/` es un **bind mount** del host: el contenedor `web` ve
 exactamente los permisos del directorio en el host. El worker de Apache
 escribe ahí como `www-data`, así que si el directorio no es escribible por

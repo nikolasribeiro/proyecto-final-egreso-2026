@@ -218,6 +218,12 @@ foreach ($documentos as $doc) {
     }
 </script>
 
+<!-- Helper del límite de subida (tamaño máximo de los PDFs).
+     Debe cargarse ANTES que subida-documentos.js y gestion-documentos.js:
+     ambos leen el límite desde data-max-bytes y lo usan para validar el
+     archivo antes de subirlo. -->
+<script src="/assets/javascript/documentos/limite-subida.js"></script>
+
 <!-- Upload Document Modal issue 116 -->
 <?php componente('modulos/documentos/subida-documentos-modal', [
     'categorias' => $categoriasUnicas

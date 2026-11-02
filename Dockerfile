@@ -4,10 +4,20 @@ RUN docker-php-ext-install pdo_mysql
 
 RUN a2enmod rewrite
 
-# Añade esto en tu Dockerfile (si usas php:8.2-apache)
+# Límites de subida de archivos.
+#
+#   upload_max_filesize = peso máximo del archivo (50 MB)
+#   post_max_size        = peso máximo del POST completo. Tiene que ser MAYOR
+#                          que upload_max_filesize porque incluye el overhead
+#                          del multipart (boundary, headers). Con 52M hay
+#                          margen para un PDF de 50M.
+#
+# Estos valores tienen que coincidir con el `client_max_body_size` de nginx y
+# con el helper PHP `tamano_maximo_subida()` que le pasa el límite al
+# frontend. Ver nginx/default.conf y src/Nucleo/ayudantes.php.
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" && \
     echo "upload_max_filesize = 50M" >> "$PHP_INI_DIR/php.ini" && \
-    echo "post_max_size = 50M" >> "$PHP_INI_DIR/php.ini"
+    echo "post_max_size = 52M" >> "$PHP_INI_DIR/php.ini"
 
 # =============================================================================
 # ENTRYPOINT: prepara /var/www/html/uploads antes de arrancar Apache.

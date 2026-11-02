@@ -82,6 +82,31 @@
     }
 
     // ==========================================
+    // LÍMITE DE TAMAÑO
+    // ==========================================
+    // El límite lo impone el servidor (nginx + PHP). Lo leemos del
+    // data-max-bytes que deja el backend, así no hay un número duplicado
+    // en el JS. Si el archivo ya lo excede, avisamos al instante y NO
+    // subimos: es mucho mejor que esperar un 413 del servidor.
+    const maxBytes = window.LimiteSubida
+      ? window.LimiteSubida.leerBytes(inputArchivo)
+      : 0;
+
+    function archivoExcedeLimite() {
+      const file = inputArchivo.files[0];
+      if (!file || !window.LimiteSubida) {
+        return false;
+      }
+      return window.LimiteSubida.excede(file, maxBytes);
+    }
+
+    function mensajeExceso() {
+      return window.LimiteSubida
+        ? window.LimiteSubida.mensajeExceso(maxBytes)
+        : "El archivo es demasiado grande.";
+    }
+
+    // ==========================================
     // SUBIDA AL SERVIDOR
     // ==========================================
 
@@ -90,6 +115,13 @@
 
       if (!inputArchivo.files[0]) {
         mostrarFeedback("Por favor, selecciona un archivo PDF.", "error");
+        return;
+      }
+
+      // Validación previa: si el archivo excede el límite, no tiene sentido
+      // subirlo (el servidor lo va a rechazar con 413).
+      if (archivoExcedeLimite()) {
+        mostrarFeedback(mensajeExceso(), "error");
         return;
       }
 
@@ -120,6 +152,13 @@
         });
 
         if (!response.ok) {
+          // 413 = el archivo excede el límite del servidor. Lo genera nginx
+          // (client_max_body_size) ANTES de que el archivo llegue a PHP, así
+          // que la respuesta no es JSON: no tiene sentido parsearla.
+          if (response.status === 413) {
+            throw new Error(mensajeExceso());
+          }
+
           // El backend responde JSON con el motivo real del rechazo:
           //   {"error": "No se pudo guardar el archivo en el servidor."}
           // Antes mostrabamos un mensaje generico y el operador se enteraba
