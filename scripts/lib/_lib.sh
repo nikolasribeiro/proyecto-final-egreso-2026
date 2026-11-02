@@ -62,6 +62,9 @@ SB_ENVIRONMENT_EXPLICIT="${SB_ENVIRONMENT_EXPLICIT:-false}"
 # Ruta a una llave publica (.pub) para instalar en el authorized_keys del
 # administrador. Vacio = deteccion automatica.
 SB_SSH_KEY_PATH="${SB_SSH_KEY_PATH:-}"
+# Usuarios extra autorizados a entrar por SSH (ademas del administrador).
+# Space-separated, tal como lo espera la directiva AllowUsers.
+SB_EXTRA_ALLOW_USERS="${SB_EXTRA_ALLOW_USERS:-}"
 
 # ----------------------------------------------------------------------------
 # Colores (solo si stdout es TTY)
@@ -869,6 +872,11 @@ sb_print_resumen() {
     printf '  Aplicación       http://%s:%s/\n' "$host_ip" "$SB_APP_PORT" >&2
     printf '  Zabbix           http://%s:%s/zabbix/\n' "$host_ip" "$SB_APP_PORT" >&2
     printf '  SSH              ssh -p %s %s@%s\n' "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" >&2
+    if [[ -n "${SB_EXTRA_ALLOW_USERS// /}" ]]; then
+        printf '  OJO: por SSH solo entran %s y%s (AllowUsers). Con la consola del\n' \
+            "$SB_ADMIN_USER" "$SB_EXTRA_ALLOW_USERS" >&2
+        printf '       servidor usá:  sudo cat %s/.ssh/id_ed25519\n' "$admin_home" >&2
+    fi
 
     # --- LLAVES SSH -----------------------------------------------------
     printf '\n%sLLAVES SSH%s\n' "$C_BOLD" "$C_RESET" >&2
@@ -878,12 +886,14 @@ sb_print_resumen() {
         printf '  Se GENERO un par de llaves en ESTE servidor.\n' >&2
         printf '  Privada          %s/.ssh/id_ed25519\n' "$admin_home" >&2
         printf '  Publica          %s/.ssh/id_ed25519.pub\n' "$admin_home" >&2
-        printf '  Traela a tu maquina:\n' >&2
-        printf '    scp -P %s %s@%s:%s/.ssh/id_ed25519 ~/.ssh/songbird_admin_ed25519\n' \
-            "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" "$admin_home" >&2
-        printf '  Y BORRALA del servidor (la privada no debe quedar ahi):\n' >&2
-        printf '    ssh -p %s %s@%s "rm -f %s/.ssh/id_ed25519"\n' \
-            "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" "$admin_home" >&2
+        printf '  Para obtenerla (desde la CONSOLA del servidor):\n' >&2
+        printf '    sudo cat %s/.ssh/id_ed25519\n' "$admin_home" >&2
+        printf '  Copiala a un archivo en tu maquina y dale permisos 600.\n' >&2
+        printf '  Despues borrala del servidor (la privada no debe quedar ahi):\n' >&2
+        printf '    sudo rm -f %s/.ssh/id_ed25519\n' "$admin_home" >&2
+        printf '  Y conectate con:\n' >&2
+        printf '    ssh -i ~/.ssh/songbird_admin_ed25519 -p %s %s@%s\n' \
+            "$SB_SSH_PORT" "$SB_ADMIN_USER" "$host_ip" >&2
     elif [[ -n "$origen_llave" ]]; then
         printf '  Llave publica instalada en %s/.ssh/authorized_keys\n' "$admin_home" >&2
         printf '  Origen           %s\n' "$origen_llave" >&2
@@ -915,6 +925,15 @@ sb_print_resumen() {
         printf '  Replicación         %sACTIVA%s (hilos IO y SQL corriendo)\n' "$C_GREEN" "$C_RESET" >&2
     elif [[ "$master_vivo" == "true" ]]; then
         printf '  Replicación         %sNO ACTIVA%s (Slave_running=%s)\n' "$C_RED" "$C_RESET" "${estado_repl:-?}" >&2
+        # Diagnostico: por que fallo el inicializador.
+        local c_init init_exit
+        c_init="$(sb_compose_container_of_service "$compose_file" "$env_file" db-replication-init)"
+        if [[ -n "$c_init" ]]; then
+            init_exit="$(docker inspect -f '{{.State.ExitCode}}' "$c_init" 2>/dev/null || echo '?')"
+            printf '  db-replication-init  exit code %s\n' "$init_exit" >&2
+            printf '  Ultimas lineas del inicializador:\n' >&2
+            docker logs "$c_init" 2>&1 | tail -n 6 | sed 's/^/    /' >&2 || true
+        fi
     else
         printf '  Replicación         %sno verificable%s (el contenedor master no está corriendo)\n' "$C_YELLOW" "$C_RESET" >&2
     fi

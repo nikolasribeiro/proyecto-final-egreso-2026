@@ -123,6 +123,7 @@ sudo scripts/operator.sh --module <nombre> [opciones]
 | `--environment <nombre>`              | **Fuerza** `APP_ENVIRONMENT` (`development` / `production`). Si no lo pasás, se respeta el del `.env` |
 | `--repo-dir <path>`                   | Despliega en otro directorio (sincroniza el checkout, **incluido tu `.env`**)                         |
 | `--ssh-key <archivo.pub>`             | Llave pública a instalar para el admin (default: usa la tuya si existe, o genera una)                 |
+| `--allow-user <usuario>`              | Usuario extra autorizado por SSH (repetible). Sin esto, `AllowUsers` deja entrar **solo** al admin    |
 | `--expose-zabbix-web`                 | Abre el puerto 8080 en UFW para la UI de Zabbix                                                       |
 | `--reset-volumes`                     | Borra los volúmenes de datos (DESTRUCTIVO, requiere `--interactive`)                                  |
 | `--interactive` / `--non-interactive` | Prompts de confirmación (default: no interactivo)                                                     |
@@ -197,6 +198,45 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
    Si existe, **no lo toca**.
 4. Si pasaste `--repo-dir <otro path>`, sincroniza el checkout hacia ese
    destino **incluyendo tu `.env`** (para no perder tus variables).
+
+### `usuarios`
+- Crea `songbird_admin`, `songbird_app`, `songbird_backup`, `songbird_zbx`.
+- Crea `/home/songbird_admin/.ssh/` (700) y `authorized_keys` (600).
+- **Configura la llave SSH del administrador** (ver abajo).
+
+### Llaves SSH del administrador
+
+El módulo `usuarios` deja el acceso por SSH **listo para usar**. La llave
+pública queda en `/home/songbird_admin/.ssh/authorized_keys` y hay 3 formas de
+resolverla, en este orden:
+
+| Prioridad | Origen | Qué implica |
+|---|---|---|
+| 1 | `--ssh-key <archivo.pub>` | Instalás la llave que quieras explícitamente. |
+| 2 | La del usuario que invocó el operador (`$SUDO_USER`) | Se detecta sola (`~/.ssh/id_ed25519.pub`, `id_ecdsa.pub` o `id_rsa.pub`). **La llave privada nunca toca el servidor.** |
+| 3 | Par ed25519 generado en el servidor | Si no hay ninguna previa, se genera `id_ed25519` en `/home/songbird_admin/.ssh/`. |
+
+En el caso 3 la **llave privada queda en el servidor**.
+
+> **Ojo con el círculo**: si `AllowUsers` deja entrar solo a `songbird_admin` y
+> todavía no tenés la llave privada en tu máquina, no podés usar `scp` para
+> traerla (necesitás la llave para autenticarte). La salida es la **consola del
+> servidor** (Proxmox, Cockpit, consola del proveedor):
+>
+> ```bash
+> sudo cat /home/songbird_admin/.ssh/id_ed25519     # copiala a tu maquina
+> chmod 600 ~/.ssh/songbird_admin_ed25519
+> ssh -i ~/.ssh/songbird_admin_ed25519 -p 2222 songbird_admin@<host>
+> sudo rm -f /home/songbird_admin/.ssh/id_ed25519    # borrala del servidor
+> ```
+>
+> Para no quedar afuera en el futuro, usá `--allow-user <tu_usuario>`: ese
+> usuario entra por SSH aunque la llave del admin todavía no la tengas.
+
+Con la llave configurada, el módulo `ssh` **valida la conexión de verdad**:
+se conecta a `localhost:${SSH_PORT}` **como `songbird_admin`** y usando su
+llave. Antes la prueba corría como `root`, que buscaba la clave en
+`/root/.ssh/` y por eso siempre terminaba en "no respondió".
 
 ### `ssh` (hardening)
 
@@ -277,7 +317,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
   como OK si terminan con exit code 0.
 - Guarda las credenciales en `/opt/songbird-operator/credentials.env` (chmod 600).
 
-### `verificar` (smoke test, 21 checks)
+### `verificar` (smoke test, 23 checks)
 
 | #   | Check                                                    | Esperado                          |
 | --- | -------------------------------------------------------- | --------------------------------- |
@@ -303,6 +343,7 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
 | 20  | GTID del slave ≥ GTID del master                         | sin lag                           |
 | 21  | Split read/write activo en el `.env`                     | `true`                            |
 | 22  | Log del operador disponible y con contenido              | legible                           |
+| 23  | Llaves de host de SSH presentes en `/etc/ssh`              | al menos una                       |
 | 23  | Llaves de host de SSH presentes en `/etc/ssh`              | al menos una                       |
 
 **Exit codes**: `0` = todo OK · `1..N` = N checks fallidos · `64` = config inválida · `70` = error interno.
@@ -337,6 +378,54 @@ bash scripts/lint-pipefail.sh
 El lint recorre `scripts/lib/*.sh` y `scripts/operator.sh`, une las asignaciones
 multi-línea y reporta las que no están protegidas con `|| true` (o que no
 manejan el valor vacío).
+
+---
+
+## Resumen final
+
+Al terminar (`--all`, o `--module deploy` / `--module verificar`) se imprime un
+resumen con lo que hay que saber: accesos, dónde están las llaves SSH, estado
+de la replicación, rutas importantes y los próximos pasos.
+
+```
+══════════════════════════════════════════════════════════════════════
+  RESUMEN DEL DESPLIEGUE — songbird-operator v0.3.0
+══════════════════════════════════════════════════════════════════════
+
+ACCESO
+  Aplicación       http://<ip>:8000/
+  Zabbix           http://<ip>:8000/zabbix/
+  SSH              ssh -p 2222 songbird_admin@<ip>
+
+LLAVES SSH
+  Se GENERO un par de llaves en ESTE servidor.
+  Privada          /home/songbird_admin/.ssh/id_ed25519
+  Publica          /home/songbird_admin/.ssh/id_ed25519.pub
+  Para obtenerla (desde la CONSOLA del servidor):
+    sudo cat /home/songbird_admin/.ssh/id_ed25519
+  ...
+
+BASE DE DATOS (master-slave)
+  Master (escritura)  songbird_db_master
+  Slave  (lectura)    songbird_db_slave
+  Replicación         ACTIVA (hilos IO y SQL corriendo)
+
+RUTAS
+  Proyecto        /opt/songbird-app
+  Compose file    /opt/songbird-app/docker-compose.yml
+  Variables       /opt/songbird-app/.env (600)
+  Credenciales    /opt/songbird-operator/credentials.env (600)
+  Log operador    /var/log/songbird/songbird-operator.log
+  Backups         /var/backups/songbird/
+  Estado (json)   /var/lib/songbird-operator/state.json
+
+PROXIMOS PASOS
+  1. Traé la llave privada SSH del servidor y borrala de ahí.
+  2. Entrá a la app: http://<ip>:8000/
+  3. Cambiá el password de Admin/zabbix en la UI de Zabbix.
+  4. Vincular los hosts en Zabbix (proxy, web, db, db_slave).
+  5. Probá el backup: sudo /usr/local/sbin/songbird-backup.sh
+```
 
 ---
 

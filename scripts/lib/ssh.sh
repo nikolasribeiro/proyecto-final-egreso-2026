@@ -67,7 +67,8 @@ mod_ssh_run() {
         "${SB_TEMPLATES_DIR}/sshd_config.tpl" \
         "$SSH_DROP_IN" \
         "SSH_PORT=${SB_SSH_PORT}" \
-        "ADMIN_USER=${SB_ADMIN_USER}"
+        "ADMIN_USER=${SB_ADMIN_USER}" \
+        "EXTRA_ALLOW_USERS=${SB_EXTRA_ALLOW_USERS}"
 
     run_cmd chmod 644 "$SSH_DROP_IN"
 
@@ -80,6 +81,15 @@ mod_ssh_run() {
         logger_error "Se restaura el drop-in anterior (el servidor sigue como estaba)"
         sb_ssh_rollback_if_needed
         return 70
+    fi
+
+    # 5.b Aviso de lockout: AllowUsers deja entrar solo a los usuarios listados.
+    local invocador="${SUDO_USER:-}"
+    if [[ -n "$invocador" && "$invocador" != "$SB_ADMIN_USER" ]] \
+        && [[ "$SB_EXTRA_ALLOW_USERS" != *" ${invocador} "* && "$SB_EXTRA_ALLOW_USERS" != *" ${invocador}" ]]; then
+        logger_warn "ATENCION: AllowUsers deja entrar solo a '${SB_ADMIN_USER}'."
+        logger_warn "El usuario '${invocador}' (quien invoco el operador) NO va a poder abrir sesion por SSH."
+        logger_warn "Para permitirlo: sudo scripts/operator.sh --module ssh --allow-user ${invocador}"
     fi
 
     # 6. Habilitar + reload (no restart — preserva la sesion actual)

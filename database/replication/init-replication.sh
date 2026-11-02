@@ -81,9 +81,15 @@ if ! wait_for_server "$SLAVE_HOST" "slave"; then
 fi
 
 # --- 2. Usuario de replicacion en el master ------------------------------
-# IF NOT EXISTS + GRANT son idempotentes.
+#
+# OJO con `CREATE USER IF NOT EXISTS`: si el usuario YA existe, MySQL/MariaDB
+# SKIPPEA la sentencia COMPLETA (incluido el IDENTIFIED BY), asi que el
+# password viejo se queda. Si despues el .env tiene otro password, el slave
+# se configura con el nuevo y la autenticacion falla: la replica queda
+# "Slave_running=OFF" sin explicacion. Por eso se fuerza con ALTER USER.
 log "Garantizando el usuario de replicacion '$REPL_USER' en el master..."
 master_sql "CREATE USER IF NOT EXISTS '${REPL_USER}'@'%' IDENTIFIED BY '${REPL_PASSWORD}';"
+master_sql "ALTER USER '${REPL_USER}'@'%' IDENTIFIED BY '${REPL_PASSWORD}';"
 master_sql "GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO '${REPL_USER}'@'%';"
 master_sql "FLUSH PRIVILEGES;"
 

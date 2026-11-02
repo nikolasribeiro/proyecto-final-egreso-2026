@@ -76,6 +76,80 @@ sb_env_ensure_value() {
     fi
 }
 
+
+# ----------------------------------------------------------------------------
+# Replicación: el inicializador es one-shot, hay que poder re-animarlo
+# ----------------------------------------------------------------------------
+# El contenedor `db-replication-init` corre una vez y muere. Si falla (o si el
+# slave se recreó con el volumen vacío), la réplica queda MUERTA y nadie la
+# levanta: el healthcheck del slave exige Slave_running=ON, así que el deploy
+# esperaba los 300s completos y el resumen decía "NO ACTIVA" sin explicar por
+# qué.
+#
+# El inicializador es idempotente (si la réplica ya está activa sale con 0 sin
+# tocar nada), así que re-ejecutarlo es seguro.
+
+# ¿Está la réplica activa? ( Slave_running=ON )
+sb_deploy_replication_on() {
+    local compose_file="$1" env_file="$2"
+    local c_slave root_pwd estado
+    c_slave="$(sb_compose_container_of_service "$compose_file" "$env_file" db-slave)"
+    [[ -z "$c_slave" ]] && return 1
+    root_pwd="$(sb_env_get "$env_file" MYSQL_ROOT_PASSWORD 2>/dev/null || true)"
+    [[ -z "$root_pwd" ]] && return 1
+    estado="$(docker exec "$c_slave" \
+        mariadb -uroot -p"$root_pwd" --protocol=tcp -h 127.0.0.1 -N -B \
+        -e "SHOW GLOBAL STATUS LIKE 'Slave_running';" 2>/dev/null | cut -f2 || true)"
+    [[ "$estado" == "ON" ]]
+}
+
+# Espera a que el inicializador termine y, si la replica no quedo activa,
+# lo re-ejecuta. Devuelve 0 si la replica quedo activa.
+sb_deploy_ensure_replication() {
+    local compose_file="$1" env_file="$2" intentos="${3:-2}"
+    local i waited estado exit_code init_c
+
+    init_c="$(sb_compose_container_of_service "$compose_file" "$env_file" db-replication-init)"
+
+    for ((i = 1; i <= intentos; i++)); do
+        # 1. Esperar a que el inicializador termine (max 180s)
+        if [[ -n "$init_c" ]]; then
+            waited=0
+            while (( waited < 180 )); do
+                estado="$(docker inspect -f '{{.State.Status}}' "$init_c" 2>/dev/null || true)"
+                [[ "$estado" == "exited" ]] && break
+                [[ -z "$estado" ]] && break
+                sleep 3
+                waited=$((waited + 3))
+            done
+            exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$init_c" 2>/dev/null || echo '?')"
+            if [[ "$exit_code" != "0" ]]; then
+                logger_warn "db-replication-init terminó con exit code ${exit_code}:"
+                docker logs "$init_c" 2>&1 | tail -n 12 | sed 's/^/    /' >&2 || true
+            fi
+        fi
+
+        # 2. ¿La replica quedo activa?
+        if sb_deploy_replication_on "$compose_file" "$env_file"; then
+            logger_ok "Replicación activa (Slave_running=ON)"
+            return 0
+        fi
+
+        # 3. Reintentar: el inicializador es idempotente
+        if (( i < intentos )); then
+            logger_warn "La réplica no está activa: se re-ejecuta db-replication-init (intento $((i + 1))/${intentos})"
+            docker compose -f "$compose_file" --env-file "$env_file" \
+                up -d --force-recreate db-replication-init >/dev/null 2>&1 || true
+            init_c="$(sb_compose_container_of_service "$compose_file" "$env_file" db-replication-init)"
+        fi
+    done
+
+    logger_error "La réplica no se pudo activar. Diagnóstico:"
+    logger_error "  docker compose logs db-replication-init"
+    logger_error "  docker compose exec db-slave mariadb -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -e \"SHOW SLAVE STATUS\\G\""
+    return 1
+}
+
 mod_deploy_run() {
     logger_section "Módulo deploy"
 
@@ -221,12 +295,19 @@ mod_deploy_run() {
     # que ya no existen en el compose file (p.ej. el viejo `songbird_db`).
     run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --remove-orphans
 
-    # --- 10. Esperar healthchecks --------------------------------------
+    # --- 10. Replicación: revivir el inicializador si hace falta -------
+    # Va ANTES de esperar los healthchecks: si la replica no arranca, el slave
+    # nunca queda healthy y esperaríamos los 300s para nada.
+    logger_info "Verificando la replicación master-slave..."
+    local repl_ok=true
+    sb_deploy_ensure_replication "$compose_file" "$ENV_FILE" 2 || repl_ok=false
+
+    # --- 11. Esperar healthchecks --------------------------------------
     logger_info "Esperando healthchecks (max 300s)..."
     local wait_ok=true
     sb_compose_wait_healthy "$compose_file" "$ENV_FILE" 300 600 || wait_ok=false
 
-    # --- 11. Estado final ----------------------------------------------
+    # --- 12. Estado final ----------------------------------------------
     local total pending_now
     total="$(docker compose -f "$compose_file" --env-file "$ENV_FILE" config --services 2>/dev/null | wc -l || echo 0)"
     pending_now="$(sb_compose_pending_services "$compose_file" "$ENV_FILE" || true)"
@@ -236,7 +317,7 @@ mod_deploy_run() {
     sb_kv "APP URL" "http://localhost:${SB_APP_PORT}/"
     sb_kv "Zabbix URL" "http://localhost:${SB_APP_PORT}/zabbix/"
 
-    # --- 12. Credenciales generadas (solo root) ------------------------
+    # --- 13. Credenciales generadas (solo root) ------------------------
     if [[ "$SB_DRY_RUN" != "true" ]]; then
         sb_ensure_dir /opt/songbird-operator 700 root root
         run_cmd tee "$SB_CRED_FILE" >/dev/null <<EOF

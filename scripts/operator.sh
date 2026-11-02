@@ -139,6 +139,8 @@ ${C_BOLD}OPCIONES${C_RESET}
     --repo-dir <path>          Desplegar en otro directorio (default: el checkout)
     --ssh-key <archivo.pub>    Llave publica a instalar para el admin
                                (default: usa la tuya o genera una)
+    --allow-user <usuario>     Usuario extra autorizado por SSH
+                               (repetible; sin esto solo entra el admin)
     --expose-zabbix-web        Abre puerto 8080 en UFW para UI Zabbix
     --reset-volumes            Borra volumenes Docker antes de deploy (DESTRUCTIVO)
     --interactive              Activa prompts de confirmacion (default: no)
@@ -214,6 +216,11 @@ parse_cli() {
                 [[ $# -ge 2 ]] || { logger_error "--environment requiere un argumento"; exit 64; }
                 SB_ENVIRONMENT="$2"
                 SB_ENVIRONMENT_EXPLICIT="true"
+                shift 2
+                ;;
+            --allow-user)
+                [[ $# -ge 2 ]] || { logger_error "--allow-user requiere un argumento"; exit 64; }
+                SB_EXTRA_ALLOW_USERS="${SB_EXTRA_ALLOW_USERS:+${SB_EXTRA_ALLOW_USERS} }$2"
                 shift 2
                 ;;
             --ssh-key)
@@ -394,7 +401,7 @@ main() {
     # Export para subshells (ej. docker exec)
     export SB_DRY_RUN SB_SSH_PORT SB_APP_PORT SB_REPO_DIR SB_ADMIN_USER
     export SB_APP_PORT_EXPLICIT SB_ENVIRONMENT SB_ENVIRONMENT_EXPLICIT SB_REPO_DIR_EXPLICIT
-    export SB_SSH_KEY_PATH
+    export SB_SSH_KEY_PATH SB_EXTRA_ALLOW_USERS
 
     # Aplicar hostname si se pidio
     if [[ -n "$SB_HOSTNAME" ]]; then
