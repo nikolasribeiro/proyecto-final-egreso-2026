@@ -435,6 +435,13 @@ sb_ssh_rollback_if_needed() {
         if command -v sshd >/dev/null 2>&1; then
             sshd -t && systemctl reload ssh >/dev/null 2>&1 || true
         fi
+    elif [[ -f "$drop_in" ]]; then
+        # No habia drop-in previo (primer despliegue): se elimina el recien
+        # desplegado. Si se lo deja, el proximo restart de sshd aplicaria un
+        # drop-in NUNCA validado (p.ej. puerto 2222 + AllowUsers) y el host
+        # quedaria sin acceso por el puerto habitual.
+        logger_warn "No habia drop-in previo: se elimina el recien desplegado"
+        rm -f "$drop_in"
     fi
     SB_NEEDS_SSH_ROLLBACK="false"
 }

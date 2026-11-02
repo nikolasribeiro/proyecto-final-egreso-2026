@@ -55,6 +55,22 @@ mod_ssh_run() {
         sb_kv "Llaves de host" "$(printf '%s\n' "$host_keys" | wc -l) encontradas"
     fi
 
+    # 1.c Directorio de separacion de privilegios de sshd (/run/sshd).
+    #
+    #     `sshd -t` aborta con "Missing privilege separation directory: /run/sshd"
+    #     cuando ese directorio NO existe. En Debian lo crea el servicio systemd
+    #     (RuntimeDirectory=sshd) al arrancar, o systemd-tmpfiles al bootear.
+    #     Si openssh-server se instala DESPUES del ultimo arranque (o el
+    #     servicio nunca llega a arrancar), el directorio todavia no existe y
+    #     el modulo fallaba en la validacion, devolviendo 70 y ABORTANDO TODO
+    #     el operador (firewall, docker y deploy nunca corrian).
+    #
+    #     Crearlo es idempotente y barato: mejor eso que abortar el deploy.
+    if [[ ! -d /run/sshd ]]; then
+        logger_info "Creando /run/sshd (separacion de privilegios de sshd)"
+        run_cmd install -d -m 0755 /run/sshd
+    fi
+
     # 2. Backup del drop-in actual
     if [[ -f "$SSH_DROP_IN" ]]; then
         local bak="${SSH_DROP_IN}.bak-$(date +%Y%m%d-%H%M%S)"
@@ -81,6 +97,11 @@ mod_ssh_run() {
         # "sshd -t fallo" y no se sabe por que.
         logger_error "sshd -t falló. Diagnóstico:"
         sshd -t 2>&1 | head -n 5 | sed 's/^/    /' >&2 || true
+        # Causa frecuente: el directorio de separacion de privilegios.
+        if sshd -t 2>&1 | grep -q "privilege separation directory"; then
+            logger_error "Falta el directorio de separacion de privilegios de sshd:"
+            logger_error "    sudo install -d -m 0755 /run/sshd"
+        fi
         logger_error "Se restaura el drop-in anterior (el servidor sigue como estaba)"
         sb_ssh_rollback_if_needed
         return 70
