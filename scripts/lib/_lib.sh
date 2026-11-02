@@ -505,6 +505,175 @@ sb_is_project_dir() {
 }
 
 # ----------------------------------------------------------------------------
+# Permisos del deploy: checkout <-> runtime del contenedor
+# ----------------------------------------------------------------------------
+# `/var/www/html` es un BIND MOUNT de `./src` (docker-compose.yml). Los
+# permisos del host se ven tal cual dentro del contenedor: si `src/uploads/`
+# no es escribible por el usuario con el que corre el worker de Apache, cada
+# subida de PDF falla con
+#
+#   move_uploaded_file(.../uploads/archivo.pdf): Failed to open stream:
+#     Permission denied
+#
+# y POST /api/documentos responde 400. El resto de la app funciona (login,
+# dashboard, listados), por eso el sintoma es tan dificil de ver.
+#
+# REPARTO DE RESPONSABILIDADES
+# ----------------------------
+#   - El REPARO de `uploads` lo hace el entrypoint del contenedor, DENTRO del
+#     contenedor (docker/entrypoint-web.sh): es el unico lugar donde el uid de
+#     `www-data` es el correcto (con Podman/Docker rootless el uid del HOST
+#     NO es el 33, asi que un `chown 33:33` desde el host seria equivocado).
+#   - El HOST solo deja el arbol del repo con un grupo compartido, para que el
+#     admin remoto y el usuario del bootstrap puedan editar el mismo checkout.
+#
+# Grupo compartido: `songbird-ops` (lo crea el modulo `grupos`; contiene a
+# songbird_admin, songbird_app, songbird_backup y songbird_zbx).
+
+# Usuario dueno del checkout: el que invoco el operador (SUDO_USER). Si el
+# operador corrio como root puro (su -), cae al admin remoto, que es el
+# usuario de operacion por SSH.
+sb_deploy_owner() {
+    local owner="${SUDO_USER:-}"
+    [[ -n "$owner" ]] || owner="${SB_ADMIN_USER:-}"
+    [[ -n "$owner" ]] || owner="root"
+    printf '%s' "$owner"
+}
+
+# Grupo compartido del deploy: `songbird-ops` si existe; si no (el modulo
+# `grupos` no corrio), el grupo primario del owner, para no abortar.
+sb_deploy_shared_group() {
+    local owner="${1:-}"
+    local group="songbird-ops"
+    [[ -n "$owner" ]] || owner="$(sb_deploy_owner)"
+    if getent group "$group" >/dev/null 2>&1; then
+        printf '%s' "$group"
+        return 0
+    fi
+    id -gn "$owner" 2>/dev/null || printf '%s' "$owner"
+}
+
+# Aplica la politica de permisos del checkout.
+#   $1 = directorio del repo (default: SB_REPO_DIR)
+#   $2 = owner (default: sb_deploy_owner)
+#   $3 = grupo compartido (default: songbird-ops)
+#
+# Idempotente: se puede llamar en cada deploy.
+sb_apply_repo_permissions() {
+    local repo_dir="${1:-${SB_REPO_DIR}}"
+    local owner="${2:-}"
+    local group="${3:-}"
+
+    [[ -n "$owner" ]] || owner="$(sb_deploy_owner)"
+
+    if [[ ! -d "$repo_dir" ]]; then
+        return 0
+    fi
+
+    # Si el grupo compartido no existe (modulo `grupos` sin correr), se cae al
+    # grupo primario del owner en vez de abortar el deploy.
+    if [[ -z "$group" ]]; then
+        group="$(sb_deploy_shared_group "$owner")"
+        if [[ "$group" != "songbird-ops" ]]; then
+            logger_warn "El grupo songbird-ops no existe: se usa ${group} como grupo compartido"
+        fi
+    fi
+
+    # `src/uploads` lo maneja el runtime del contenedor: se EXCLUYE del barrido
+    # para no pisar el owner que el entrypoint deja.
+    local uploads_dir="${repo_dir}/src/uploads"
+
+    if [[ "$SB_DRY_RUN" == "true" ]]; then
+        logger_dry "install -d -m 2775 -o ${owner} -g ${group} ${repo_dir}"
+        logger_dry "chgrp -R ${group} ${repo_dir} (excluye src/uploads)"
+        logger_dry "chmod g+rw (archivos) / g+rwx,g+s (directorios) en ${repo_dir} (excluye src/uploads)"
+        logger_dry "chown ${owner}:${group} ${repo_dir}/.env && chmod 640"
+        return 0
+    fi
+
+    # --- 1. Raiz del repo: owner real + grupo compartido + setgid ---------
+    sb_ensure_dir "$repo_dir" 2775 "$owner" "$group"
+
+    # --- 2. Grupo compartido en todo el arbol -----------------------------
+    # `find -prune` para no bajar a src/uploads. El OWNER no se toca: los
+    # archivos siguen siendo del usuario que clonó el repo.
+    if ! find "$repo_dir" -path "$uploads_dir" -prune -o -exec chgrp "$group" {} + 2>/dev/null; then
+        logger_warn "No se pudo aplicar el grupo ${group} a ${repo_dir} (permisos)"
+    fi
+
+    # --- 3. Permisos de escritura para el grupo --------------------------
+    # Archivos: rw para el grupo. Directorios: rw + setgid (g+s) para que los
+    # archivos nuevos hereden el grupo y cualquiera de los dos usuarios
+    # (admin remoto o bootstrap) pueda seguir editando el checkout.
+    find "$repo_dir" -path "$uploads_dir" -prune -o -type f -exec chmod g+rw {} + 2>/dev/null || true
+    find "$repo_dir" -path "$uploads_dir" -prune -o -type d -exec chmod g+rwx,g+s {} + 2>/dev/null || true
+
+    # --- 4. El .env: escribible por su owner, legible por el grupo -------
+    # 640 = el owner (quien clonó y hace `nano .env`) escribe; el grupo
+    # (songbird-ops -> songbird_admin) LEE, para poder correr `docker compose`
+    # sin sudo: compose carga el .env automaticamente para interpolar
+    # variables y con 600 el admin no podria ni abrirlo.
+    local env_file="${repo_dir}/.env"
+    if [[ -f "$env_file" ]]; then
+        if ! chown "${owner}:${group}" "$env_file" 2>/dev/null; then
+            logger_warn "No se pudo fijar el owner de ${env_file} (permisos)"
+        fi
+        if ! chmod 640 "$env_file" 2>/dev/null; then
+            logger_warn "No se pudo fijar el modo de ${env_file} (permisos)"
+        fi
+    fi
+
+    sb_kv "Permisos repo" "${repo_dir} (${owner}:${group}, setgid)"
+    sb_kv "Permisos .env" "${env_file} (640 ${owner}:${group})"
+}
+
+# Verifica (y repara) que el worker de Apache pueda escribir en uploads.
+#
+# El chown se hace DENTRO del contenedor: ahi el nombre `www-data` resuelve al
+# uid correcto del runtime (importante con Podman rootless). El entrypoint ya
+# lo hace al arrancar; este paso asegura el estado cuando el deploy corre
+# sobre un contenedor que ya existe.
+#   $1 = compose file, $2 = env file
+sb_ensure_uploads_writable() {
+    local compose_file="$1" env_file="$2"
+    local c_web
+
+    c_web="$(sb_compose_container_of_service "$compose_file" "$env_file" web)"
+    if [[ -z "$c_web" ]] || ! docker inspect "$c_web" >/dev/null 2>&1; then
+        logger_info "uploads: el contenedor web aun no existe (se ajustara al arrancar)"
+        return 0
+    fi
+
+    # `docker exec` solo funciona contra un contenedor en ejecucion.
+    if [[ "$(docker inspect -f '{{.State.Running}}' "$c_web" 2>/dev/null || true)" != "true" ]]; then
+        logger_info "uploads: el contenedor web no esta corriendo (se ajustara al arrancar)"
+        return 0
+    fi
+
+    if [[ "$SB_DRY_RUN" == "true" ]]; then
+        logger_dry "docker exec -u root ${c_web} chown -R www-data:www-data /var/www/html/uploads"
+        return 0
+    fi
+
+    if ! docker exec -u root "$c_web" chown -R www-data:www-data /var/www/html/uploads 2>/dev/null; then
+        logger_warn "No se pudo ajustar el owner de uploads dentro de ${c_web}"
+        return 1
+    fi
+
+    # Prueba real de escritura, con el MISMO usuario que usa la app.
+    if docker exec -u www-data "$c_web" sh -c \
+        'touch /var/www/html/uploads/.probe_write && rm -f /var/www/html/uploads/.probe_write' 2>/dev/null; then
+        sb_kv "uploads" "escribible por www-data ($(docker exec "$c_web" ls -ld /var/www/html/uploads 2>/dev/null | awk '{print $1, $3, $4}'))"
+        return 0
+    fi
+
+    logger_error "El worker de Apache NO puede escribir en /var/www/html/uploads"
+    logger_error "  Las subidas de documentos van a fallar con 'Permission denied'."
+    logger_error "  Fix: docker exec -u root ${c_web} chown -R www-data:www-data /var/www/html/uploads"
+    return 1
+}
+
+# ----------------------------------------------------------------------------
 # Helpers de .env
 # ----------------------------------------------------------------------------
 

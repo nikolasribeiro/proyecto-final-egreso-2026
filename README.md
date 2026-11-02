@@ -119,7 +119,7 @@ cp .env.example .env && nano .env
 # 3. Corrés el operador desde el checkout
 sudo scripts/operator.sh --all
 
-# 4. Smoke test (21 checks)
+# 4. Smoke test (24 checks)
 sudo scripts/operator.sh --module verificar
 ```
 
@@ -129,6 +129,53 @@ sudo scripts/operator.sh --module verificar
 El operador trabaja **in-place** sobre el repo donde vive el script y
 **respeta tu `.env`**: solo rellena lo que está vacío. Detalle completo en
 [`scripts/README.md`](scripts/README.md).
+
+### Permisos de `uploads/` (subida de documentos)
+
+`src/uploads/` es un **bind mount** del host: el contenedor `web` ve
+exactamente los permisos del directorio en el host. El worker de Apache
+escribe ahí como `www-data`, así que si el directorio no es escribible por
+ese usuario, la subida de documentos falla con:
+
+```
+PHP Warning: move_uploaded_file(.../uploads/archivo.pdf): Failed to open stream: Permission denied
+```
+
+...mientras **el resto de la app funciona normal** (login, dashboard,
+listados). El único síntoma es que el `POST /api/documentos` devuelve `400`.
+
+Esto está resuelto en dos capas:
+
+1. **`docker/entrypoint-web.sh`** (dentro del contenedor): en cada arranque
+   ajusta el owner de `/var/www/html/uploads` a `www-data` (`0775`). Se hace
+   **adentro** del contenedor a propósito: es el único lugar donde el uid de
+   `www-data` es el correcto (con Docker rootful es el `33` del host; con
+   Podman rootless es otro uid mapeado, y un `chown 33:33` desde el host
+   sería equivocado).
+2. **`scripts/lib/verificar.sh` (check #24)**: hace una escritura real en
+   `/var/www/html/uploads` con el mismo usuario que usa la app. Si algún día
+   vuelve a romperse, el smoke test falla en vez de descubrirlo en la UI.
+
+> **Si modificaste el `Dockerfile`** (o el código) y el stack ya estaba
+> `healthy`, el operador **no reconstruye la imagen** (optimiza el deploy).
+> Reconstruí a mano:
+>
+> ```bash
+> cd /home/debian/proyecto
+> sudo docker compose --env-file .env build web
+> sudo docker compose --env-file .env up -d web
+> ```
+
+### Permisos del checkout
+
+El deploy deja el árbol del proyecto con una política consistente:
+
+| Ruta | Owner | Modo | Por qué |
+|---|---|---|---|
+| `<repo>/` | el usuario que invocó el operador | `2775` | `root:root` lo dejaba sin escritura: un `git pull` que agregara archivos fallaba |
+| `<repo>/src/…` | el usuario que clonó | `g+rw`, dirs `g+s` | grupo compartido `songbird-ops` |
+| `<repo>/.env` | el usuario que clonó | `640` | grupo `songbird-ops`: el admin remoto lo **lee** para correr `docker compose` sin sudo (Compose carga el `.env` para interpolar variables) |
+| `<repo>/src/uploads/` | `www-data` (`33`) | `0775` | lo ajusta el entrypoint del contenedor |
 
 ---
 
@@ -284,7 +331,11 @@ Las credenciales y versiones de Zabbix se controlan vía variables en `.env` (bl
 ### Notas de seguridad
 
 - **No expongo puertos innecesariamente al host**: el dashboard de Zabbix se accede vía `nginx` en `/zabbix/`, y la comunicación agente→server ocurre dentro de la red `songbird_network`. Solo el puerto `${APP_PORT}` queda publicado.
-- En producción, hacé `chmod 600 .env` para restringir el acceso a credenciales.
+- En producción, el `.env` queda en `640` con el grupo `songbird-ops` (lo
+  administra el operador): el owner lo edita y solo los miembros del grupo —
+  el admin remoto entre ellos — lo leen. Si necesitás restrictarlo por
+  completo, `chmod 600 .env` (el admin necesitará `sudo` para correr
+  `docker compose`).
 
 ### En caso de tener problemas con algunos sitemas como por ejemplo Linux Mint
 

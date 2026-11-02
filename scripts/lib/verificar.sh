@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # scripts/lib/verificar.sh
-# Smoke test del host + el stack (21 checks).
+# Smoke test del host + el stack (24 checks).
 # Modulo: verificar
 #
 # Checks 1-15  : estado del host y del stack (los originales)
 # Checks 16-21 : estrategia master-slave (replicación + split read/write)
+# Checks 22-24 : operador, llaves SSH y permisos de escritura de uploads
 #
 # Los nombres de contenedor NO están hardcodeados: se resuelven desde el
 # compose file (ver sb_compose_container_of_service), asi que el smoke test
@@ -240,17 +241,32 @@ mod_verificar_run() {
         _record 14 "Logrotate válido" 1 "/etc/logrotate.d/songbird no existe"
     fi
 
-    # 15. .env chmod 600
+    # 15. .env: permisos restrictivos y legible por el grupo de operacion
+    #
+    # Politica del deploy: 640 con grupo `songbird-ops`. El owner (quien
+    # clonó) lo edita con `nano .env` y el admin remoto (songbird_admin,
+    # miembro del grupo) lo LEE para correr `docker compose` sin sudo:
+    # compose carga el `.env` del directorio del proyecto para interpolar
+    # variables, asi que con 600 el admin no podria ni abrirlo.
+    # 600 tambien se acepta: es mas restrictivo, pero el admin necesita sudo.
     if [[ -f "$ENV_FILE" ]]; then
-        local mode
+        local mode grp
         mode="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo 000)"
-        if [[ "$mode" == "600" ]]; then
-            _record 15 ".env permisos 600" 0
+        grp="$(stat -c '%G' "$ENV_FILE" 2>/dev/null || echo '')"
+        if [[ "$mode" == "640" && "$grp" == "songbird-ops" ]]; then
+            _record 15 ".env permisos 640 (grupo songbird-ops)" 0
+        elif [[ "$mode" == "640" ]]; then
+            _record 15 ".env permisos 640 (grupo songbird-ops)" 0 "" \
+                "grupo actual: ${grp} (el admin remoto necesita el grupo songbird-ops para leerlo)"
+        elif [[ "$mode" == "600" ]]; then
+            _record 15 ".env permisos 600" 0 "" \
+                "restringido al owner: el admin necesita sudo para leerlo"
         else
-            _record 15 ".env permisos 600" 1 "permisos actuales: $mode"
+            _record 15 ".env permisos 640 (grupo songbird-ops)" 1 \
+                "permisos actuales: ${mode} grupo:${grp:-?}"
         fi
     else
-        _record 15 ".env permisos 600" 1 "$ENV_FILE no existe"
+        _record 15 ".env permisos 640 (grupo songbird-ops)" 1 "$ENV_FILE no existe"
     fi
 
     # ================================================================
@@ -384,14 +400,42 @@ mod_verificar_run() {
         _record 23 "Llaves de host de SSH presentes" 1 "no hay /etc/ssh/ssh_host_*_key (ssh-keygen -A las genera)"
     fi
 
+    # 24. El worker de Apache puede escribir en /var/www/html/uploads
+    #
+    # Este es el check que evita que el bug de permisos vuelva a colarse:
+    # el worker de Apache corre como `www-data` y escribe los PDFs subidos en
+    # /var/www/html/uploads (bind mount de ./src/uploads en el host). Si el
+    # directorio no es escribible por ese uid, POST /api/documentos responde
+    # 400 con "move_uploaded_file(): Permission denied" mientras el resto de
+    # la app funciona normal -> el deploy parece sano y el fallo solo aparece
+    # en la UI, cuando el usuario intenta subir un documento.
+    local c_web uploads_probe
+    c_web="$(sb_compose_container_of_service "$COMPOSE_FILE" "$ENV_FILE" web)"
+    if [[ -n "$c_web" ]] && docker inspect "$c_web" >/dev/null 2>&1; then
+        # Prueba real de escritura, con el MISMO usuario que usa la app.
+        uploads_probe="$(docker exec -u www-data "$c_web" sh -c \
+            'touch /var/www/html/uploads/.probe_write 2>/dev/null && rm -f /var/www/html/uploads/.probe_write && echo OK' \
+            2>/dev/null || true)"
+        if [[ "$uploads_probe" == "OK" ]]; then
+            _record 24 "uploads escribible por www-data" 0 "" \
+                "$(docker exec "$c_web" ls -ld /var/www/html/uploads 2>/dev/null | awk '{print $1, $3, $4}' || true)"
+        else
+            _record 24 "uploads escribible por www-data" 1 \
+                "no se pudo escribir en /var/www/html/uploads (dentro de $c_web)"
+            logger_info "[verificar] Fix: docker exec -u root $c_web chown -R www-data:www-data /var/www/html/uploads"
+        fi
+    else
+        _record 24 "uploads escribible por www-data" 1 "contenedor web no disponible"
+    fi
+
     # --- Resumen -------------------------------------------------------
     printf '\n' >&2
     if [[ $SB_FAIL_COUNT -eq 0 ]]; then
-        logger_ok "Smoke test: 23/23 OK"
+        logger_ok "Smoke test: 24/24 OK"
         logger_info "Log completo del operador: $SB_LOG_FILE"
         return 0
     fi
-    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 23"
+    logger_error "Smoke test: $SB_FAIL_COUNT fallos de 24"
     logger_info "Log completo del operador: $SB_LOG_FILE"
     return "$SB_FAIL_COUNT"
 }

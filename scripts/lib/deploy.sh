@@ -183,7 +183,15 @@ mod_deploy_run() {
     fi
 
     # --- 1. Control del directorio -------------------------------------
-    sb_ensure_dir "$SB_REPO_DIR" 755 root root
+    # Owner = el usuario que invoco el operador (SUDO_USER) y grupo
+    # compartido `songbird-ops` con setgid, para que el admin remoto
+    # (songbird_admin) y el usuario del bootstrap puedan editar el MISMO
+    # checkout.
+    #
+    # Antes era `root:root 755`: dejaba la raiz del repo sin escritura para
+    # quien lo clonó, y un `git pull` que agregara un archivo nuevo fallaba
+    # con "Permission denied".
+    sb_ensure_dir "$SB_REPO_DIR" 2775 "$(sb_deploy_owner)" "$(sb_deploy_shared_group)"
 
     # --- 2. .env base ---------------------------------------------------
     if [[ ! -f "$ENV_FILE" ]]; then
@@ -249,13 +257,33 @@ mod_deploy_run() {
     fi
 
     # --- 6. Permisos del .env ------------------------------------------
-    run_cmd chmod 600 "$ENV_FILE"
-    if id "$SB_ADMIN_USER" >/dev/null 2>&1; then
-        run_cmd chown "${SB_ADMIN_USER}:${SB_ADMIN_USER}" "$ENV_FILE" 2>/dev/null || true
+    # 640 con grupo `songbird-ops`: el owner (quien clonó y hace `nano .env`)
+    # lo edita y el admin remoto lo LEE para poder correr `docker compose`
+    # sin sudo. Compose carga el `.env` del directorio del proyecto para
+    # interpolar variables: con 600 el admin no podria ni abrirlo y el
+    # `docker compose` fallaba con "permission denied".
+    run_cmd chmod 640 "$ENV_FILE"
+    run_cmd chown "$(sb_deploy_owner):$(sb_deploy_shared_group)" "$ENV_FILE" 2>/dev/null || true
+
+    sb_kv ".env" "$ENV_FILE (640 $(sb_deploy_owner):$(sb_deploy_shared_group))"
+    sb_kv "Secretos generados" "$generated"
+
+    # --- 6.b Permisos del arbol del repo --------------------------------
+    # Grupo compartido + setgid en todo el arbol (menos src/uploads, que lo
+    # maneja el runtime del contenedor) y .env con la politica de arriba.
+    # Se aplica ANTES del chequeo de "stack ya healthy" para que se ejecute
+    # en cada deploy, no solo en el primero.
+    sb_apply_repo_permissions "$SB_REPO_DIR"
+
+    # --- 6.c Permisos de escritura de uploads ---------------------------
+    # Verifica que el worker de Apache (www-data) pueda escribir en
+    # /var/www/html/uploads. Si no puede, POST /api/documentos devuelve 400
+    # con "move_uploaded_file(): Permission denied" y el resto de la app
+    # funciona normal: el fallo solo aparece cuando alguien sube un PDF.
+    if ! sb_ensure_uploads_writable "$compose_file" "$ENV_FILE"; then
+        logger_warn "uploads: el worker de Apache no puede escribir en /var/www/html/uploads"
     fi
 
-    sb_kv ".env" "$ENV_FILE (600)"
-    sb_kv "Secretos generados" "$generated"
     logger_info "El deploy NO modifica scripts ni código: solo completa el .env y escribe /opt/songbird-operator/credentials.env"
 
     # --- 7. Volumenes de datos preexistentes ---------------------------
@@ -271,6 +299,12 @@ mod_deploy_run() {
     pending="$(sb_compose_pending_services "$compose_file" "$ENV_FILE" || true)"
     if [[ -z "$pending" ]]; then
         logger_ok "[deploy] el stack ya está completo y healthy (skip)"
+        # El skip evita reconstruir la imagen si el stack ya esta sano. Si
+        # cambiaste el Dockerfile (por ejemplo el entrypoint del contenedor web)
+        # o el codigo, ese cambio NO se aplica solo: hay que forzar el rebuild.
+        logger_info "[deploy] Si cambiaste el Dockerfile o el codigo, el rebuild NO se aplica solo:"
+        logger_info "[deploy]   docker compose -f ${compose_file} --env-file ${ENV_FILE} build web"
+        logger_info "[deploy]   docker compose -f ${compose_file} --env-file ${ENV_FILE} up -d web"
         state_set_module_completed deploy '{"skipped": true}'
         mod_deploy_status_summary
         return 0
@@ -294,6 +328,14 @@ mod_deploy_run() {
     # `--remove-orphans` converge el host: elimina contenedores de servicios
     # que ya no existen en el compose file (p.ej. el viejo `songbird_db`).
     run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --remove-orphans
+
+    # --- 9.b Confirmar permisos de escritura de uploads -----------------
+    # Recien ahora existe el contenedor `web`: su entrypoint ya ajusto el
+    # owner de /var/www/html/uploads, asi que se confirma con una escritura
+    # real (mismo usuario que usa la app) antes de seguir.
+    if ! sb_ensure_uploads_writable "$compose_file" "$ENV_FILE"; then
+        logger_warn "uploads: el worker de Apache no puede escribir en /var/www/html/uploads"
+    fi
 
     # --- 10. Replicación: revivir el inicializador si hace falta -------
     # Va ANTES de esperar los healthchecks: si la replica no arranca, el slave

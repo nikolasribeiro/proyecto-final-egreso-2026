@@ -84,7 +84,7 @@ Tiempo total aproximado: **8–12 minutos** en una VM con red decente.
 | 11  | `logs`      | Logrotate + journal persistente                                          | sí                                 |
 | 12  | `backups`   | `cron.d` + script de `mysqldump` + tar + rotación 7d                     | sí                                 |
 | 13  | `deploy`    | Completa el `.env` (solo huecos) + `docker compose up -d`                | sí (skip si healthy)               |
-| 14  | `verificar` | Smoke test de 21 checks                                                  | re-ejecutable                      |
+| 14  | `verificar` | Smoke test de 24 checks                                                  | re-ejecutable                      |
 
 ### Por qué `deps` va primero
 
@@ -195,7 +195,8 @@ Verifica el proyecto del despliegue. **No clona ni copia nada.**
    no por el CWD.
 2. Verifica que estén `docker-compose.yml` y `.env.example`.
 3. Si falta el `.env`, lo crea desde `.env.example` (con permisos 600).
-   Si existe, **no lo toca**.
+   Si existe, **no lo toca**. El módulo `deploy` es el que después aplica la
+   política final: `640`, owner = el usuario que clonó, grupo `songbird-ops`.
 4. Si pasaste `--repo-dir <otro path>`, sincroniza el checkout hacia ese
    destino **incluyendo tu `.env`** (para no perder tus variables).
 
@@ -332,14 +333,36 @@ llave. Antes la prueba corría como `root`, que buscaba la clave en
 - **Solo fuerza** `APP_ENVIRONMENT` y `APP_PORT` si los pediste por flag
   (`--environment`, `--app-port`). Un `--app-port` que no diste no pisa el
   `APP_PORT` que configuraste a mano.
-- `chmod 600 .env`.
+- **Permisos del checkout**:
+  - Raíz del repo: owner = el usuario que invocó el operador (`$SUDO_USER`),
+    grupo compartido `songbird-ops`, modo `2775` (setgid).
+  - Árbol del repo: grupo `songbird-ops`, archivos `g+rw`, directorios
+    `g+rwx,g+s` → el admin remoto y el usuario del bootstrap pueden editar el
+    mismo checkout (`src/uploads/` queda excluido: su owner lo maneja el
+    runtime del contenedor).
+  - `.env`: `640`, owner = el usuario que clonó, grupo `songbird-ops` → el
+    owner lo edita con `nano .env` y el admin lo **lee** para correr
+    `docker compose` sin sudo (Compose carga el `.env` para interpolar
+    variables; con `600` el admin no podía ni abrirlo).
+- **Permisos de `uploads/`**: verifica (y repara) que el worker de Apache
+  (`www-data`) pueda escribir en `/var/www/html/uploads`. El `chown` se hace
+  **dentro** del contenedor, que es el único lugar donde el uid de
+  `www-data` es el correcto (con rootless el uid del host es otro).
 - `docker compose build` → `pull --ignore-buildable` → `up -d --remove-orphans`.
 - Espera hasta 300s a que todos los contenedores estén `healthy`. Los
   contenedores **one-shot** (p. ej. el inicializador de replicación) cuentan
   como OK si terminan con exit code 0.
 - Guarda las credenciales en `/opt/songbird-operator/credentials.env` (chmod 600).
 
-### `verificar` (smoke test, 23 checks)
+> **Si el stack ya estaba `healthy`, el deploy hace `skip` y NO reconstruye la
+> imagen.** Si cambiaste el `Dockerfile` o el código, reconstruí a mano:
+>
+> ```bash
+> docker compose -f <repo>/docker-compose.yml --env-file <repo>/.env build web
+> docker compose -f <repo>/docker-compose.yml --env-file <repo>/.env up -d web
+> ```
+
+### `verificar` (smoke test, 24 checks)
 
 | #   | Check                                                    | Esperado                          |
 | --- | -------------------------------------------------------- | --------------------------------- |
@@ -357,7 +380,7 @@ llave. Antes la prueba corría como `root`, que buscaba la clave en
 | 12  | ping de la BD de Zabbix                                  | OK                                |
 | 13  | `/etc/cron.d/songbird-backup` existe                     | OK                                |
 | 14  | `logrotate -d` sin errores                               | OK                                |
-| 15  | `stat -c '%a' .env`                                      | `600`                             |
+| 15  | `stat -c '%a %G' .env`                                    | `640` + grupo `songbird-ops`      |
 | 16  | Master: `@@log_bin=1` y `@@server_id=1`                  | OK                                |
 | 17  | Slave: `@@read_only=1` y `@@server_id=2`                 | OK                                |
 | 18  | `SHOW GLOBAL STATUS LIKE 'Slave_running'`                | `ON`                              |
@@ -365,8 +388,8 @@ llave. Antes la prueba corría como `root`, que buscaba la clave en
 | 20  | GTID del slave ≥ GTID del master                         | sin lag                           |
 | 21  | Split read/write activo en el `.env`                     | `true`                            |
 | 22  | Log del operador disponible y con contenido              | legible                           |
-| 23  | Llaves de host de SSH presentes en `/etc/ssh`              | al menos una                       |
-| 23  | Llaves de host de SSH presentes en `/etc/ssh`              | al menos una                       |
+| 23  | Llaves de host de SSH presentes en `/etc/ssh`             | al menos una                      |
+| 24  | Escritura real en `/var/www/html/uploads` como `www-data` | `OK`                              |
 
 **Exit codes**: `0` = todo OK · `1..N` = N checks fallidos · `64` = config inválida · `70` = error interno.
 
@@ -437,7 +460,7 @@ BASE DE DATOS (master-slave)
 RUTAS
   Proyecto        /opt/songbird-app
   Compose file    /opt/songbird-app/docker-compose.yml
-  Variables       /opt/songbird-app/.env (600)
+  Variables       /opt/songbird-app/.env (640, grupo songbird-ops)
   Credenciales    /opt/songbird-operator/credentials.env (600)
   Log operador    /var/log/songbird/songbird-operator.log
   Backups         /var/backups/songbird/
@@ -544,6 +567,46 @@ grep PasswordAuthentication /etc/ssh/sshd_config.d/00-songbird-hardening.conf
 passwd -S songbird_admin     # debe devolver "P" (no "L" = bloqueado)
 ```
 
+### La subida de documentos falla con "Permission denied"
+
+Síntoma: el login, el dashboard y los listados funcionan, pero al subir un
+PDF el `POST /api/documentos` devuelve `400` y el log del contenedor `web`
+muestra:
+
+```
+PHP Warning: move_uploaded_file(.../uploads/archivo.pdf): Failed to open stream: Permission denied
+```
+
+Causa: `/var/www/html/uploads` es un bind mount de `./src/uploads` en el
+host. El worker de Apache escribe ahí como `www-data`; si el directorio no
+es escribible por ese usuario, la subida falla.
+
+Diagnóstico:
+
+```bash
+# ¿El worker puede escribir?
+docker exec -u www-data songbird_web sh -c \
+  'touch /var/www/html/uploads/.probe && rm -f /var/www/html/uploads/.probe && echo OK'
+
+# ¿Qué owner/mode ve el contenedor?
+docker exec songbird_web ls -ld /var/www/html/uploads
+```
+
+Fix (el entrypoint del contenedor lo hace solo al arrancar; esto es el
+remanual por si el contenedor no se reinició):
+
+```bash
+docker exec -u root songbird_web chown -R www-data:www-data /var/www/html/uploads
+```
+
+Si el fix no se mantiene, es que la imagen nueva no está desplegada (el
+deploy hace `skip` si el stack ya está healthy):
+
+```bash
+docker compose -f <repo>/docker-compose.yml --env-file <repo>/.env build web
+docker compose -f <repo>/docker-compose.yml --env-file <repo>/.env up -d web
+```
+
 ### La replicación no arranca
 
 ```bash
@@ -613,6 +676,7 @@ sudo journalctl -u docker
 /var/lib/songbird-operator/state.json                     # estado de idempotencia
 /opt/songbird-operator/credentials.env                    # passwords generados (chmod 600)
 <checkout>/                                                # proyecto desplegado (in-place)
+<checkout>/src/uploads/                                   # PDFs subidos (owner www-data, 0775)
 ```
 
 ---

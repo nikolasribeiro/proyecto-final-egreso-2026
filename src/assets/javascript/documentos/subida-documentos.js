@@ -120,7 +120,22 @@
         });
 
         if (!response.ok) {
-          throw new Error("Error al procesar la subida.");
+          // El backend responde JSON con el motivo real del rechazo:
+          //   {"error": "No se pudo guardar el archivo en el servidor."}
+          // Antes mostrabamos un mensaje generico y el operador se enteraba
+          // del problema (permisos de uploads, PDF invalido, sesion caduca)
+          // recien mirando el log del servidor.
+          let detalle = "";
+          try {
+            const data = await response.json();
+            detalle = data && data.error ? String(data.error) : "";
+          } catch (e) {
+            // Respuesta sin JSON (error de proxy/Apache): se usa el status.
+            detalle = "";
+          }
+          throw new Error(
+            detalle || `Error al procesar la subida (HTTP ${response.status}).`,
+          );
         } else {
           mostrarFeedback("Documento subido con éxito.", "exito");
           setTimeout(() => window.location.reload(), 1200);
