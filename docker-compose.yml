@@ -1,21 +1,42 @@
-# Este es el docker-compose.yml que utilizaremos en modo DESARROLLO.
-# En este caso, usamos PHP:8.2-apache como una imagen preconfigurada para PHP.
-# También utilizamos una base de datos MariaDB para almacenar los datos.
-# Finalmente, usamos PHPMyAdmin para administrar la base de datos.
-# El archivo de produccion sera docker-compose.prod.yml y no se utilizara phpmyadmin
+# =============================================================================
+# SONGBIRD — Stack completo (DESARROLLO y PRODUCCIÓN)
+# =============================================================================
+# Este es el ÚNICO compose file del proyecto: el mismo archivo levanta el
+# entorno de desarrollo y el de producción. Lo que cambia entre ambos es el
+# contenido del `.env` (APP_ENVIRONMENT, credenciales, APP_PORT), que el
+# módulo `deploy` del operador genera para producción.
 #
-# Zabbix (server, web, db y 3 agentes) forma parte del arranque normal
-# del entorno de desarrollo. No se necesita ningún profile.
+# BASE DE DATOS: estrategia MASTER-SLAVE
+#   db-master            → escritura. Alias de red `db` (compatibilidad).
+#   db-slave             → lectura. Réplica con GTID, solo lectura.
+#   db-replication-init  → one-shot: crea el usuario de replicación y
+#                          ejecuta CHANGE MASTER TO + START SLAVE.
 #
-# Orquestación: cada servicio declara un `healthcheck:` y todas las
-# dependencias usan `condition: service_healthy`. Esto elimina la race
-# condition que provocaba un 502 transitorio en /zabbix/ cuando nginx
-# arrancaba antes de que zabbix-web terminara su inicialización interna.
+# El healthcheck del slave exige `Slave_running=ON`: "healthy" significa
+# "replicando de verdad", no solo "el proceso vive".
+#
+# CONFIGURACIÓN DECLARATIVA
+#   Los parámetros de cada nodo MariaDB están declarados en el `command:` del
+#   servicio, con el "por qué" de cada setting en los comentarios.
+#   La única lógica (el CHANGE MASTER TO) vive en un único script:
+#     database/replication/init-replication.sh
+#
+# ORQUESTACIÓN
+#   Cada servicio declara un `healthcheck:` y las dependencias usan
+#   `condition: service_healthy`. Esto elimina las race conditions que
+#   provocaban un 502 transitorio en /zabbix/ y en la app.
+#
+# IMPORTANTE (entrypoint de MariaDB)
+#   El entrypoint hace `set -- mariadbd "$@"` SOLO si el primer argumento
+#   empieza con "-". Por eso `command:` NO debe incluir el literal `mariadbd`:
+#   `command: [mariadbd, --server-id=1]` ejecutaría `mariadbd mariadbd ...`.
+# =============================================================================
 
 services:
   proxy:
     image: nginx:alpine
     container_name: songbird_proxy
+    restart: unless-stopped
     ports:
       - "${APP_PORT}:80"
     volumes:
@@ -24,11 +45,9 @@ services:
     networks:
       - songbird_network
     # proxy no arranca hasta que TODOS sus upstreams están healthy.
-    # Esto garantiza que /zabbix/ y /phpmyadmin/ respondan al primer request.
+    # Esto garantiza que /zabbix/ responda al primer request.
     depends_on:
       web:
-        condition: service_healthy
-      phpmyadmin:
         condition: service_healthy
       zabbix-web:
         condition: service_healthy
@@ -43,18 +62,38 @@ services:
   web:
     build: .
     container_name: songbird_web
+    restart: unless-stopped
     environment:
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
+      # --- Estrategia master-slave ---
+      # DB_HOST      = maestro (escritura)
+      # DB_SLAVE_HOST = esclavo (lectura)
+      DB_HOST: ${DB_HOST:-db-master}
+      DB_SLAVE_HOST: ${DB_SLAVE_HOST:-db-slave}
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASS: ${MYSQL_PASSWORD}
+      DB_PORT: ${DB_PORT:-3306}
+      # Enruta SELECT al slave e INSERT/UPDATE/DELETE al master.
+      DB_READ_REPLICA_ENABLED: ${DB_READ_REPLICA_ENABLED:-true}
+      # Tras una escritura, espera a que el slave la aplique ("leer lo que
+      # escribí"). Sin esto, una lectura posterior en otro request podría ir
+      # al slave y todavía no ver la fila recién insertada.
+      DB_REPLICA_WAIT_AFTER_WRITE: ${DB_REPLICA_WAIT_AFTER_WRITE:-true}
+      DB_REPLICA_WAIT_TIMEOUT_MS: ${DB_REPLICA_WAIT_TIMEOUT_MS:-2000}
+      # Variables heredadas (compatibilidad con el código existente).
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - ./src:/var/www/html:z
-
     networks:
       - songbird_network
+    # La app depende SOLO del master: si el slave cae, la app sigue
+    # escribiendo (fail-open al master) en vez de quedarse sin base de datos.
     depends_on:
-      db:
+      db-master:
         condition: service_healthy
     # Healthcheck HTTP: `curl` viene incluido en php:8.2-apache.
     # Acepta 2xx/3xx/4xx, rechaza 5xx (Apache vivo pero respondiendo error de app).
@@ -67,42 +106,174 @@ services:
       retries: 6
       start_period: 20s
 
-  db:
+  # ==========================================================================
+  # BASE DE DATOS: MASTER (escritura)
+  # ==========================================================================
+  db-master:
     image: mariadb:10.11
-    container_name: songbird_db
+    container_name: songbird_db_master
+    restart: unless-stopped
+    # Configuración del nodo maestro.
+    # NO incluir el literal `mariadbd` (ver nota del entrypoint arriba).
+    command:
+      # Identidad del nodo: debe ser única dentro del cluster (1=master, 2=slave).
+      - --server-id=1
+      # Binary log: es exactamente lo que el slave replica.
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      # GTID: habilita el auto-posicionado del slave (MASTER_USE_GTID=slave_pos),
+      # así el slave retoma solo lo que se perdió mientras estuvo caído.
+      - --gtid-strict-mode=ON
+      - --gtid-domain-id=0
+      # Registra en su propio binlog lo que replica. Necesario para que el
+      # slave lleve el registro de los GTID que aplicó (gtid_binlog_pos).
+      - --log-slave-updates=ON
+      # DURABILIDAD: con el default (sync_binlog=0) una caída del host puede
+      # perder transacciones YA confirmadas que el slave nunca recibió, y
+      # master y slave divergen. Con 1, el binlog se fsync antes del ack.
+      - --sync-binlog=1
+      # Retención del binlog: 7 días. El slave lo necesita para reconectar.
+      - --binlog-expire-logs-seconds=604800
+      # Evita el DNS inverso en cada conexión.
+      - --skip-name-resolve=ON
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - mariadb_master_data:/var/lib/mysql
+      # Schema inicial: solo en el master. El slave lo recibe por replicación.
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
     networks:
-      - songbird_network
-    # Healthcheck MariaDB: `mariadb-admin ping` (la imagen incluye ambos aliases).
-    # El doble `$$` escapa la variable para que la expanda el shell dentro del contenedor.
+      songbird_network:
+        aliases:
+          # Alias `db` por compatibilidad: phpMyAdmin (PMA_HOST) y cualquier
+          # configuración legacy siguen apuntando al master.
+          - db
+          - db-master
+    # Healthcheck MariaDB: `mariadb-admin ping` + binlog habilitado.
+    # El doble `$$` escapa la variable para que la expanda el shell del contenedor.
     healthcheck:
       test:
         - CMD-SHELL
-        - mariadb-admin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+        - >-
+          mariadb-admin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+          && mariadb --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" -N -B
+          -e 'SELECT @@log_bin' | grep -qx 1
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 40s
+
+  # ==========================================================================
+  # BASE DE DATOS: SLAVE (lectura / respaldo en caliente)
+  # ==========================================================================
+  db-slave:
+    image: mariadb:10.11
+    container_name: songbird_db_slave
+    restart: unless-stopped
+    # Configuración del nodo esclavo.
+    command:
+      # Identidad del nodo (distinta del master).
+      - --server-id=2
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --gtid-strict-mode=ON
+      - --gtid-domain-id=0
+      - --log-slave-updates=ON
+      # Solo lectura: bloquea INSERT/UPDATE/DELETE a los usuarios SIN
+      # privilegio SUPER (el usuario de la app no lo tiene).
+      - --read-only=ON
+      # Relay log: donde el slave aplica lo que recibe del master.
+      - --relay-log=relay-bin
+      # Recupera el relay log si quedó corrupto tras una caída. Sin esto el
+      # slave puede no volver a arrancar.
+      - --relay-log-recovery=ON
+      # Aplica los eventos en paralelo.
+      - --slave-parallel-workers=4
+      - --skip-name-resolve=ON
+    environment:
+      # OJO: no se pasa MYSQL_DATABASE/USER/PASSWORD. El entrypoint del slave
+      # crearía localmente los objetos que luego llegan por replicación
+      # (CREATE DATABASE / CREATE USER) y la replicación se rompería.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER:-repl}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+    volumes:
+      - mariadb_slave_data:/var/lib/mysql
+    networks:
+      songbird_network:
+        aliases:
+          - db-slave
+    depends_on:
+      db-master:
+        condition: service_healthy
+    # Healthcheck ESTRICTO: además del ping exige que los hilos de
+    # replicación (IO y SQL) estén corriendo. `Slave_running` es ON solo
+    # cuando ambos hilos funcionan.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mariadb-admin ping --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent
+          && mariadb --protocol=tcp -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" -N -B
+          -e 'SHOW GLOBAL STATUS LIKE "Slave_running"' | grep -q ON
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ==========================================================================
+  # INICIALIZADOR DE REPLICACIÓN (one-shot)
+  # ==========================================================================
+  # Crea el usuario de replicación en el master y configura el slave con
+  # CHANGE MASTER TO (auto-posicionado por GTID) + START SLAVE.
+  # Es idempotente: si la replicación ya está activa, sale con 0.
+  db-replication-init:
+    # Reusa la imagen de MariaDB: ya trae el cliente `mariadb` que necesita
+    # el script, así que no hace falta ningún build ni descarga extra.
+    image: mariadb:10.11
+    container_name: songbird_db_replication_init
+    restart: "no"
+    # Se sobrescribe el entrypoint de la imagen (que arrancaría un servidor)
+    # para ejecutar el script una vez y morir.
+    entrypoint: ["/bin/bash", "/opt/init-replication.sh"]
+    volumes:
+      - ./database/replication/init-replication.sh:/opt/init-replication.sh:Z
+    environment:
+      MASTER_HOST: db-master
+      SLAVE_HOST: db-slave
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_REPLICATION_USER: ${MYSQL_REPLICATION_USER:-repl}
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPLICATION_PASSWORD}
+      REPL_WAIT_TIMEOUT: 120
+    networks:
+      - songbird_network
+    depends_on:
+      db-master:
+        condition: service_healthy
+      # `service_started` (no healthy): el healthcheck del slave exige que la
+      # replicación esté activa, y eso es justamente lo que hace este
+      # contenedor. Con `service_healthy` habría un deadlock.
+      db-slave:
+        condition: service_started
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: songbird_pma
+    restart: unless-stopped
     environment:
       PMA_ABSOLUTE_URI: ${BASE_PATH}/phpmyadmin/
-      PMA_HOST: ${PMA_HOST}
-      PMA_USER: ${PMA_USER}
-      PMA_PASSWORD: ${PMA_PASSWORD}
+      PMA_HOST: ${PMA_HOST:-db-master}
+      PMA_USER: ${PMA_USER:-${MYSQL_USER}}
+      PMA_PASSWORD: ${PMA_PASSWORD:-${MYSQL_PASSWORD}}
     networks:
       - songbird_network
     depends_on:
-      db:
+      db-master:
         condition: service_healthy
     # phpMyAdmin incluye curl (es Debian-based). Mismo patrón que `web`.
     healthcheck:
@@ -114,12 +285,13 @@ services:
       retries: 6
       start_period: 30s
 
-  # ==========================================
-  # AGENTES ZABBIX
-  # ==========================================
+  # ==========================================================================
+  # AGENTES ZABBIX (sidecar por servicio)
+  # ==========================================================================
   zabbix-agent-proxy:
     image: ${ZABBIX_AGENT_IMAGE}
-    container_name: zabbix-agent-proxy
+    container_name: songbird_zabbix_agent_proxy
+    restart: unless-stopped
     environment:
       - ZBX_SERVER_HOST=zabbix-server
       - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
@@ -145,7 +317,8 @@ services:
 
   zabbix-agent-web:
     image: ${ZABBIX_AGENT_IMAGE}
-    container_name: zabbix-agent-web
+    container_name: songbird_zabbix_agent_web
+    restart: unless-stopped
     environment:
       - ZBX_SERVER_HOST=zabbix-server
       - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
@@ -169,20 +342,47 @@ services:
 
   zabbix-agent-db:
     image: ${ZABBIX_AGENT_IMAGE}
-    container_name: zabbix-agent-db
+    container_name: songbird_zabbix_agent_db
+    restart: unless-stopped
     environment:
       - ZBX_SERVER_HOST=zabbix-server
       - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
       - ZBX_HOSTNAME=songbird_db
       - ZBX_PASSIVE_ALLOW=true
       - ZBX_ACTIVE_ALLOW=true
-      - ZBX_METADATA=songbird db mariadb
+      - ZBX_METADATA=songbird db mariadb master
     networks:
       - songbird_network
     depends_on:
       zabbix-server:
         condition: service_healthy
-      db:
+      db-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # Agente del ESCLAVO: permite alertar por lag de replicación.
+  zabbix-agent-db-slave:
+    image: ${ZABBIX_AGENT_IMAGE}
+    container_name: songbird_zabbix_agent_db_slave
+    restart: unless-stopped
+    environment:
+      - ZBX_SERVER_HOST=zabbix-server
+      - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
+      - ZBX_HOSTNAME=songbird_db_slave
+      - ZBX_PASSIVE_ALLOW=true
+      - ZBX_ACTIVE_ALLOW=true
+      - ZBX_METADATA=songbird db mariadb slave replica
+    networks:
+      - songbird_network
+    depends_on:
+      zabbix-server:
+        condition: service_healthy
+      db-slave:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
@@ -193,12 +393,13 @@ services:
 
   zabbix-agent-server:
     image: ${ZABBIX_AGENT_IMAGE}
-    container_name: zabbix-agent-server
+    container_name: songbird_zabbix_agent_server
+    restart: unless-stopped
     environment:
       - ZBX_SERVER_HOST=zabbix-server
       - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
       # Este nombre debe coincidir exactamente con el que Zabbix trae por defecto
-      - ZBX_HOSTNAME=Zabbix server 
+      - ZBX_HOSTNAME=Zabbix server
       - ZBX_PASSIVE_ALLOW=true
       - ZBX_ACTIVE_ALLOW=true
     networks:
@@ -206,7 +407,6 @@ services:
     depends_on:
       zabbix-server:
         condition: service_healthy
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "nc -z -w 3 127.0.0.1 10050 || exit 1"]
       interval: 15s
@@ -214,12 +414,13 @@ services:
       retries: 6
       start_period: 30s
 
-  # ==========================================
-  # INFRAESTRUCTURA DE MONITOREO (ZABBIX)
-  # ==========================================
+  # ==========================================================================
+  # INFRAESTRUCTURA DE MONITOREO (Zabbix)
+  # ==========================================================================
   zabbix-db:
     image: ${ZABBIX_DB_IMAGE}
-    container_name: zabbix-db-dev
+    container_name: songbird_zabbix_db
+    restart: unless-stopped
     command: --log_bin_trust_function_creators=1
     environment:
       - TZ=${ZABBIX_TZ}
@@ -243,7 +444,8 @@ services:
 
   zabbix-server:
     image: ${ZABBIX_SERVER_IMAGE}
-    container_name: zabbix-server-dev
+    container_name: songbird_zabbix_server
+    restart: unless-stopped
     environment:
       - TZ=${ZABBIX_TZ}
       - DB_SERVER_HOST=zabbix-db
@@ -269,7 +471,8 @@ services:
 
   zabbix-web:
     image: ${ZABBIX_WEB_IMAGE}
-    container_name: zabbix-web-dev
+    container_name: songbird_zabbix_web
+    restart: unless-stopped
     environment:
       - TZ=${ZABBIX_TZ}
       - DB_SERVER_HOST=zabbix-db
@@ -279,7 +482,7 @@ services:
       - ZBX_SERVER_HOST=zabbix-server
       - ZBX_SERVER_PORT=${ZABBIX_SERVER_PORT}
       - PHP_TZ=${ZABBIX_TZ}
-      # URL pública del frontend. CRÍTICO cuando Zabbix vive detrás de
+      # URL pública del frontend de Zabbix. CRÍTICO cuando Zabbix vive detrás de
       # un reverse proxy en sub-path: si Zabbix no conoce su URL pública
       # completa, emite redirects relativos que el navegador resuelve en
       # bucles infinitos al cruzar auth/login.
@@ -301,7 +504,8 @@ services:
       start_period: 60s
 
 volumes:
-  mariadb_data:
+  mariadb_master_data:
+  mariadb_slave_data:
   zabbix-db-data:
 
 networks:

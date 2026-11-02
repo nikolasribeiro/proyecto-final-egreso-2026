@@ -1,56 +1,199 @@
 #!/usr/bin/env bash
 # scripts/lib/deploy.sh
-# Regenera .env, despliega el stack via docker-compose.prod.yml.
-# NO clona el repo — asume /opt/songbird-app ya presente.
+# Genera el .env (solo los huecos) y despliega el stack con docker compose.
 # Modulo: deploy
+#
+# RESPETO POR LA CONFIGURACION DEL USUARIO
+# ----------------------------------------
+# El `.env` es configuracion del operador. Este modulo:
+#   - NO sobreescribe valores que ya definiste (PMA_HOST, DB_HOST, APP_PORT,
+#     APP_ENVIRONMENT, tus credenciales...).
+#   - Solo RELLENA lo que esta vacio (nombres de BD, usuario, secretos).
+#   - Solo FUERZA APP_PORT / APP_ENVIRONMENT si los pediste por flag
+#     (`--app-port`, `--environment`).
+#
+# CAMBIOS IMPORTANTES (v0.2.0)
+# ----------------------------
+# 1. Usa el compose file UNICO `docker-compose.yml` (dev y prod).
+#    Antes apuntaba a `docker-compose.prod.yml`, que fue eliminado del repo:
+#    el deploy fallaba SIEMPRE con "No se encontró ..." y abortaba el `--all`.
+# 2. Genera las credenciales que quedaron vacias en `.env.example`
+#    (MYSQL_DATABASE/USER/PASSWORD/ROOT_PASSWORD). Antes solo se regeneraban
+#    las de Zabbix y la BD de la app quedaba sin credenciales.
+# 3. Las credenciales de Zabbix SOLO se generan si estan vacias o son el
+#    placeholder `cambiar_en_produccion`. Regenerarlas siempre rompia el stack
+#    ya desplegado (la BD interna de Zabbix conservaba el password viejo).
+# 4. La espera de healthchecks distingue contenedores one-shot (exited 0) de
+#    los permanentes. Antes comparaba `healthy >= total_services`, lo que
+#    NUNCA se cumplia y hacia esperar los 180s completos siempre.
+# 5. `docker compose ps --format json` cambio a array JSON en Compose v2.21+.
+#    El parser nuevo tolera ambos formatos.
 
 set -euo pipefail
 IFS=$'\n\t'
 
 ENV_FILE="${SB_REPO_DIR}/.env"
 ENV_EXAMPLE="${SB_REPO_DIR}/.env.example"
-COMPOSE_FILE="${SB_REPO_DIR}/docker-compose.prod.yml"
+
+# Resuelve las rutas del proyecto en el momento de usarlas.
+# (Los modulos se cargan dinamicamente, pero depender del valor de SB_REPO_DIR
+#  al momento del `source` es fragil: si el flag se parsea despues, la ruta
+#  quedaria desactualizada.)
+sb_deploy_paths() {
+    ENV_FILE="${SB_REPO_DIR}/.env"
+    ENV_EXAMPLE="${SB_REPO_DIR}/.env.example"
+}
+
+# Valores por defecto de la base de la app (usados solo si estan vacios).
+readonly SB_DEFAULT_DB_NAME="clinicas_db"
+readonly SB_DEFAULT_DB_USER="songbird_app"
+readonly SB_DEFAULT_REPL_USER="repl"
+
+# Genera un secreto solo si el valor actual esta vacio o es un placeholder.
+# Devuelve 0 si genero el valor, 1 si ya existia.
+#
+# IMPORTANTE: solo se rellenan valores VACIOS. Un valor que el operador ya
+# cargo a mano NUNCA se pisa.
+sb_env_ensure_secret() {
+    local file="$1" key="$2" current
+    current="$(sb_env_get "$file" "$key" 2>/dev/null || true)"
+    if [[ -z "$current" || "$current" == "cambiar_en_produccion" || "$current" == "CHANGE_ME" || "$current" == "change_me" ]]; then
+        sb_env_set "$file" "$key" "$(sb_gen_password)"
+        logger_info ".env: $key = <generado>   (estaba vacio)"
+        return 0
+    fi
+    return 1
+}
+
+# Asegura que la clave exista con un valor no vacio. Si el valor es vacio se
+# usa el default passed como $3.
+sb_env_ensure_value() {
+    local file="$1" key="$2" fallback="$3" current
+    current="$(sb_env_get "$file" "$key" 2>/dev/null || true)"
+    if [[ -z "$current" ]]; then
+        sb_env_set "$file" "$key" "$fallback"
+        logger_info ".env: $key = $fallback   (estaba vacio)"
+    fi
+}
+
+
+# ----------------------------------------------------------------------------
+# Replicación: el inicializador es one-shot, hay que poder re-animarlo
+# ----------------------------------------------------------------------------
+# El contenedor `db-replication-init` corre una vez y muere. Si falla (o si el
+# slave se recreó con el volumen vacío), la réplica queda MUERTA y nadie la
+# levanta: el healthcheck del slave exige Slave_running=ON, así que el deploy
+# esperaba los 300s completos y el resumen decía "NO ACTIVA" sin explicar por
+# qué.
+#
+# El inicializador es idempotente (si la réplica ya está activa sale con 0 sin
+# tocar nada), así que re-ejecutarlo es seguro.
+
+# ¿Está la réplica activa? ( Slave_running=ON )
+sb_deploy_replication_on() {
+    local compose_file="$1" env_file="$2"
+    local c_slave root_pwd estado
+    c_slave="$(sb_compose_container_of_service "$compose_file" "$env_file" db-slave)"
+    [[ -z "$c_slave" ]] && return 1
+    root_pwd="$(sb_env_get "$env_file" MYSQL_ROOT_PASSWORD 2>/dev/null || true)"
+    [[ -z "$root_pwd" ]] && return 1
+    estado="$(docker exec "$c_slave" \
+        mariadb -uroot -p"$root_pwd" --protocol=tcp -h 127.0.0.1 -N -B \
+        -e "SHOW GLOBAL STATUS LIKE 'Slave_running';" 2>/dev/null | cut -f2 || true)"
+    [[ "$estado" == "ON" ]]
+}
+
+# Espera a que el inicializador termine y, si la replica no quedo activa,
+# lo re-ejecuta. Devuelve 0 si la replica quedo activa.
+sb_deploy_ensure_replication() {
+    local compose_file="$1" env_file="$2" intentos="${3:-2}"
+    local i waited estado exit_code init_c
+
+    init_c="$(sb_compose_container_of_service "$compose_file" "$env_file" db-replication-init)"
+
+    for ((i = 1; i <= intentos; i++)); do
+        # 1. Esperar a que el inicializador termine (max 180s)
+        if [[ -n "$init_c" ]]; then
+            waited=0
+            while (( waited < 180 )); do
+                estado="$(docker inspect -f '{{.State.Status}}' "$init_c" 2>/dev/null || true)"
+                [[ "$estado" == "exited" ]] && break
+                [[ -z "$estado" ]] && break
+                sleep 3
+                waited=$((waited + 3))
+            done
+            exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$init_c" 2>/dev/null || echo '?')"
+            if [[ "$exit_code" != "0" ]]; then
+                logger_warn "db-replication-init terminó con exit code ${exit_code}:"
+                docker logs "$init_c" 2>&1 | tail -n 12 | sed 's/^/    /' >&2 || true
+            fi
+        fi
+
+        # 2. ¿La replica quedo activa?
+        if sb_deploy_replication_on "$compose_file" "$env_file"; then
+            logger_ok "Replicación activa (Slave_running=ON)"
+            return 0
+        fi
+
+        # 3. Reintentar: el inicializador es idempotente
+        if (( i < intentos )); then
+            logger_warn "La réplica no está activa: se re-ejecuta db-replication-init (intento $((i + 1))/${intentos})"
+            docker compose -f "$compose_file" --env-file "$env_file" \
+                up -d --force-recreate db-replication-init >/dev/null 2>&1 || true
+            init_c="$(sb_compose_container_of_service "$compose_file" "$env_file" db-replication-init)"
+        fi
+    done
+
+    logger_error "La réplica no se pudo activar. Diagnóstico:"
+    logger_error "  docker compose logs db-replication-init"
+    logger_error "  docker compose exec db-slave mariadb -uroot -p\"\$MYSQL_ROOT_PASSWORD\" -e \"SHOW SLAVE STATUS\\G\""
+    return 1
+}
 
 mod_deploy_run() {
-    logger_section "Módulo deploy (NO clona)"
+    logger_section "Módulo deploy"
 
+    sb_deploy_paths
+
+    local compose_file
+    compose_file="$(sb_compose_file)"
+
+    # --- 0. Precondiciones ---------------------------------------------
     if [[ ! -d "$SB_REPO_DIR" ]]; then
-        logger_error "Repo no encontrado en $SB_REPO_DIR. Cloná el repo manualmente y re-ejecutá."
+        logger_error "Repo no encontrado en $SB_REPO_DIR."
+        logger_error "Ejecutá primero: sudo scripts/operator.sh --module repo"
         return 64
     fi
-    if [[ ! -d "$SB_REPO_DIR/.git" ]]; then
-        logger_warn "$SB_REPO_DIR no parece ser un repo git (.git ausente)"
-    fi
-    if [[ ! -f "$COMPOSE_FILE" ]]; then
-        logger_error "No se encontró $COMPOSE_FILE"
+    if [[ ! -f "$compose_file" ]]; then
+        logger_error "No se encontró ${compose_file}"
+        logger_error "El modulo 'repo' debe sincronizar el proyecto antes del deploy."
         return 64
     fi
     if [[ ! -f "$ENV_EXAMPLE" ]]; then
         logger_error "No se encontró $ENV_EXAMPLE (¿hiciste git pull?)"
         return 64
     fi
-
-    # Idempotencia: si el stack está corriendo y .env existe, skip
-    if [[ -f "$ENV_FILE" ]] && \
-        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --services --filter status=running 2>/dev/null | \
-        grep -q .; then
-        local running
-        running="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --services --filter status=running 2>/dev/null | wc -l)"
-        if [[ "$running" -ge 9 ]]; then
-            logger_ok "[deploy] ya hay $running servicios corriendo (skip)"
-            state_set_module_completed deploy \
-                '{"containers_running": '"${running}"', "skipped": true}'
-            return 0
-        fi
+    if ! command -v docker >/dev/null 2>&1; then
+        logger_error "docker no está instalado (¿ejecutaste el módulo 'docker'?)"
+        return 70
+    fi
+    if ! docker compose version >/dev/null 2>&1; then
+        logger_error "el plugin docker compose no está disponible"
+        return 70
     fi
 
-    # 1. Tomar control del directorio
-    run_cmd install -d -m 755 -o root -g root "$SB_REPO_DIR"
-    if id songbird_admin >/dev/null 2>&1; then
-        run_cmd chown -R "${SB_ADMIN_USER}:${SB_ADMIN_USER}" "$SB_REPO_DIR" 2>/dev/null || true
-    fi
+    # --- 1. Control del directorio -------------------------------------
+    # Owner = el usuario que invoco el operador (SUDO_USER) y grupo
+    # compartido `songbird-ops` con setgid, para que el admin remoto
+    # (songbird_admin) y el usuario del bootstrap puedan editar el MISMO
+    # checkout.
+    #
+    # Antes era `root:root 755`: dejaba la raiz del repo sin escritura para
+    # quien lo clonó, y un `git pull` que agregara un archivo nuevo fallaba
+    # con "Permission denied".
+    sb_ensure_dir "$SB_REPO_DIR" 2775 "$(sb_deploy_owner)" "$(sb_deploy_shared_group)"
 
-    # 2. Copiar .env.example -> .env (si no existe)
+    # --- 2. .env base ---------------------------------------------------
     if [[ ! -f "$ENV_FILE" ]]; then
         run_cmd cp -n "$ENV_EXAMPLE" "$ENV_FILE"
         logger_ok "Creado $ENV_FILE desde .env.example"
@@ -58,116 +201,214 @@ mod_deploy_run() {
         logger_info "Preservando $ENV_FILE existente"
     fi
 
-    # 3. Regenerar credenciales Zabbix SIEMPRE (defaults literales rompen healthchecks)
-    local zbx_pwd zbx_root_pwd
-    zbx_pwd="$(sb_gen_password)"
-    zbx_root_pwd="$(sb_gen_password)"
+    # --- 3. Credenciales: solo se generan si faltan --------------------
+    local generated=0
 
-    # Reemplazar líneas en .env (in-place, con sed delimitador |)
-    if grep -qE "^ZABBIX_DB_PASSWORD=" "$ENV_FILE"; then
-        run_cmd sed -i.bak "s|^ZABBIX_DB_PASSWORD=.*|ZABBIX_DB_PASSWORD=${zbx_pwd}|" "$ENV_FILE"
-    else
-        run_cmd bash -c "echo 'ZABBIX_DB_PASSWORD=${zbx_pwd}' >> '$ENV_FILE'"
+    if sb_env_ensure_secret "$ENV_FILE" MYSQL_PASSWORD; then
+        logger_ok "MYSQL_PASSWORD generado"
+        generated=$((generated + 1))
     fi
-    if grep -qE "^ZABBIX_DB_ROOT_PASSWORD=" "$ENV_FILE"; then
-        run_cmd sed -i.bak "s|^ZABBIX_DB_ROOT_PASSWORD=.*|ZABBIX_DB_ROOT_PASSWORD=${zbx_root_pwd}|" "$ENV_FILE"
-    else
-        run_cmd bash -c "echo 'ZABBIX_DB_ROOT_PASSWORD=${zbx_root_pwd}' >> '$ENV_FILE'"
+    if sb_env_ensure_secret "$ENV_FILE" MYSQL_ROOT_PASSWORD; then
+        logger_ok "MYSQL_ROOT_PASSWORD generado"
+        generated=$((generated + 1))
     fi
-
-    # 4. Forzar APP_ENVIRONMENT=production
-    if grep -qE "^APP_ENVIRONMENT=" "$ENV_FILE"; then
-        run_cmd sed -i "s|^APP_ENVIRONMENT=.*|APP_ENVIRONMENT=production|" "$ENV_FILE"
-    else
-        run_cmd bash -c "echo 'APP_ENVIRONMENT=production' >> '$ENV_FILE'"
+    if sb_env_ensure_secret "$ENV_FILE" MYSQL_REPLICATION_PASSWORD; then
+        logger_ok "MYSQL_REPLICATION_PASSWORD generado"
+        generated=$((generated + 1))
     fi
-
-    # 5. Forzar APP_PORT
-    if grep -qE "^APP_PORT=" "$ENV_FILE"; then
-        run_cmd sed -i "s|^APP_PORT=.*|APP_PORT=${SB_APP_PORT}|" "$ENV_FILE"
+    if sb_env_ensure_secret "$ENV_FILE" ZABBIX_DB_PASSWORD; then
+        logger_ok "ZABBIX_DB_PASSWORD generado"
+        generated=$((generated + 1))
+    fi
+    if sb_env_ensure_secret "$ENV_FILE" ZABBIX_DB_ROOT_PASSWORD; then
+        logger_ok "ZABBIX_DB_ROOT_PASSWORD generado"
+        generated=$((generated + 1))
     fi
 
-    # 6. Permisos
-    run_cmd chmod 600 "$ENV_FILE"
-    if id songbird_admin >/dev/null 2>&1; then
-        run_cmd chown "${SB_ADMIN_USER}:${SB_ADMIN_USER}" "$ENV_FILE" 2>/dev/null || true
+    # --- 4. Valores no secretos: se completan SOLO si faltan -------------
+    # El `.env` es configuración del operador: lo que el usuario cargó a mano
+    # se respeta. Acá únicamente se rellenan los huecos.
+    sb_env_ensure_value "$ENV_FILE" MYSQL_DATABASE        "$SB_DEFAULT_DB_NAME"
+    sb_env_ensure_value "$ENV_FILE" MYSQL_USER            "$SB_DEFAULT_DB_USER"
+    sb_env_ensure_value "$ENV_FILE" MYSQL_REPLICATION_USER "$SB_DEFAULT_REPL_USER"
+    sb_env_ensure_value "$ENV_FILE" PMA_USER              "$(sb_env_get "$ENV_FILE" MYSQL_USER || echo "$SB_DEFAULT_DB_USER")"
+    sb_env_ensure_value "$ENV_FILE" PMA_PASSWORD          "$(sb_env_get "$ENV_FILE" MYSQL_PASSWORD || echo '')"
+
+    # Hosts del split read/write. Si el usuario ya los definió, se respetan.
+    sb_env_ensure_value "$ENV_FILE" PMA_HOST      "db-master"
+    sb_env_ensure_value "$ENV_FILE" DB_HOST       "db-master"
+    sb_env_ensure_value "$ENV_FILE" DB_SLAVE_HOST "db-slave"
+
+    # Estrategia de split read/write.
+    sb_env_ensure_value "$ENV_FILE" DB_READ_REPLICA_ENABLED     "true"
+    sb_env_ensure_value "$ENV_FILE" DB_REPLICA_WAIT_AFTER_WRITE "true"
+    sb_env_ensure_value "$ENV_FILE" DB_REPLICA_WAIT_TIMEOUT_MS  "2000"
+
+    # --- 5. Valores forzados: SOLO si se pidieron por flag ---------------
+    # Un `--app-port` que no diste no debe pisar el APP_PORT que ya
+    # configuraste a mano.
+    if [[ "$SB_ENVIRONMENT_EXPLICIT" == "true" ]]; then
+        sb_env_set "$ENV_FILE" APP_ENVIRONMENT "$SB_ENVIRONMENT"
+        logger_info ".env: APP_ENVIRONMENT = $SB_ENVIRONMENT   (forzado por --environment)"
+    fi
+    if [[ "$SB_APP_PORT_EXPLICIT" == "true" ]]; then
+        sb_env_set "$ENV_FILE" APP_PORT "${SB_APP_PORT}"
+        logger_info ".env: APP_PORT = ${SB_APP_PORT}   (forzado por --app-port)"
     fi
 
-    # 7. Detectar volumen mariadb_data preexistente
-    if docker volume inspect mariadb_data >/dev/null 2>&1; then
-        logger_warn "Volumen mariadb_data preexistente detectado. Si tiene schema viejo, usar --reset-volumes para recrearlo (DESTRUCTIVO)."
+    # --- 6. Permisos del .env ------------------------------------------
+    # 640 con grupo `songbird-ops`: el owner (quien clonó y hace `nano .env`)
+    # lo edita y el admin remoto lo LEE para poder correr `docker compose`
+    # sin sudo. Compose carga el `.env` del directorio del proyecto para
+    # interpolar variables: con 600 el admin no podria ni abrirlo y el
+    # `docker compose` fallaba con "permission denied".
+    run_cmd chmod 640 "$ENV_FILE"
+    run_cmd chown "$(sb_deploy_owner):$(sb_deploy_shared_group)" "$ENV_FILE" 2>/dev/null || true
+
+    sb_kv ".env" "$ENV_FILE (640 $(sb_deploy_owner):$(sb_deploy_shared_group))"
+    sb_kv "Secretos generados" "$generated"
+
+    # --- 6.b Permisos del arbol del repo --------------------------------
+    # Grupo compartido + setgid en todo el arbol (menos src/uploads, que lo
+    # maneja el runtime del contenedor) y .env con la politica de arriba.
+    # Se aplica ANTES del chequeo de "stack ya healthy" para que se ejecute
+    # en cada deploy, no solo en el primero.
+    sb_apply_repo_permissions "$SB_REPO_DIR"
+
+    # --- 6.c Permisos de escritura de uploads ---------------------------
+    # Verifica que el worker de Apache (www-data) pueda escribir en
+    # /var/www/html/uploads. Si no puede, POST /api/documentos devuelve 400
+    # con "move_uploaded_file(): Permission denied" y el resto de la app
+    # funciona normal: el fallo solo aparece cuando alguien sube un PDF.
+    if ! sb_ensure_uploads_writable "$compose_file" "$ENV_FILE"; then
+        logger_warn "uploads: el worker de Apache no puede escribir en /var/www/html/uploads"
     fi
 
-    # 8. Pull + up
+    logger_info "El deploy NO modifica scripts ni código: solo completa el .env y escribe /opt/songbird-operator/credentials.env"
+
+    # --- 7. Volumenes de datos preexistentes ---------------------------
+    local vol
+    for vol in mariadb_master_data mariadb_slave_data; do
+        if docker volume inspect "$vol" >/dev/null 2>&1; then
+            logger_warn "Volumen $vol preexistente. Si tiene schema viejo, usar --reset-volumes para recrearlo (DESTRUCTIVO)."
+        fi
+    done
+
+    # --- 8. ¿El stack ya está sano? (idempotencia) ---------------------
+    local pending
+    pending="$(sb_compose_pending_services "$compose_file" "$ENV_FILE" || true)"
+    if [[ -z "$pending" ]]; then
+        logger_ok "[deploy] el stack ya está completo y healthy (skip)"
+        # El skip evita reconstruir la imagen si el stack ya esta sano. Si
+        # cambiaste el Dockerfile (por ejemplo el entrypoint del contenedor web)
+        # o el codigo, ese cambio NO se aplica solo: hay que forzar el rebuild.
+        logger_info "[deploy] Si cambiaste el Dockerfile o el codigo, el rebuild NO se aplica solo:"
+        logger_info "[deploy]   docker compose -f ${compose_file} --env-file ${ENV_FILE} build web"
+        logger_info "[deploy]   docker compose -f ${compose_file} --env-file ${ENV_FILE} up -d web"
+        state_set_module_completed deploy '{"skipped": true}'
+        mod_deploy_status_summary
+        return 0
+    fi
+    logger_info "Servicios pendientes: $(printf '%s' "$pending" | tr '\n' ' ')"
+
+    # --- 9. Build + pull + up ------------------------------------------
+    logger_info "docker compose build..."
+    run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" build
+
     logger_info "docker compose pull..."
-    run_cmd docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
+    # `--ignore-buildable` (Compose >= 2.20) evita intentar bajar imagenes
+    # de servicios que se construyen localmente.
+    if docker compose pull --help 2>&1 | grep -q -- "--ignore-buildable"; then
+        run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" pull --ignore-buildable
+    else
+        run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" pull
+    fi
 
     logger_info "docker compose up -d..."
-    run_cmd docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+    # `--remove-orphans` converge el host: elimina contenedores de servicios
+    # que ya no existen en el compose file (p.ej. el viejo `songbird_db`).
+    run_cmd docker compose -f "$compose_file" --env-file "$ENV_FILE" up -d --remove-orphans
 
-    # 9. Esperar healthchecks (timeout 180s)
-    logger_info "Esperando healthchecks (max 180s)..."
-    local waited=0
-    local healthy_count=0
-    local total_services
-    total_services="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --services 2>/dev/null | wc -l)"
+    # --- 9.b Confirmar permisos de escritura de uploads -----------------
+    # Recien ahora existe el contenedor `web`: su entrypoint ya ajusto el
+    # owner de /var/www/html/uploads, asi que se confirma con una escritura
+    # real (mismo usuario que usa la app) antes de seguir.
+    if ! sb_ensure_uploads_writable "$compose_file" "$ENV_FILE"; then
+        logger_warn "uploads: el worker de Apache no puede escribir en /var/www/html/uploads"
+    fi
 
-    while [[ $waited -lt 180 ]]; do
-        healthy_count="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --format json 2>/dev/null | \
-            jq '[.[] | select(.Health=="healthy" or .Health=="") ] | length' 2>/dev/null || echo 0)"
-        if [[ "$healthy_count" -ge "$total_services" ]]; then
-            break
-        fi
-        sleep 5
-        waited=$((waited + 5))
-        printf '.' >&2
-    done
-    printf '\n' >&2
+    # --- 10. Replicación: revivir el inicializador si hace falta -------
+    # Va ANTES de esperar los healthchecks: si la replica no arranca, el slave
+    # nunca queda healthy y esperaríamos los 300s para nada.
+    logger_info "Verificando la replicación master-slave..."
+    local repl_ok=true
+    sb_deploy_ensure_replication "$compose_file" "$ENV_FILE" 2 || repl_ok=false
 
-    # 10. Estado final
-    local running
-    running="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps --services --filter status=running 2>/dev/null | wc -l)"
+    # --- 11. Esperar healthchecks --------------------------------------
+    logger_info "Esperando healthchecks (max 300s)..."
+    local wait_ok=true
+    sb_compose_wait_healthy "$compose_file" "$ENV_FILE" 300 600 || wait_ok=false
 
-    sb_kv "Servicios corriendo" "${running}/${total_services}"
-    sb_kv "Healthy" "${healthy_count}/${total_services}"
+    # --- 12. Estado final ----------------------------------------------
+    local total pending_now
+    total="$(docker compose -f "$compose_file" --env-file "$ENV_FILE" config --services 2>/dev/null | wc -l || echo 0)"
+    pending_now="$(sb_compose_pending_services "$compose_file" "$ENV_FILE" || true)"
+
+    sb_kv "Servicios declarados" "$total"
+    sb_kv "Servicios OK" "$(if [[ -z "$pending_now" ]]; then echo "$total/$total"; else echo "$((total - $(printf '%s\n' "$pending_now" | wc -l)))/$total"; fi)"
     sb_kv "APP URL" "http://localhost:${SB_APP_PORT}/"
     sb_kv "Zabbix URL" "http://localhost:${SB_APP_PORT}/zabbix/"
 
-    # Guardar credenciales generadas (root only, chmod 600)
+    # --- 13. Credenciales generadas (solo root) ------------------------
     if [[ "$SB_DRY_RUN" != "true" ]]; then
-        run_cmd install -d -m 700 -o root -g root /opt/songbird-operator
+        sb_ensure_dir /opt/songbird-operator 700 root root
         run_cmd tee "$SB_CRED_FILE" >/dev/null <<EOF
-# Generado por songbird-operator (issue #35). NO compartir.
+# Generado por songbird-operator. NO compartir.
 # App
-MYSQL_DATABASE=\$(grep ^MYSQL_DATABASE= $ENV_FILE | cut -d= -f2-)
-MYSQL_USER=\$(grep ^MYSQL_USER= $ENV_FILE | cut -d= -f2-)
-MYSQL_PASSWORD=\$(grep ^MYSQL_PASSWORD= $ENV_FILE | cut -d= -f2-)
-MYSQL_ROOT_PASSWORD=\$(grep ^MYSQL_ROOT_PASSWORD= $ENV_FILE | cut -d= -f2-)
+MYSQL_DATABASE=$(sb_env_get "$ENV_FILE" MYSQL_DATABASE || echo '')
+MYSQL_USER=$(sb_env_get "$ENV_FILE" MYSQL_USER || echo '')
+MYSQL_PASSWORD=$(sb_env_get "$ENV_FILE" MYSQL_PASSWORD || echo '')
+MYSQL_ROOT_PASSWORD=$(sb_env_get "$ENV_FILE" MYSQL_ROOT_PASSWORD || echo '')
+# Replicacion master-slave
+MYSQL_REPLICATION_USER=$(sb_env_get "$ENV_FILE" MYSQL_REPLICATION_USER || echo '')
+MYSQL_REPLICATION_PASSWORD=$(sb_env_get "$ENV_FILE" MYSQL_REPLICATION_PASSWORD || echo '')
 # Zabbix
-ZABBIX_DB_PASSWORD=${zbx_pwd}
-ZABBIX_DB_ROOT_PASSWORD=${zbx_root_pwd}
+ZABBIX_DB_PASSWORD=$(sb_env_get "$ENV_FILE" ZABBIX_DB_PASSWORD || echo '')
+ZABBIX_DB_ROOT_PASSWORD=$(sb_env_get "$ENV_FILE" ZABBIX_DB_ROOT_PASSWORD || echo '')
 EOF
         run_cmd chmod 600 "$SB_CRED_FILE"
         run_cmd chown root:root "$SB_CRED_FILE"
     fi
 
-    if [[ $running -lt 9 ]]; then
-        logger_warn "Solo $running servicios corriendo (esperado >= 9). Revisá: docker compose -f $COMPOSE_FILE ps"
+    if [[ -n "$pending_now" ]]; then
+        logger_warn "Servicios no_OK: $(printf '%s' "$pending_now" | tr '\n' ' ')"
+        logger_warn "Revisá: docker compose -f $compose_file ps"
     fi
 
     state_set_module_completed deploy \
-        '{"containers_running": '"${running}"', "app_url": "http://localhost:'"${SB_APP_PORT}"'/", "zabbix_url": "http://localhost:'"${SB_APP_PORT}"'/zabbix/"}'
+        '{"app_url": "http://localhost:'"${SB_APP_PORT}"'/", "zabbix_url": "http://localhost:'"${SB_APP_PORT}"'/zabbix/"}'
 
+    if [[ "$wait_ok" != "true" ]]; then
+        return 1
+    fi
     logger_ok "Stack desplegado"
 }
 
+mod_deploy_status_summary() {
+    local compose_file
+    compose_file="$(sb_compose_file)"
+    [[ -f "$compose_file" ]] || return 0
+    docker compose -f "$compose_file" --env-file "$ENV_FILE" ps 2>/dev/null | head -n 30
+}
+
 mod_deploy_status() {
+    sb_deploy_paths
     if [[ -d "$SB_REPO_DIR" ]]; then
-        cd "$SB_REPO_DIR"
-        if [[ -f docker-compose.prod.yml ]]; then
-            docker compose -f docker-compose.prod.yml ps 2>/dev/null
+        cd "$SB_REPO_DIR" || return 1
+        if [[ -f "$SB_COMPOSE_FILE_NAME" ]]; then
+            docker compose -f "$SB_COMPOSE_FILE_NAME" ps 2>/dev/null
         else
-            echo "docker-compose.prod.yml no encontrado en $SB_REPO_DIR"
+            echo "$SB_COMPOSE_FILE_NAME no encontrado en $SB_REPO_DIR"
         fi
     else
         echo "$SB_REPO_DIR no existe"

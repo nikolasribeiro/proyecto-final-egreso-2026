@@ -6,14 +6,18 @@
 Port {{SSH_PORT}}
 
 # Autenticacion
+# PasswordAuthentication yes: modo DEMO, para poder entrar con usuario/password.
+# En produccion deberia volver a "no" (key-only).
 PermitRootLogin no
-PasswordAuthentication no
+PasswordAuthentication yes
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 UsePAM yes
 
-# Usuarios permitidos (allowlist explicita)
-AllowUsers {{ADMIN_USER}}
+# Usuarios permitidos (allowlist explicita).
+# {{EXTRA_ALLOW_USERS}} se rellena con los usuarios extra que se pasen con
+# --allow-user (por ejemplo " debian"). Vacio = solo el administrador.
+AllowUsers {{ADMIN_USER}}{{EXTRA_ALLOW_USERS}}
 
 # Forwarding y tunneling
 X11Forwarding no

@@ -32,19 +32,19 @@ mod_red_run() {
     sb_kv "FQDN" "$(hostname -f 2>/dev/null || echo 'n/a')"
 
     local ipv4
-    ipv4="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | tr '\n' ',' | sed 's/,$//')"
+    ipv4="$(ip -4 addr show 2>/dev/null | awk '/inet /{print $2}' | tr '\n' ',' | sed 's/,$//' || true)"
     sb_kv "IPv4" "${ipv4:-n/a}"
 
     local gw
-    gw="$(ip route 2>/dev/null | awk '/default/ {print $3}' | head -n1)"
+    gw="$(ip route 2>/dev/null | awk '/default/ {print $3}' | head -n1 || true)"
     sb_kv "Gateway" "${gw:-n/a}"
 
     local dns
-    dns="$(awk '/^nameserver/ {print $2}' /etc/resolv.conf 2>/dev/null | tr '\n' ',' | sed 's/,$//')"
+    dns="$(awk '/^nameserver/ {print $2}' /etc/resolv.conf 2>/dev/null | tr '\n' ',' | sed 's/,$//' || true)"
     sb_kv "Nameservers" "${dns:-n/a}"
 
     local listening
-    listening="$(ss -ltn 2>/dev/null | awk 'NR>1 {print $4}' | grep -oE ':[0-9]+$' | sort -u | tr '\n' ',' | sed 's/,$//')"
+    listening="$(ss -ltn 2>/dev/null | awk 'NR>1 {print $4}' | grep -oE ':[0-9]+$' | sort -u | tr '\n' ',' | sed 's/,$//' || true)"
     sb_kv "Listening ports" "${listening:-ninguno}"
 
     # No se persiste estado: el modulo es informativo / opcional.

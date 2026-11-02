@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/lib/ssh.sh
-# Hardening del servicio SSH: puerto custom, sin root, sin password, key-only.
+# Hardening del servicio SSH: puerto custom, sin root, password habilitada (demo).
 # Modulo: ssh
 
 set -euo pipefail
@@ -11,18 +11,64 @@ SSH_DROP_IN="/etc/ssh/sshd_config.d/00-songbird-hardening.conf"
 mod_ssh_run() {
     logger_section "Módulo ssh (hardening)"
 
+    # El grep de PasswordAuthentication detecta el cambio de Politica: si el
+    # drop-in anterior tenia "PasswordAuthentication no", la precondicion
+    # falla y el modulo se re-aplica con el template nuevo.
     if module_skip_if_done ssh \
-        '[[ -f '"${SSH_DROP_IN}"' ]] && grep -q "^Port ${SB_SSH_PORT}"'" ${SSH_DROP_IN}"' && sshd -t 2>/dev/null'; then
+        '[[ -f '"${SSH_DROP_IN}"' ]] && grep -q "^Port ${SB_SSH_PORT}"'" ${SSH_DROP_IN}"' && grep -q "^PasswordAuthentication yes" '"${SSH_DROP_IN}"' && sshd -t 2>/dev/null'; then
         return 0
     fi
 
     # 1. Instalar openssh-server si falta
-    if ! dpkg -l openssh-server >/dev/null 2>&1; then
+    #    `dpkg -l` devuelve 0 incluso para estados "un"/"rc" (desinstalado con
+    #    config residual). `dpkg-query -f='${Status}'` si distingue.
+    if ! dpkg-query -W -f='${Status}' openssh-server 2>/dev/null | grep -q "install ok installed"; then
         logger_info "Instalando openssh-server"
         run_cmd apt-get update -qq
         run_cmd apt-get install -y -qq openssh-server
     else
         logger_ok "openssh-server ya instalado"
+    fi
+
+    # 1.b Asegurar que existan las llaves de HOST.
+    #
+    #     `sshd -t` aborta con "no hostkeys available -- exiting" si no
+    #     encuentra ninguna llave de host en el disco. Es un caso real: un
+    #     sshd YA CORRIENDO sigue vivo (las llaves estan en memoria) aunque los
+    #     archivos falten, asi que el puerto 2222 contesta pero el reload
+    #     habria fallado.
+    #
+    #     Causas: instalacion del paquete con el postinst omitido (imagenes de
+    #     contenedor, policy-rc.d), o llaves borradas por un cleanup.
+    #
+    #     `ssh-keygen -A` genera las que falten y es idempotente.
+    local host_keys
+    host_keys="$(ls /etc/ssh/ssh_host_*_key 2>/dev/null || true)"
+    if [[ -z "$host_keys" ]]; then
+        logger_warn "No hay llaves de host en /etc/ssh: se generan con ssh-keygen -A"
+        if ! run_cmd ssh-keygen -A; then
+            logger_error "No se pudieron generar las llaves de host"
+            return 70
+        fi
+        logger_ok "Llaves de host generadas: $(ls /etc/ssh/ssh_host_*_key 2>/dev/null | tr '\n' ' ')"
+    else
+        sb_kv "Llaves de host" "$(printf '%s\n' "$host_keys" | wc -l) encontradas"
+    fi
+
+    # 1.c Directorio de separacion de privilegios de sshd (/run/sshd).
+    #
+    #     `sshd -t` aborta con "Missing privilege separation directory: /run/sshd"
+    #     cuando ese directorio NO existe. En Debian lo crea el servicio systemd
+    #     (RuntimeDirectory=sshd) al arrancar, o systemd-tmpfiles al bootear.
+    #     Si openssh-server se instala DESPUES del ultimo arranque (o el
+    #     servicio nunca llega a arrancar), el directorio todavia no existe y
+    #     el modulo fallaba en la validacion, devolviendo 70 y ABORTANDO TODO
+    #     el operador (firewall, docker y deploy nunca corrian).
+    #
+    #     Crearlo es idempotente y barato: mejor eso que abortar el deploy.
+    if [[ ! -d /run/sshd ]]; then
+        logger_info "Creando /run/sshd (separacion de privilegios de sshd)"
+        run_cmd install -d -m 0755 /run/sshd
     fi
 
     # 2. Backup del drop-in actual
@@ -40,15 +86,34 @@ mod_ssh_run() {
         "${SB_TEMPLATES_DIR}/sshd_config.tpl" \
         "$SSH_DROP_IN" \
         "SSH_PORT=${SB_SSH_PORT}" \
-        "ADMIN_USER=${SB_ADMIN_USER}"
+        "ADMIN_USER=${SB_ADMIN_USER}" \
+        "EXTRA_ALLOW_USERS=${SB_EXTRA_ALLOW_USERS}"
 
     run_cmd chmod 644 "$SSH_DROP_IN"
 
     # 5. Validar con sshd -t
     if ! run_cmd sshd -t; then
-        logger_error "sshd -t falló, restaurando backup"
+        # Se muestra el error real de sshd: sin esto solo se ve
+        # "sshd -t fallo" y no se sabe por que.
+        logger_error "sshd -t falló. Diagnóstico:"
+        sshd -t 2>&1 | head -n 5 | sed 's/^/    /' >&2 || true
+        # Causa frecuente: el directorio de separacion de privilegios.
+        if sshd -t 2>&1 | grep -q "privilege separation directory"; then
+            logger_error "Falta el directorio de separacion de privilegios de sshd:"
+            logger_error "    sudo install -d -m 0755 /run/sshd"
+        fi
+        logger_error "Se restaura el drop-in anterior (el servidor sigue como estaba)"
         sb_ssh_rollback_if_needed
         return 70
+    fi
+
+    # 5.b Aviso de lockout: AllowUsers deja entrar solo a los usuarios listados.
+    local invocador="${SUDO_USER:-}"
+    if [[ -n "$invocador" && "$invocador" != "$SB_ADMIN_USER" ]] \
+        && [[ "$SB_EXTRA_ALLOW_USERS" != *" ${invocador} "* && "$SB_EXTRA_ALLOW_USERS" != *" ${invocador}" ]]; then
+        logger_warn "ATENCION: AllowUsers deja entrar solo a '${SB_ADMIN_USER}'."
+        logger_warn "El usuario '${invocador}' (quien invoco el operador) NO va a poder abrir sesion por SSH."
+        logger_warn "Para permitirlo: sudo scripts/operator.sh --module ssh --allow-user ${invocador}"
     fi
 
     # 6. Habilitar + reload (no restart — preserva la sesion actual)
@@ -63,15 +128,47 @@ mod_ssh_run() {
     fi
 
     # 7. Validacion post-aplicacion (best effort)
+    #    La prueba se hace COMO el usuario admin y con SU llave: si la
+    #    hicieramos como root, el cliente usaria /root/.ssh/ y no encontraria
+    #    la llave del admin (siempre fallaria).
     logger_info "Validando acceso al puerto ${SB_SSH_PORT}..."
     sleep 2
     if command -v ssh >/dev/null 2>&1; then
-        if ssh -p "${SB_SSH_PORT}" -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-            "${SB_ADMIN_USER}@localhost" echo "OK" >/dev/null 2>&1; then
-            logger_ok "Conexion SSH:${SB_SSH_PORT} verificada"
+        local admin_home
+        # `|| true`: getent devuelve 2 si el usuario no existe.
+        admin_home="$(getent passwd "$SB_ADMIN_USER" 2>/dev/null | cut -d: -f6 || true)"
+        if [[ -z "$admin_home" ]]; then
+            admin_home="/home/${SB_ADMIN_USER}"
+        fi
+
+        local -a ssh_opts=(
+            -p "${SB_SSH_PORT}"
+            -o BatchMode=yes
+            -o ConnectTimeout=5
+            -o StrictHostKeyChecking=no
+            -o UserKnownHostsFile=/dev/null
+            -o IdentitiesOnly=yes
+            -o PreferredAuthentications=publickey
+        )
+        if [[ -f "${admin_home}/.ssh/id_ed25519" ]]; then
+            ssh_opts+=(-i "${admin_home}/.ssh/id_ed25519")
+        fi
+
+        local ssh_ok="false"
+        if command -v runuser >/dev/null 2>&1; then
+            if runuser -u "$SB_ADMIN_USER" -- ssh "${ssh_opts[@]}" \
+                "${SB_ADMIN_USER}@localhost" true >/dev/null 2>&1; then
+                ssh_ok="true"
+            fi
+        fi
+
+        if [[ "$ssh_ok" == "true" ]]; then
+            logger_ok "Conexion SSH:${SB_SSH_PORT} verificada (como ${SB_ADMIN_USER})"
+        elif [[ -f "${admin_home}/.ssh/id_ed25519" ]]; then
+            logger_warn "Conexion SSH:${SB_SSH_PORT} no respondio usando la llave generada"
         else
-            logger_warn "Conexion SSH:${SB_SSH_PORT} no respondio (probable: clave publica no copiada aun)"
-            logger_warn "Recordá: copiá tu clave a /home/${SB_ADMIN_USER}/.ssh/authorized_keys"
+            logger_warn "Conexion SSH:${SB_SSH_PORT} no verificable desde el servidor"
+            logger_warn "(normal si la llave privada esta en tu maquina y no en el servidor)"
         fi
     fi
 
@@ -81,7 +178,7 @@ mod_ssh_run() {
     # Output
     sb_kv "Puerto SSH" "${SB_SSH_PORT}"
     sb_kv "PermitRootLogin" "no"
-    sb_kv "PasswordAuthentication" "no"
+    sb_kv "PasswordAuthentication" "yes"
     sb_kv "AllowUsers" "${SB_ADMIN_USER}"
 
     state_set_module_completed ssh \
