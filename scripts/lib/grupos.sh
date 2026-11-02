@@ -25,9 +25,18 @@ mod_grupos_run() {
     done
 
     # 2. Asignar grupos a usuarios
-    run_cmd usermod -aG docker "$SB_ADMIN_USER" songbird_app || true
+    #
+    #    `usermod` acepta UN SOLO usuario por invocacion. Pasarle varios
+    #    ("usermod -aG docker user1 user2") lo hace fallar con "too many
+    #    arguments" y vuelca el usage por pantalla, dejando a los usuarios
+    #    SIN el grupo. Por eso es una llamada por usuario.
+    run_cmd usermod -aG docker "$SB_ADMIN_USER" || true
+    run_cmd usermod -aG docker songbird_app || true
     run_cmd usermod -aG backup songbird_backup || true
-    run_cmd usermod -aG songbird-ops "$SB_ADMIN_USER" songbird_app songbird_backup songbird_zbx || true
+    local u
+    for u in "$SB_ADMIN_USER" songbird_app songbird_backup songbird_zbx; do
+        run_cmd usermod -aG songbird-ops "$u" || true
+    done
 
     # 3. Sudoers scoped para el admin
     local sudoers_file="/etc/sudoers.d/songbird_admin"
